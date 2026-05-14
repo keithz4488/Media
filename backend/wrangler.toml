@@ -1,0 +1,17 @@
+name = "media-shelf"
+main = "src/index.ts"
+compatibility_date = "2025-01-15"
+
+# Replace database_id with the value printed by `wrangler d1 create media-shelf`.
+[[d1_databases]]
+binding = "DB"
+database_name = "media-shelf"
+database_id = "REPLACE_ME"
+
+# Optional: cover-image storage. Comment out if you don't want R2.
+# [[r2_buckets]]
+# binding = "COVERS"
+# bucket_name = "media-shelf-covers"
+
+# Routes are configured via the dashboard once the custom domain is added:
+#   media.kzaller.com/*  ->  this worker

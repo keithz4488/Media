@@ -1,0 +1,28 @@
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/.cxx/
+android/captures/
+android/*.iml
+android/app/release/
+android/app/debug/
+*.apk
+*.aab
+*.keystore
+
+# Gradle wrapper jars are committed; everything else under .gradle is not
+android/.kotlin/
+
+# Cloudflare Worker / Node
+backend/node_modules/
+backend/.wrangler/
+backend/dist/
+backend/.dev.vars
+backend/.env
+
+# General
+.DS_Store
+*.log
