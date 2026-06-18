@@ -21,6 +21,15 @@ class ShelfRepository(context: Context) {
     fun observeItem(id: String): Flow<ItemDto?> =
         db.items().observe(id).map { it?.toDto() }
 
+    fun observeCounts(): Flow<Map<MediaKind, Int>> =
+        db.items().observeCounts().map { rows ->
+            rows.associate { MediaKind.fromWire(it.kind) to it.n }
+        }
+
+    suspend fun refreshAll(): Result<Unit> = runCatching {
+        MediaKind.values().forEach { refresh(it).getOrThrow() }
+    }
+
     suspend fun refresh(kind: MediaKind): Result<Unit> = runCatching {
         val resp = api.list(kind = kind.wire)
         db.items().clearKind(kind.wire)

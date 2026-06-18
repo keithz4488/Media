@@ -53,8 +53,10 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.kzaller.shelf.data.MediaKind
+import com.kzaller.shelf.data.Status
 import com.kzaller.shelf.data.models.SearchHit
 import com.kzaller.shelf.ui.components.ShelfBackground
+import com.kzaller.shelf.ui.components.shelfTextFieldColors
 import com.kzaller.shelf.ui.theme.MediaShelfTheme
 import com.kzaller.shelf.ui.theme.flavorFor
 
@@ -190,6 +192,7 @@ private fun SearchSection(
             label = { Text("Title or keywords") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
+            colors = shelfTextFieldColors(),
             trailingIcon = {
                 if (searching) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
             },
@@ -255,7 +258,7 @@ private fun ManualSection(
     var title by remember { mutableStateOf(seed) }
     var subtitle by remember { mutableStateOf("") }
     var year by remember { mutableStateOf("") }
-    var status by remember { mutableStateOf("owned") }
+    var statuses by remember { mutableStateOf(setOf(Status.OWNED)) }
     Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         OutlinedTextField(
             value = title,
@@ -263,6 +266,7 @@ private fun ManualSection(
             label = { Text("Title") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
+            colors = shelfTextFieldColors(),
         )
         OutlinedTextField(
             value = subtitle,
@@ -275,6 +279,7 @@ private fun ManualSection(
             }) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
+            colors = shelfTextFieldColors(),
         )
         OutlinedTextField(
             value = year,
@@ -282,14 +287,20 @@ private fun ManualSection(
             label = { Text("Year") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
+            colors = shelfTextFieldColors(),
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("owned", "seen", "wishlist").forEach { s ->
+            Status.ALL.forEach { s ->
+                val on = s in statuses
                 AssistChip(
-                    onClick = { status = s },
-                    label = { Text(s) },
+                    onClick = {
+                        statuses = if (on) statuses - s else statuses + s
+                    },
+                    label = {
+                        Text(s, color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground)
+                    },
                     colors = AssistChipDefaults.assistChipColors(
-                        containerColor = if (status == s) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.Transparent,
+                        containerColor = if (on) MaterialTheme.colorScheme.primary.copy(alpha = 0.22f) else Color.Transparent,
                     ),
                 )
             }
@@ -297,7 +308,10 @@ private fun ManualSection(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = onCancel) { Text("Back") }
             Button(
-                onClick = { onSave(title, subtitle, year.toIntOrNull(), status) },
+                onClick = {
+                    val csv = Status.ALL.filter { it in statuses }.joinToString(",")
+                    onSave(title, subtitle, year.toIntOrNull(), csv.ifEmpty { Status.OWNED })
+                },
                 enabled = title.isNotBlank(),
             ) { Text("Save") }
         }

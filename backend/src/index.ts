@@ -35,7 +35,7 @@ interface Item {
   external_src?: string | null;
   description?: string | null;
   rating?: number | null;
-  status?: "owned" | "seen" | "wishlist";
+  status?: string; // CSV: any of 'owned','seen','wishlist'
   notes?: string | null;
   added_at?: number;
   updated_at?: number;

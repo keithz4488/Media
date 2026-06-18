@@ -47,7 +47,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.kzaller.shelf.data.MediaKind
+import com.kzaller.shelf.data.Status
 import com.kzaller.shelf.ui.components.ShelfBackground
+import com.kzaller.shelf.ui.components.shelfTextFieldColors
 import com.kzaller.shelf.ui.theme.MediaShelfTheme
 import com.kzaller.shelf.ui.theme.flavorFor
 
@@ -122,13 +124,15 @@ fun DetailScreen(vm: DetailViewModel, onBack: () -> Unit) {
                         )
                     }
                     Spacer(Modifier.height(16.dp))
+                    val selectedStatuses = Status.parse(current.status)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("owned", "seen", "wishlist").forEach { s ->
+                        Status.ALL.forEach { s ->
+                            val on = s in selectedStatuses
                             AssistChip(
-                                onClick = { vm.setStatus(s) },
-                                label = { Text(s) },
+                                onClick = { vm.setStatus(Status.toggle(current.status, s)) },
+                                label = { Text(s, color = if (on) flavor.accent else MaterialTheme.colorScheme.onBackground) },
                                 colors = AssistChipDefaults.assistChipColors(
-                                    containerColor = if ((current.status ?: "owned") == s) flavor.accent.copy(alpha = 0.2f) else Color.Transparent,
+                                    containerColor = if (on) flavor.accent.copy(alpha = 0.22f) else Color.Transparent,
                                 ),
                             )
                         }
@@ -155,6 +159,7 @@ fun DetailScreen(vm: DetailViewModel, onBack: () -> Unit) {
                         label = { Text("Notes") },
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 2,
+                        colors = shelfTextFieldColors(),
                     )
                     Row(modifier = Modifier.padding(top = 8.dp)) {
                         AssistChip(onClick = { vm.setNotes(notes) }, label = { Text("Save notes") })

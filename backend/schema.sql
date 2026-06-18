@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS items (
   external_src  TEXT,           -- 'google_books','tmdb','rawg','manual'
   description   TEXT,
   rating        INTEGER,        -- 1..5, nullable
-  status        TEXT NOT NULL DEFAULT 'owned' CHECK (status IN ('owned','seen','wishlist')),
+  status        TEXT NOT NULL DEFAULT 'owned', -- CSV: any of 'owned','seen','wishlist'
   notes         TEXT,
   added_at      INTEGER NOT NULL,
   updated_at    INTEGER NOT NULL,

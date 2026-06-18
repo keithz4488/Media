@@ -11,6 +11,9 @@ interface ItemDao {
     @Query("SELECT * FROM items WHERE kind = :kind ORDER BY addedAt DESC")
     fun observeByKind(kind: String): Flow<List<ItemEntity>>
 
+    @Query("SELECT kind, COUNT(*) as n FROM items GROUP BY kind")
+    fun observeCounts(): Flow<List<KindCount>>
+
     @Query("SELECT * FROM items WHERE id = :id")
     suspend fun get(id: String): ItemEntity?
 
@@ -29,3 +32,5 @@ interface ItemDao {
     @Query("DELETE FROM items WHERE kind = :kind")
     suspend fun clearKind(kind: String)
 }
+
+data class KindCount(val kind: String, val n: Int)

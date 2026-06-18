@@ -10,7 +10,11 @@ import retrofit2.Retrofit
 import java.util.concurrent.TimeUnit
 
 object ApiClient {
-    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+    private val json = Json {
+        ignoreUnknownKeys = true
+        encodeDefaults = true
+        explicitNulls = false
+    }
 
     private fun baseUrl(): String {
         val raw = BuildConfig.API_BASE.trimEnd('/')
