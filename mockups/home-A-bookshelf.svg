@@ -1,0 +1,200 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 1560" font-family="system-ui, sans-serif">
+  <!-- Option A: skeuomorphic bookshelf. Two wooden planks with brass brackets;
+       the four category tiles sit on top with a drop shadow. -->
+  <defs>
+    <linearGradient id="wall" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1a1014"/>
+      <stop offset="100%" stop-color="#2a1a1c"/>
+    </linearGradient>
+    <linearGradient id="wood" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#7a4422"/>
+      <stop offset="50%" stop-color="#5a2e16"/>
+      <stop offset="100%" stop-color="#3a1d0c"/>
+    </linearGradient>
+    <linearGradient id="woodEdge" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3a1d0c"/>
+      <stop offset="100%" stop-color="#1a0a04"/>
+    </linearGradient>
+    <linearGradient id="bookTile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#6b3f1c"/>
+      <stop offset="100%" stop-color="#a56a2c"/>
+    </linearGradient>
+    <linearGradient id="movieTile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0b132b"/>
+      <stop offset="100%" stop-color="#1c2541"/>
+    </linearGradient>
+    <linearGradient id="tvTile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0a1f14"/>
+      <stop offset="100%" stop-color="#0f3b22"/>
+    </linearGradient>
+    <linearGradient id="gameTile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#180a3c"/>
+      <stop offset="100%" stop-color="#3a0e5c"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="14" stdDeviation="10" flood-opacity="0.45"/>
+    </filter>
+  </defs>
+
+  <!-- wall -->
+  <rect width="720" height="1560" fill="url(#wall)"/>
+
+  <!-- status bar -->
+  <rect width="720" height="80" fill="rgba(0,0,0,0.3)"/>
+  <text x="40" y="50" fill="#888" font-size="22">11:34</text>
+  <text x="640" y="50" fill="#888" font-size="22">86%</text>
+
+  <!-- header -->
+  <text x="48" y="170" fill="#e5c07b" font-size="44" font-weight="900" letter-spacing="6">MEDIA</text>
+  <text x="48" y="220" fill="#e8e8ea" font-size="32" font-weight="300" letter-spacing="2">shelf</text>
+
+  <!-- ====== Top shelf board ====== -->
+  <g transform="translate(0, 660)">
+    <!-- board face -->
+    <rect x="20" y="0" width="680" height="36" fill="url(#wood)"/>
+    <!-- board front edge (slight 3D) -->
+    <rect x="20" y="36" width="680" height="14" fill="url(#woodEdge)"/>
+    <!-- brackets -->
+    <path d="M30 50 L30 110 L60 110 Z" fill="#3a1d0c"/>
+    <path d="M690 50 L690 110 L660 110 Z" fill="#3a1d0c"/>
+    <!-- wood grain knots -->
+    <ellipse cx="200" cy="18" rx="40" ry="6" fill="rgba(0,0,0,0.18)"/>
+    <ellipse cx="490" cy="18" rx="50" ry="5" fill="rgba(0,0,0,0.15)"/>
+  </g>
+
+  <!-- ====== Bottom shelf board ====== -->
+  <g transform="translate(0, 1280)">
+    <rect x="20" y="0" width="680" height="36" fill="url(#wood)"/>
+    <rect x="20" y="36" width="680" height="14" fill="url(#woodEdge)"/>
+    <path d="M30 50 L30 110 L60 110 Z" fill="#3a1d0c"/>
+    <path d="M690 50 L690 110 L660 110 Z" fill="#3a1d0c"/>
+    <ellipse cx="280" cy="18" rx="50" ry="5" fill="rgba(0,0,0,0.18)"/>
+  </g>
+
+  <!-- ====== Top row tiles (Books, Movies) ====== -->
+  <!-- Books -->
+  <g filter="url(#shadow)">
+    <rect x="48" y="320" width="290" height="340" rx="18" fill="url(#bookTile)"/>
+    <text x="68" y="370" fill="#e5c07b" font-size="32" font-weight="900" font-family="Georgia, serif">Books</text>
+    <text x="68" y="395" fill="rgba(255,255,255,0.7)" font-size="14">Read &amp; to read</text>
+    <!-- book spines at the bottom -->
+    <g transform="translate(58, 480)">
+      <rect x="0"   y="40" width="38" height="140" fill="#b54b2a"/>
+      <rect x="40"  y="10" width="38" height="170" fill="#e3b25a"/>
+      <rect x="80"  y="60" width="38" height="120" fill="#6e3018"/>
+      <rect x="120" y="30" width="38" height="150" fill="#c9824a"/>
+      <rect x="160" y="50" width="38" height="130" fill="#8a4520"/>
+      <rect x="200" y="0"  width="38" height="180" fill="#e9d4a5"/>
+      <rect x="240" y="40" width="32" height="140" fill="#7c3b18"/>
+    </g>
+    <!-- count badge -->
+    <rect x="280" y="338" width="44" height="26" rx="13" fill="rgba(0,0,0,0.45)"/>
+    <text x="302" y="356" fill="#e5c07b" font-size="14" text-anchor="middle" font-weight="900">12</text>
+  </g>
+
+  <!-- Movies -->
+  <g filter="url(#shadow)">
+    <rect x="382" y="320" width="290" height="340" rx="18" fill="url(#movieTile)"/>
+    <text x="402" y="370" fill="#e4c46b" font-size="32" font-weight="900" font-style="italic" font-family="Georgia, serif">Movies</text>
+    <text x="402" y="395" fill="rgba(255,255,255,0.7)" font-size="14">Big screen, small screen</text>
+    <!-- stars -->
+    <circle cx="500" cy="425" r="1.4" fill="white" opacity="0.55"/>
+    <circle cx="555" cy="445" r="1.4" fill="white" opacity="0.55"/>
+    <circle cx="620" cy="430" r="1.4" fill="white" opacity="0.55"/>
+    <circle cx="445" cy="475" r="1.4" fill="white" opacity="0.55"/>
+    <!-- marquee bulbs row -->
+    <g transform="translate(412, 580)">
+      <circle cx="0"  cy="0" r="6" fill="#ffd56b"/>
+      <circle cx="35" cy="0" r="6" fill="#ffd56b"/>
+      <circle cx="70" cy="0" r="6" fill="#ffd56b"/>
+      <circle cx="105" cy="0" r="6" fill="#ffd56b"/>
+      <circle cx="140" cy="0" r="6" fill="#ffd56b"/>
+      <circle cx="175" cy="0" r="6" fill="#ffd56b"/>
+      <circle cx="210" cy="0" r="6" fill="#ffd56b"/>
+      <circle cx="245" cy="0" r="6" fill="#ffd56b"/>
+    </g>
+    <g transform="translate(412, 620)">
+      <circle cx="0"  cy="0" r="6" fill="#ffd56b"/>
+      <circle cx="35" cy="0" r="6" fill="#ffd56b"/>
+      <circle cx="70" cy="0" r="6" fill="#ffd56b"/>
+      <circle cx="105" cy="0" r="6" fill="#ffd56b"/>
+      <circle cx="140" cy="0" r="6" fill="#ffd56b"/>
+      <circle cx="175" cy="0" r="6" fill="#ffd56b"/>
+      <circle cx="210" cy="0" r="6" fill="#ffd56b"/>
+      <circle cx="245" cy="0" r="6" fill="#ffd56b"/>
+    </g>
+    <!-- film strip left edge -->
+    <rect x="382" y="320" width="20" height="340" fill="#050714"/>
+    <rect x="386" y="340" width="12" height="20" fill="black"/>
+    <rect x="386" y="380" width="12" height="20" fill="black"/>
+    <rect x="386" y="420" width="12" height="20" fill="black"/>
+    <rect x="386" y="460" width="12" height="20" fill="black"/>
+    <rect x="386" y="500" width="12" height="20" fill="black"/>
+    <rect x="386" y="540" width="12" height="20" fill="black"/>
+    <rect x="386" y="580" width="12" height="20" fill="black"/>
+    <rect x="386" y="620" width="12" height="20" fill="black"/>
+    <!-- count badge -->
+    <rect x="614" y="338" width="44" height="26" rx="13" fill="rgba(0,0,0,0.45)"/>
+    <text x="636" y="356" fill="#e4c46b" font-size="14" text-anchor="middle" font-weight="900">7</text>
+  </g>
+
+  <!-- ====== Bottom row tiles (TV, Games) ====== -->
+  <!-- TV -->
+  <g filter="url(#shadow)">
+    <rect x="48" y="940" width="290" height="340" rx="18" fill="url(#tvTile)"/>
+    <text x="68" y="990" fill="#52ff8a" font-size="32" font-weight="900" font-family="monospace" letter-spacing="2">TV</text>
+    <text x="68" y="1015" fill="rgba(255,255,255,0.7)" font-size="14">Series &amp; seasons</text>
+    <!-- color bars in lower half -->
+    <g transform="translate(48, 1100)">
+      <rect x="0"   y="0" width="41" height="160" fill="#c0c0c0" opacity="0.78"/>
+      <rect x="41"  y="0" width="41" height="160" fill="#c0c000" opacity="0.78"/>
+      <rect x="82"  y="0" width="41" height="160" fill="#00c0c0" opacity="0.78"/>
+      <rect x="123" y="0" width="41" height="160" fill="#00c000" opacity="0.78"/>
+      <rect x="164" y="0" width="42" height="160" fill="#c000c0" opacity="0.78"/>
+      <rect x="206" y="0" width="42" height="160" fill="#c00000" opacity="0.78"/>
+      <rect x="248" y="0" width="42" height="160" fill="#0000c0" opacity="0.78"/>
+    </g>
+    <!-- bezel bottom -->
+    <rect x="48" y="1260" width="290" height="20" fill="#050e08"/>
+    <!-- scanlines hint -->
+    <g opacity="0.18">
+      <line x1="48" y1="970" x2="338" y2="970" stroke="black"/>
+      <line x1="48" y1="980" x2="338" y2="980" stroke="black"/>
+      <line x1="48" y1="990" x2="338" y2="990" stroke="black"/>
+    </g>
+    <!-- count badge -->
+    <rect x="280" y="958" width="44" height="26" rx="13" fill="rgba(0,0,0,0.45)"/>
+    <text x="302" y="976" fill="#52ff8a" font-size="14" text-anchor="middle" font-weight="900">5</text>
+  </g>
+
+  <!-- Games -->
+  <g filter="url(#shadow)">
+    <rect x="382" y="940" width="290" height="340" rx="18" fill="url(#gameTile)"/>
+    <text x="402" y="990" fill="#ff3dbe" font-size="32" font-weight="900">Games</text>
+    <text x="402" y="1015" fill="rgba(255,255,255,0.7)" font-size="14">Played &amp; in the backlog</text>
+    <!-- retro sun -->
+    <circle cx="527" cy="1130" r="55" fill="#ffb6e0"/>
+    <rect x="472" y="1135" width="110" height="6" fill="#180a3c"/>
+    <rect x="472" y="1150" width="110" height="6" fill="#180a3c"/>
+    <rect x="472" y="1165" width="110" height="6" fill="#180a3c"/>
+    <!-- horizon line -->
+    <line x1="382" y1="1180" x2="672" y2="1180" stroke="#ff3dbe" stroke-width="2" opacity="0.7"/>
+    <!-- perspective grid -->
+    <g stroke="#34e0ff" stroke-width="1.4" opacity="0.55">
+      <line x1="452" y1="1180" x2="382" y2="1280"/>
+      <line x1="482" y1="1180" x2="432" y2="1280"/>
+      <line x1="512" y1="1180" x2="482" y2="1280"/>
+      <line x1="542" y1="1180" x2="532" y2="1280"/>
+      <line x1="572" y1="1180" x2="582" y2="1280"/>
+      <line x1="602" y1="1180" x2="632" y2="1280"/>
+    </g>
+    <g stroke="#ff3dbe" stroke-width="1.4" opacity="0.45">
+      <line x1="382" y1="1210" x2="672" y2="1210"/>
+      <line x1="382" y1="1240" x2="672" y2="1240"/>
+      <line x1="382" y1="1275" x2="672" y2="1275"/>
+    </g>
+    <!-- count badge -->
+    <rect x="614" y="958" width="44" height="26" rx="13" fill="rgba(0,0,0,0.45)"/>
+    <text x="636" y="976" fill="#ff3dbe" font-size="14" text-anchor="middle" font-weight="900">3</text>
+  </g>
+</svg>

@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Icon 4: a literal little bookshelf with mixed media on it.
+       Most figurative of the four options. Reads as "shelf" first. -->
+  <defs>
+    <linearGradient id="bg4" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#241828"/>
+      <stop offset="100%" stop-color="#0a0612"/>
+    </linearGradient>
+    <linearGradient id="plank4" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#a07045"/>
+      <stop offset="100%" stop-color="#5d3a1d"/>
+    </linearGradient>
+    <linearGradient id="plankEdge4" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#5d3a1d"/>
+      <stop offset="100%" stop-color="#2a1808"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" fill="url(#bg4)"/>
+
+  <!-- Top shelf -->
+  <g transform="translate(0, 170)">
+    <!-- items on this shelf: 3 books + 1 game cartridge -->
+    <g transform="translate(110, 0)">
+      <rect x="0"   y="40" width="34" height="120" fill="#b54b2a"/>
+      <rect x="36"  y="20" width="34" height="140" fill="#e3b25a"/>
+      <rect x="72"  y="60" width="34" height="100" fill="#6e3018"/>
+      <rect x="108" y="30" width="34" height="130" fill="#c9824a"/>
+      <!-- a small game cart leaning on the right -->
+      <g transform="translate(160, 70)">
+        <rect x="0" y="0" width="60" height="90" rx="4" fill="#3a0e5c"/>
+        <rect x="6" y="10" width="48" height="40" fill="#ff3dbe" opacity="0.85"/>
+        <rect x="20" y="60" width="20" height="14" rx="2" fill="#34e0ff"/>
+      </g>
+    </g>
+    <!-- the shelf plank -->
+    <rect x="40" y="160" width="432" height="22" fill="url(#plank4)"/>
+    <rect x="40" y="182" width="432" height="10" fill="url(#plankEdge4)"/>
+  </g>
+
+  <!-- Bottom shelf -->
+  <g transform="translate(0, 380)">
+    <!-- items on this shelf: a TV-like rectangle + film reel -->
+    <g transform="translate(80, -110)">
+      <!-- mini TV -->
+      <rect x="0" y="0" width="130" height="95" rx="8" fill="#0a1810"/>
+      <rect x="8" y="8" width="114" height="68" rx="3" fill="#52ff8a" opacity="0.78"/>
+      <rect x="48" y="76" width="34" height="14" rx="3" fill="#0a1810"/>
+      <rect x="30" y="90" width="70" height="6" rx="2" fill="#0a1810"/>
+      <!-- film reel beside it -->
+      <g transform="translate(230, 50)">
+        <circle cx="0" cy="0" r="48" fill="#1a1820"/>
+        <circle cx="0" cy="0" r="10" fill="#050507"/>
+        <circle cx="0" cy="-26" r="8" fill="#050507"/>
+        <circle cx="22" cy="-13" r="8" fill="#050507"/>
+        <circle cx="22" cy="13" r="8" fill="#050507"/>
+        <circle cx="0" cy="26" r="8" fill="#050507"/>
+        <circle cx="-22" cy="13" r="8" fill="#050507"/>
+        <circle cx="-22" cy="-13" r="8" fill="#050507"/>
+      </g>
+    </g>
+    <rect x="40" y="0" width="432" height="22" fill="url(#plank4)"/>
+    <rect x="40" y="22" width="432" height="10" fill="url(#plankEdge4)"/>
+  </g>
+
+  <!-- side uprights -->
+  <rect x="40" y="170" width="14" height="220" fill="url(#plankEdge4)"/>
+  <rect x="458" y="170" width="14" height="220" fill="url(#plankEdge4)"/>
+</svg>

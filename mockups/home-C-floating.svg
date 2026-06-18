@@ -1,0 +1,161 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 1560" font-family="system-ui, sans-serif">
+  <!-- Option C: floating minimalist shelves. Thin warm wood planks under each row
+       cast a soft shadow on the wall. Tiles "rest" on the planks with slight overlap.
+       Less skeuomorphic, lots of breathing room. -->
+  <defs>
+    <radialGradient id="wallC" cx="50%" cy="20%" r="70%">
+      <stop offset="0%" stop-color="#1d1822"/>
+      <stop offset="100%" stop-color="#0d0a12"/>
+    </radialGradient>
+    <linearGradient id="plank" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#a07045"/>
+      <stop offset="100%" stop-color="#5d3a1d"/>
+    </linearGradient>
+    <linearGradient id="bookTileC" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#5a3618"/>
+      <stop offset="100%" stop-color="#8d5a2c"/>
+    </linearGradient>
+    <linearGradient id="movieTileC" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#08102a"/>
+      <stop offset="100%" stop-color="#1a2440"/>
+    </linearGradient>
+    <linearGradient id="tvTileC" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0a2014"/>
+      <stop offset="100%" stop-color="#0d3520"/>
+    </linearGradient>
+    <linearGradient id="gameTileC" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0a0420"/>
+      <stop offset="100%" stop-color="#35105a"/>
+    </linearGradient>
+    <filter id="tileShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="20" stdDeviation="16" flood-opacity="0.55"/>
+    </filter>
+    <filter id="plankShadow" x="-10%" y="-10%" width="120%" height="220%">
+      <feDropShadow dx="0" dy="8" stdDeviation="6" flood-opacity="0.6"/>
+    </filter>
+  </defs>
+
+  <rect width="720" height="1560" fill="url(#wallC)"/>
+  <rect width="720" height="80" fill="rgba(0,0,0,0.25)"/>
+  <text x="40" y="50" fill="#888" font-size="22">11:34</text>
+  <text x="640" y="50" fill="#888" font-size="22">86%</text>
+
+  <text x="48" y="170" fill="#e5c07b" font-size="44" font-weight="900" letter-spacing="6">MEDIA</text>
+  <text x="48" y="220" fill="#e8e8ea" font-size="32" font-weight="300" letter-spacing="2">shelf</text>
+
+  <!-- ===== Floating plank #1 ===== -->
+  <g filter="url(#plankShadow)">
+    <rect x="40" y="700" width="640" height="14" rx="2" fill="url(#plank)"/>
+  </g>
+
+  <!-- ===== Floating plank #2 ===== -->
+  <g filter="url(#plankShadow)">
+    <rect x="40" y="1340" width="640" height="14" rx="2" fill="url(#plank)"/>
+  </g>
+
+  <!-- ===== Top row tiles (slight overlap with the plank below) ===== -->
+  <g filter="url(#tileShadow)">
+    <!-- Books -->
+    <rect x="64" y="360" width="280" height="345" rx="14" fill="url(#bookTileC)"/>
+    <text x="84" y="408" fill="#e5c07b" font-size="30" font-weight="900" font-family="Georgia, serif">Books</text>
+    <text x="84" y="432" fill="rgba(255,255,255,0.65)" font-size="13">Read &amp; to read</text>
+    <g transform="translate(74, 530)">
+      <rect x="0"   y="40" width="34" height="140" fill="#b54b2a"/>
+      <rect x="36"  y="10" width="34" height="170" fill="#e3b25a"/>
+      <rect x="72"  y="60" width="34" height="120" fill="#6e3018"/>
+      <rect x="108" y="30" width="34" height="150" fill="#c9824a"/>
+      <rect x="144" y="50" width="34" height="130" fill="#8a4520"/>
+      <rect x="180" y="0"  width="34" height="180" fill="#e9d4a5"/>
+      <rect x="216" y="40" width="32" height="140" fill="#7c3b18"/>
+    </g>
+    <rect x="288" y="378" width="42" height="26" rx="13" fill="rgba(0,0,0,0.55)"/>
+    <text x="309" y="396" fill="#e5c07b" font-size="14" text-anchor="middle" font-weight="900">12</text>
+
+    <!-- Movies -->
+    <rect x="376" y="360" width="280" height="345" rx="14" fill="url(#movieTileC)"/>
+    <text x="396" y="408" fill="#e4c46b" font-size="30" font-weight="900" font-style="italic" font-family="Georgia, serif">Movies</text>
+    <text x="396" y="432" fill="rgba(255,255,255,0.65)" font-size="13">Big screen, small screen</text>
+    <circle cx="500" cy="455" r="1.5" fill="white" opacity="0.55"/>
+    <circle cx="555" cy="475" r="1.5" fill="white" opacity="0.55"/>
+    <circle cx="620" cy="460" r="1.5" fill="white" opacity="0.55"/>
+    <circle cx="445" cy="505" r="1.5" fill="white" opacity="0.55"/>
+    <g transform="translate(410, 620)">
+      <circle cx="0"   cy="0" r="6" fill="#ffd56b"/>
+      <circle cx="36"  cy="0" r="6" fill="#ffd56b"/>
+      <circle cx="72"  cy="0" r="6" fill="#ffd56b"/>
+      <circle cx="108" cy="0" r="6" fill="#ffd56b"/>
+      <circle cx="144" cy="0" r="6" fill="#ffd56b"/>
+      <circle cx="180" cy="0" r="6" fill="#ffd56b"/>
+      <circle cx="216" cy="0" r="6" fill="#ffd56b"/>
+    </g>
+    <g transform="translate(410, 660)">
+      <circle cx="0"   cy="0" r="6" fill="#ffd56b"/>
+      <circle cx="36"  cy="0" r="6" fill="#ffd56b"/>
+      <circle cx="72"  cy="0" r="6" fill="#ffd56b"/>
+      <circle cx="108" cy="0" r="6" fill="#ffd56b"/>
+      <circle cx="144" cy="0" r="6" fill="#ffd56b"/>
+      <circle cx="180" cy="0" r="6" fill="#ffd56b"/>
+      <circle cx="216" cy="0" r="6" fill="#ffd56b"/>
+    </g>
+    <rect x="376" y="360" width="18" height="345" fill="#050714"/>
+    <rect x="380" y="380" width="11" height="20" fill="black"/>
+    <rect x="380" y="420" width="11" height="20" fill="black"/>
+    <rect x="380" y="460" width="11" height="20" fill="black"/>
+    <rect x="380" y="500" width="11" height="20" fill="black"/>
+    <rect x="380" y="540" width="11" height="20" fill="black"/>
+    <rect x="380" y="580" width="11" height="20" fill="black"/>
+    <rect x="380" y="620" width="11" height="20" fill="black"/>
+    <rect x="380" y="660" width="11" height="20" fill="black"/>
+    <rect x="600" y="378" width="42" height="26" rx="13" fill="rgba(0,0,0,0.55)"/>
+    <text x="621" y="396" fill="#e4c46b" font-size="14" text-anchor="middle" font-weight="900">7</text>
+  </g>
+
+  <!-- ===== Bottom row tiles ===== -->
+  <g filter="url(#tileShadow)">
+    <!-- TV -->
+    <rect x="64" y="1000" width="280" height="345" rx="14" fill="url(#tvTileC)"/>
+    <text x="84" y="1048" fill="#52ff8a" font-size="30" font-weight="900" font-family="monospace" letter-spacing="2">TV</text>
+    <text x="84" y="1072" fill="rgba(255,255,255,0.65)" font-size="13">Series &amp; seasons</text>
+    <g transform="translate(64, 1170)">
+      <rect x="0"   y="0" width="40" height="155" fill="#c0c0c0" opacity="0.78"/>
+      <rect x="40"  y="0" width="40" height="155" fill="#c0c000" opacity="0.78"/>
+      <rect x="80"  y="0" width="40" height="155" fill="#00c0c0" opacity="0.78"/>
+      <rect x="120" y="0" width="40" height="155" fill="#00c000" opacity="0.78"/>
+      <rect x="160" y="0" width="40" height="155" fill="#c000c0" opacity="0.78"/>
+      <rect x="200" y="0" width="40" height="155" fill="#c00000" opacity="0.78"/>
+      <rect x="240" y="0" width="40" height="155" fill="#0000c0" opacity="0.78"/>
+    </g>
+    <rect x="64" y="1325" width="280" height="20" fill="#050e08"/>
+    <g opacity="0.18">
+      <line x1="64" y1="1030" x2="344" y2="1030" stroke="black"/>
+      <line x1="64" y1="1040" x2="344" y2="1040" stroke="black"/>
+      <line x1="64" y1="1050" x2="344" y2="1050" stroke="black"/>
+    </g>
+    <rect x="288" y="1018" width="42" height="26" rx="13" fill="rgba(0,0,0,0.55)"/>
+    <text x="309" y="1036" fill="#52ff8a" font-size="14" text-anchor="middle" font-weight="900">5</text>
+
+    <!-- Games -->
+    <rect x="376" y="1000" width="280" height="345" rx="14" fill="url(#gameTileC)"/>
+    <text x="396" y="1048" fill="#ff3dbe" font-size="30" font-weight="900">Games</text>
+    <text x="396" y="1072" fill="rgba(255,255,255,0.65)" font-size="13">Played &amp; in the backlog</text>
+    <circle cx="516" cy="1195" r="52" fill="#ffb6e0"/>
+    <rect x="464" y="1200" width="104" height="6" fill="#180a3c"/>
+    <rect x="464" y="1215" width="104" height="6" fill="#180a3c"/>
+    <rect x="464" y="1230" width="104" height="6" fill="#180a3c"/>
+    <line x1="376" y1="1244" x2="656" y2="1244" stroke="#ff3dbe" stroke-width="2" opacity="0.7"/>
+    <g stroke="#34e0ff" stroke-width="1.4" opacity="0.55">
+      <line x1="442" y1="1244" x2="376" y2="1345"/>
+      <line x1="475" y1="1244" x2="425" y2="1345"/>
+      <line x1="508" y1="1244" x2="476" y2="1345"/>
+      <line x1="541" y1="1244" x2="528" y2="1345"/>
+      <line x1="574" y1="1244" x2="580" y2="1345"/>
+      <line x1="607" y1="1244" x2="630" y2="1345"/>
+    </g>
+    <g stroke="#ff3dbe" stroke-width="1.4" opacity="0.45">
+      <line x1="376" y1="1272" x2="656" y2="1272"/>
+      <line x1="376" y1="1305" x2="656" y2="1305"/>
+    </g>
+    <rect x="600" y="1018" width="42" height="26" rx="13" fill="rgba(0,0,0,0.55)"/>
+    <text x="621" y="1036" fill="#ff3dbe" font-size="14" text-anchor="middle" font-weight="900">3</text>
+  </g>
+</svg>
