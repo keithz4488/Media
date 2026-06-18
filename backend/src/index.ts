@@ -226,31 +226,43 @@ async function deleteItem(id: string, env: Env): Promise<Response> {
 // ---------- external lookups ----------
 
 async function searchBooks(url: URL, env: Env): Promise<Response> {
+  // Open Library: keyless, no quota issues, mature search + cover CDN.
   const isbn = url.searchParams.get("isbn");
   const q = url.searchParams.get("q");
-  const query = isbn ? `isbn:${isbn}` : q;
-  if (!query) return err(400, "q or isbn required");
+  if (!isbn && !q) return err(400, "q or isbn required");
 
-  const api = new URL("https://www.googleapis.com/books/v1/volumes");
-  api.searchParams.set("q", query);
-  api.searchParams.set("maxResults", "12");
-  const r = await fetch(api.toString());
-  if (!r.ok) return err(502, "google books error");
+  const api = new URL("https://openlibrary.org/search.json");
+  if (isbn) api.searchParams.set("isbn", isbn);
+  else api.searchParams.set("q", q!);
+  api.searchParams.set("limit", "12");
+  api.searchParams.set(
+    "fields",
+    "key,title,subtitle,author_name,first_publish_year,isbn,cover_i",
+  );
+
+  const r = await fetch(api.toString(), { headers: { "user-agent": "media-shelf/0.1 (kzaller.com)" } });
+  if (!r.ok) {
+    const body = await r.text().catch(() => "");
+    return err(502, `open library ${r.status}: ${body.slice(0, 200)}`);
+  }
   const data = (await r.json()) as any;
+  const docs: any[] = data.docs || [];
 
-  const hits: SearchHit[] = (data.items || []).map((it: any): SearchHit => {
-    const v = it.volumeInfo || {};
-    const ids = v.industryIdentifiers || [];
-    const picked = ids.find((i: any) => i.type === "ISBN_13") || ids.find((i: any) => i.type === "ISBN_10") || ids[0];
-    const cover = v.imageLinks?.thumbnail?.replace(/^http:/, "https:") || null;
+  const hits: SearchHit[] = docs.map((d: any): SearchHit => {
+    const firstIsbn = Array.isArray(d.isbn) && d.isbn.length > 0 ? String(d.isbn[0]) : null;
+    const workId = d.key ? String(d.key).replace("/works/", "") : "";
+    const externalId = firstIsbn || workId;
+    const cover = d.cover_i ? `https://covers.openlibrary.org/b/id/${d.cover_i}-L.jpg` : null;
+    const authors = Array.isArray(d.author_name) ? d.author_name.join(", ") : null;
+    const subtitle = [authors, d.subtitle].filter(Boolean).join(" · ") || null;
     return {
-      external_id: picked?.identifier || it.id,
-      external_src: "google_books",
-      title: v.title || "Untitled",
-      subtitle: (v.authors || []).join(", ") || null,
-      year: v.publishedDate ? Number(v.publishedDate.slice(0, 4)) || null : null,
+      external_id: externalId,
+      external_src: "open_library",
+      title: d.title || "Untitled",
+      subtitle,
+      year: typeof d.first_publish_year === "number" ? d.first_publish_year : null,
       cover_url: cover,
-      description: v.description || null,
+      description: null,
     };
   });
   return json({ hits });
@@ -273,7 +285,10 @@ async function searchTmdb(url: URL, env: Env, kind: "movie" | "tv"): Promise<Res
   api.searchParams.set("api_key", env.TMDB_API_KEY);
 
   const r = await fetch(api.toString());
-  if (!r.ok) return err(502, "tmdb error");
+  if (!r.ok) {
+    const body = await r.text().catch(() => "");
+    return err(502, `tmdb ${r.status}: ${body.slice(0, 200)}`);
+  }
   const data = (await r.json()) as any;
   const list = id ? [data] : data.results || [];
   const hits: SearchHit[] = list.map((m: any): SearchHit => {
@@ -308,7 +323,10 @@ async function searchGames(url: URL, env: Env): Promise<Response> {
   }
 
   const r = await fetch(api.toString());
-  if (!r.ok) return err(502, "rawg error");
+  if (!r.ok) {
+    const body = await r.text().catch(() => "");
+    return err(502, `rawg ${r.status}: ${body.slice(0, 200)}`);
+  }
   const data = (await r.json()) as any;
   const list = slug ? [data] : data.results || [];
   const hits: SearchHit[] = list.map((g: any): SearchHit => {
