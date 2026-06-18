@@ -5,6 +5,8 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -60,7 +62,7 @@ import com.kzaller.shelf.ui.components.shelfTextFieldColors
 import com.kzaller.shelf.ui.theme.MediaShelfTheme
 import com.kzaller.shelf.ui.theme.flavorFor
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun DetailScreen(vm: DetailViewModel, onBack: () -> Unit) {
     val item by vm.item.collectAsState()
@@ -142,13 +144,20 @@ fun DetailScreen(vm: DetailViewModel, onBack: () -> Unit) {
                     Text("Status", style = MaterialTheme.typography.titleSmall)
                     Spacer(Modifier.height(6.dp))
                     val selectedStatuses = Status.parse(current.status)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Status.ALL.forEach { s ->
+                    val options = Status.optionsFor(current.kind)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        options.forEach { s ->
                             val on = s in selectedStatuses
                             AssistChip(
                                 onClick = { vm.setStatus(Status.toggle(current.status, s)) },
                                 label = {
-                                    Text(s, color = if (on) flavor.accent else MaterialTheme.colorScheme.onBackground)
+                                    Text(
+                                        text = Status.label(s),
+                                        color = if (on) flavor.accent else MaterialTheme.colorScheme.onBackground,
+                                    )
                                 },
                                 colors = AssistChipDefaults.assistChipColors(
                                     containerColor = if (on) flavor.accent.copy(alpha = 0.22f) else Color.Transparent,

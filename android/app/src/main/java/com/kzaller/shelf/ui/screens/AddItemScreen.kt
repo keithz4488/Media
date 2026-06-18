@@ -5,6 +5,8 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -247,7 +249,7 @@ private fun HitRow(hit: SearchHit, onPick: () -> Unit) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun ManualSection(
     seed: String,
@@ -289,15 +291,21 @@ private fun ManualSection(
             modifier = Modifier.fillMaxWidth(),
             colors = shelfTextFieldColors(),
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Status.ALL.forEach { s ->
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Status.optionsFor(kind).forEach { s ->
                 val on = s in statuses
                 AssistChip(
                     onClick = {
                         statuses = if (on) statuses - s else statuses + s
                     },
                     label = {
-                        Text(s, color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground)
+                        Text(
+                            text = Status.label(s),
+                            color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground,
+                        )
                     },
                     colors = AssistChipDefaults.assistChipColors(
                         containerColor = if (on) MaterialTheme.colorScheme.primary.copy(alpha = 0.22f) else Color.Transparent,
@@ -309,7 +317,7 @@ private fun ManualSection(
             OutlinedButton(onClick = onCancel) { Text("Back") }
             Button(
                 onClick = {
-                    val csv = Status.ALL.filter { it in statuses }.joinToString(",")
+                    val csv = statuses.joinToString(",")
                     onSave(title, subtitle, year.toIntOrNull(), csv.ifEmpty { Status.OWNED })
                 },
                 enabled = title.isNotBlank(),
