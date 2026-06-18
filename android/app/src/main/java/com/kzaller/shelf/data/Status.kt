@@ -23,7 +23,7 @@ object Status {
 
     fun optionsFor(kind: MediaKind): List<String> = when (kind) {
         MediaKind.BOOK  -> listOf(OWNED, READING, READ, WISHLIST)
-        MediaKind.MOVIE -> listOf(OWNED, WATCHING, WATCHED, WISHLIST)
+        MediaKind.MOVIE -> listOf(OWNED, WATCHED, WISHLIST)
         MediaKind.TV    -> listOf(OWNED, WATCHING, WATCHED, WISHLIST)
         MediaKind.GAME  -> listOf(OWNED, PLAYING, PLAYED, COMPLETE, WISHLIST)
     }

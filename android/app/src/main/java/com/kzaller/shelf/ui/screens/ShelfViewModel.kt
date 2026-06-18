@@ -5,11 +5,14 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.ShelfRepository
+import com.kzaller.shelf.data.Status
 import com.kzaller.shelf.data.models.ItemDto
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -18,8 +21,24 @@ class ShelfViewModel(
     private val kind: MediaKind,
 ) : ViewModel() {
 
+    private val _filters = MutableStateFlow<Set<String>>(emptySet())
+    val filters: StateFlow<Set<String>> = _filters.asStateFlow()
+
+    /** Items visible on the shelf: full list, intersected with active status filters. */
     val items: StateFlow<List<ItemDto>> =
-        repo.observeShelf(kind).stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+        combine(repo.observeShelf(kind), _filters) { all, filters ->
+            if (filters.isEmpty()) all
+            else all.filter { item ->
+                val s = Status.parse(item.status)
+                s.any { it in filters }
+            }
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    /** Full unfiltered count, for a "showing X of Y" label when filters are active. */
+    val totalCount: StateFlow<Int> =
+        repo.observeShelf(kind)
+            .map { it.size }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
     private val _refreshing = MutableStateFlow(false)
     val refreshing = _refreshing.asStateFlow()
@@ -36,6 +55,14 @@ class ShelfViewModel(
             _refreshing.value = false
         }
     }
+
+    fun toggleFilter(code: String) {
+        _filters.value = _filters.value.toMutableSet().apply {
+            if (!add(code)) remove(code)
+        }
+    }
+
+    fun clearFilters() { _filters.value = emptySet() }
 
     fun clearError() { _error.value = null }
 
