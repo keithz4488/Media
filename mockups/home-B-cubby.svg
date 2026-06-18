@@ -69,16 +69,19 @@
     <!-- Top-left: Books (cubby = 22..309 x 20..470) -->
     <rect x="22" y="20" width="287" height="450" fill="url(#cubbyBack)"/>
     <rect x="22" y="20" width="287" height="450" fill="url(#bookFill)" opacity="0.75"/>
-    <!-- book spines in the cubby -->
+    <!-- book spines in the cubby. All bottom-align inside the cubby (cubby is 22..309 x 20..470).
+         Tallest is 200, shortest 150; all rest on y=205 cubby-relative (= y=465 absolute). -->
     <g transform="translate(40, 260)">
-      <rect x="0"   y="40" width="34" height="180" fill="#b54b2a"/>
-      <rect x="36"  y="10" width="34" height="210" fill="#e3b25a"/>
-      <rect x="72"  y="60" width="34" height="160" fill="#6e3018"/>
-      <rect x="108" y="30" width="34" height="190" fill="#c9824a"/>
-      <rect x="144" y="50" width="34" height="170" fill="#8a4520"/>
-      <rect x="180" y="0"  width="34" height="220" fill="#e9d4a5"/>
-      <rect x="216" y="40" width="34" height="180" fill="#7c3b18"/>
+      <rect x="0"   y="35"  width="34" height="170" fill="#b54b2a"/>
+      <rect x="36"  y="15"  width="34" height="190" fill="#e3b25a"/>
+      <rect x="72"  y="55"  width="34" height="150" fill="#6e3018"/>
+      <rect x="108" y="25"  width="34" height="180" fill="#c9824a"/>
+      <rect x="144" y="45"  width="34" height="160" fill="#8a4520"/>
+      <rect x="180" y="5"   width="34" height="200" fill="#e9d4a5"/>
+      <rect x="216" y="35"  width="34" height="170" fill="#7c3b18"/>
     </g>
+    <!-- cubby floor line so the books look like they are resting on something -->
+    <line x1="22" y1="468" x2="309" y2="468" stroke="rgba(0,0,0,0.6)" stroke-width="2"/>
     <!-- inset cubby shadow -->
     <rect x="22" y="20" width="287" height="450" fill="none" stroke="rgba(0,0,0,0.6)" stroke-width="6"/>
     <text x="42" y="68" fill="#e5c07b" font-size="32" font-weight="900" font-family="Georgia, serif">Books</text>
