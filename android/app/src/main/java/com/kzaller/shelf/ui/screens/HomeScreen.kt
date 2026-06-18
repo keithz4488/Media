@@ -151,10 +151,11 @@ private fun ShelfTileCard(tile: ShelfTile, count: Int, onClick: () -> Unit) {
                         style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Black),
                     )
                 }
-                Column(modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)) {
+                // Title + tagline at the TOP, so the illustration can fill the bottom.
+                Column(modifier = Modifier.align(Alignment.TopStart).padding(start = 16.dp, top = 14.dp, end = 56.dp)) {
                     Text(
                         text = tile.kind.label,
-                        style = flavor.titleStyle.copy(color = flavor.accent, fontSize = 28.sp),
+                        style = flavor.titleStyle.copy(color = flavor.accent, fontSize = 26.sp),
                     )
                     Text(
                         text = tile.tagline,
@@ -174,7 +175,7 @@ private fun tileBrush(kind: MediaKind): Brush = when (kind) {
         listOf(Color(0xFF3B2310), Color(0xFF6B3F1C), Color(0xFFA56A2C)),
     )
     MediaKind.MOVIE -> Brush.verticalGradient(
-        listOf(Color(0xFF050203), Color(0xFF1B0A0E), Color(0xFF45121A)),
+        listOf(Color(0xFF050714), Color(0xFF0B132B), Color(0xFF1C2541)),
     )
     MediaKind.TV -> Brush.verticalGradient(
         listOf(Color(0xFF021008), Color(0xFF0A1F14), Color(0xFF0F3B22)),
@@ -189,15 +190,16 @@ private fun tileBrush(kind: MediaKind): Brush = when (kind) {
 private fun drawBookSpines(d: DrawScope) = with(d) {
     val spines = listOf(
         Color(0xFFB54B2A) to 0.70f,
-        Color(0xFFE3B25A) to 0.85f,
+        Color(0xFFE3B25A) to 0.92f,
         Color(0xFF6E3018) to 0.55f,
-        Color(0xFFC9824A) to 0.78f,
-        Color(0xFF8A4520) to 0.62f,
-        Color(0xFFE9D4A5) to 0.90f,
+        Color(0xFFC9824A) to 0.82f,
+        Color(0xFF8A4520) to 0.66f,
+        Color(0xFFE9D4A5) to 0.98f,
+        Color(0xFF7C3B18) to 0.74f,
     )
-    val rowTop = size.height * 0.58f
-    val rowH = size.height * 0.34f
-    val totalW = size.width * 0.92f
+    val rowH = size.height * 0.46f
+    val rowTop = size.height - rowH - 6f
+    val totalW = size.width * 0.94f
     val gap = 4f
     val w = (totalW - gap * (spines.size - 1)) / spines.size
     var x = (size.width - totalW) / 2f
@@ -206,46 +208,58 @@ private fun drawBookSpines(d: DrawScope) = with(d) {
         drawRect(c, topLeft = Offset(x, rowTop + (rowH - h)), size = Size(w, h))
         drawRect(
             Color.White.copy(alpha = 0.08f),
-            topLeft = Offset(x + w * 0.15f, rowTop + (rowH - h)),
-            size = Size(w * 0.10f, h),
+            topLeft = Offset(x + w * 0.18f, rowTop + (rowH - h)),
+            size = Size(w * 0.12f, h),
         )
         x += w + gap
     }
+    // little "shelf" line
     drawRect(
-        Color.Black.copy(alpha = 0.35f),
-        topLeft = Offset(0f, size.height * 0.92f),
-        size = Size(size.width, size.height * 0.08f),
+        Color(0xFF2A1409),
+        topLeft = Offset(0f, size.height - 5f),
+        size = Size(size.width, 5f),
     )
 }
 
 private fun drawMarquee(d: DrawScope) = with(d) {
+    // Twin marquee bulb rows along the bottom edge -- like the front of a theater.
     val rows = 2
     val bulbsPerRow = 8
     val padX = size.width * 0.10f
-    val padTop = size.height * 0.10f
-    val rowGap = size.height * 0.08f
-    val bulbR = size.width * 0.022f
+    val bottomPad = size.height * 0.10f
+    val rowGap = size.height * 0.07f
+    val bulbR = size.width * 0.023f
     val span = size.width - padX * 2
     for (r in 0 until rows) {
         for (c in 0 until bulbsPerRow) {
             val x = padX + span * c / (bulbsPerRow - 1)
-            val y = padTop + rowGap * r
-            drawCircle(Color(0xFFFFD56B).copy(alpha = 0.35f), radius = bulbR * 2.3f, center = Offset(x, y))
+            val y = size.height - bottomPad - rowGap * r
+            // warm glow halo against the navy background
+            drawCircle(Color(0xFFFFD56B).copy(alpha = 0.42f), radius = bulbR * 2.6f, center = Offset(x, y))
             drawCircle(Color(0xFFFFE08A), radius = bulbR, center = Offset(x, y))
             drawCircle(
-                Color.White.copy(alpha = 0.6f),
-                radius = bulbR * 0.35f,
+                Color.White.copy(alpha = 0.7f),
+                radius = bulbR * 0.38f,
                 center = Offset(x - bulbR * 0.25f, y - bulbR * 0.25f),
             )
         }
     }
-    val stripW = size.width * 0.08f
-    drawRect(Color(0xFF1A0B0F), topLeft = Offset(0f, 0f), size = Size(stripW, size.height))
-    val holes = 7
+    // a few "stars" in the upper portion to give the navy depth
+    val stars = listOf(
+        0.18f to 0.18f, 0.30f to 0.32f, 0.55f to 0.22f,
+        0.78f to 0.40f, 0.88f to 0.16f, 0.40f to 0.50f,
+    )
+    stars.forEach { (sx, sy) ->
+        drawCircle(Color.White.copy(alpha = 0.55f), radius = 1.4f, center = Offset(size.width * sx, size.height * sy))
+    }
+    // film strip down the left edge
+    val stripW = size.width * 0.06f
+    drawRect(Color(0xFF050714), topLeft = Offset(0f, 0f), size = Size(stripW, size.height))
+    val holes = 9
     val holeW = stripW * 0.50f
     val holeH = size.height * 0.05f
     for (i in 0 until holes) {
-        val y = size.height * (0.10f + 0.115f * i)
+        val y = size.height * (0.04f + 0.105f * i)
         drawRect(
             Color.Black,
             topLeft = Offset((stripW - holeW) / 2f, y),
@@ -255,30 +269,30 @@ private fun drawMarquee(d: DrawScope) = with(d) {
 }
 
 private fun drawCrtBars(d: DrawScope) = with(d) {
+    // Color bars on the lower half so the title can sit on the dark green at the top.
     val bars = listOf(
         Color(0xFFC0C0C0), Color(0xFFC0C000), Color(0xFF00C0C0),
         Color(0xFF00C000), Color(0xFFC000C0), Color(0xFFC00000),
         Color(0xFF0000C0),
     )
+    val barTop = size.height * 0.46f
+    val barH = size.height * 0.46f
     val barW = size.width / bars.size
-    val barH = size.height * 0.50f
     bars.forEachIndexed { i, c ->
-        drawRect(c.copy(alpha = 0.72f), topLeft = Offset(i * barW, 0f), size = Size(barW, barH))
+        drawRect(c.copy(alpha = 0.78f), topLeft = Offset(i * barW, barTop), size = Size(barW, barH))
     }
+    // bottom strip: a thin black "letterbox" border to evoke a TV bezel
+    drawRect(Color(0xFF050E08), topLeft = Offset(0f, size.height - size.height * 0.06f), size = Size(size.width, size.height * 0.06f))
+    // scanlines covering everything
     var y = 0f
     while (y < size.height) {
         drawLine(Color.Black.copy(alpha = 0.18f), Offset(0f, y), Offset(size.width, y), strokeWidth = 1f)
         y += 3f
     }
-    drawRect(
-        Color.Black.copy(alpha = 0.25f),
-        topLeft = Offset(0f, size.height * 0.62f),
-        size = Size(size.width, size.height * 0.38f),
-    )
 }
 
 private fun drawArcadeGrid(d: DrawScope) = with(d) {
-    val horizon = size.height * 0.40f
+    val horizon = size.height * 0.52f
     val cyan = Color(0xFF34E0FF)
     val magenta = Color(0xFFFF3DBE)
     drawRect(magenta.copy(alpha = 0.22f), topLeft = Offset(0f, horizon - 6f), size = Size(size.width, 12f))

@@ -24,14 +24,22 @@ class DetailViewModel(
     private val _busy = MutableStateFlow(false)
     val busy = _busy.asStateFlow()
 
-    fun setStatus(status: String) = launchUpdate(UpdateItemRequest(status = status))
-    fun setRating(rating: Int?) = launchUpdate(UpdateItemRequest(rating = rating))
-    fun setNotes(notes: String) = launchUpdate(UpdateItemRequest(notes = notes))
+    private val _error = MutableStateFlow<String?>(null)
+    val error = _error.asStateFlow()
 
-    private fun launchUpdate(req: UpdateItemRequest) {
+    private val _toast = MutableStateFlow<String?>(null)
+    val toast = _toast.asStateFlow()
+
+    fun setStatus(status: String) = launchUpdate(UpdateItemRequest(status = status))
+    fun setRating(rating: Int?) = launchUpdate(UpdateItemRequest(rating = rating), toast = if (rating == null) "Rating cleared" else "Rated $rating")
+    fun setNotes(notes: String) = launchUpdate(UpdateItemRequest(notes = notes), toast = "Notes saved")
+
+    private fun launchUpdate(req: UpdateItemRequest, toast: String? = null) {
         viewModelScope.launch {
             _busy.value = true
             repo.update(id, req)
+                .onSuccess { if (toast != null) _toast.value = toast }
+                .onFailure { _error.value = it.message ?: "Update failed" }
             _busy.value = false
         }
     }
@@ -39,10 +47,15 @@ class DetailViewModel(
     fun delete(after: () -> Unit) {
         viewModelScope.launch {
             _busy.value = true
-            repo.delete(id).onSuccess { after() }
+            repo.delete(id)
+                .onSuccess { after() }
+                .onFailure { _error.value = it.message ?: "Delete failed" }
             _busy.value = false
         }
     }
+
+    fun clearError() { _error.value = null }
+    fun clearToast() { _toast.value = null }
 
     companion object {
         fun factory(repo: ShelfRepository, id: String): ViewModelProvider.Factory =

@@ -19,20 +19,27 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -58,6 +65,12 @@ import com.kzaller.shelf.ui.theme.flavorFor
 fun DetailScreen(vm: DetailViewModel, onBack: () -> Unit) {
     val item by vm.item.collectAsState()
     val current = item
+    val error by vm.error.collectAsState()
+    val toast by vm.toast.collectAsState()
+    val snackbar = remember { SnackbarHostState() }
+
+    LaunchedEffect(error) { error?.let { snackbar.showSnackbar(it); vm.clearError() } }
+    LaunchedEffect(toast) { toast?.let { snackbar.showSnackbar(it); vm.clearToast() } }
 
     val dark = isSystemInDarkTheme()
     val flavor = current?.let { flavorFor(it.kind, dark) } ?: flavorFor(MediaKind.BOOK, dark)
@@ -79,6 +92,7 @@ fun DetailScreen(vm: DetailViewModel, onBack: () -> Unit) {
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                 )
             },
+            snackbarHost = { SnackbarHost(snackbar) },
         ) { padding ->
             ShelfBackground(modifier = Modifier.padding(padding)) {
                 if (current == null) return@ShelfBackground
@@ -123,20 +137,26 @@ fun DetailScreen(vm: DetailViewModel, onBack: () -> Unit) {
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }
+
                     Spacer(Modifier.height(16.dp))
+                    Text("Status", style = MaterialTheme.typography.titleSmall)
+                    Spacer(Modifier.height(6.dp))
                     val selectedStatuses = Status.parse(current.status)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Status.ALL.forEach { s ->
                             val on = s in selectedStatuses
                             AssistChip(
                                 onClick = { vm.setStatus(Status.toggle(current.status, s)) },
-                                label = { Text(s, color = if (on) flavor.accent else MaterialTheme.colorScheme.onBackground) },
+                                label = {
+                                    Text(s, color = if (on) flavor.accent else MaterialTheme.colorScheme.onBackground)
+                                },
                                 colors = AssistChipDefaults.assistChipColors(
                                     containerColor = if (on) flavor.accent.copy(alpha = 0.22f) else Color.Transparent,
                                 ),
                             )
                         }
                     }
+
                     Spacer(Modifier.height(16.dp))
                     Text("Rating", style = MaterialTheme.typography.titleSmall)
                     Row {
@@ -151,19 +171,13 @@ fun DetailScreen(vm: DetailViewModel, onBack: () -> Unit) {
                             }
                         }
                     }
+
                     Spacer(Modifier.height(8.dp))
-                    var notes by remember(current.id) { mutableStateOf(current.notes ?: "") }
-                    OutlinedTextField(
-                        value = notes,
-                        onValueChange = { notes = it },
-                        label = { Text("Notes") },
-                        modifier = Modifier.fillMaxWidth(),
-                        minLines = 2,
-                        colors = shelfTextFieldColors(),
+                    NotesSection(
+                        savedNotes = current.notes,
+                        onSave = { vm.setNotes(it) },
                     )
-                    Row(modifier = Modifier.padding(top = 8.dp)) {
-                        AssistChip(onClick = { vm.setNotes(notes) }, label = { Text("Save notes") })
-                    }
+
                     if (!current.description.isNullOrBlank()) {
                         Spacer(Modifier.height(20.dp))
                         Text("About", style = MaterialTheme.typography.titleSmall)
@@ -175,6 +189,72 @@ fun DetailScreen(vm: DetailViewModel, onBack: () -> Unit) {
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Notes start in read-only display mode. "Edit" enters editing; "Save" commits + returns
+ * to read-only, "Cancel" discards. If there are no notes yet, an "Add notes" affordance.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun NotesSection(
+    savedNotes: String?,
+    onSave: (String) -> Unit,
+) {
+    var editing by remember(savedNotes) { mutableStateOf(false) }
+    var draft by remember(savedNotes) { mutableStateOf(savedNotes.orEmpty()) }
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("Notes", style = MaterialTheme.typography.titleSmall)
+        Spacer(Modifier.size(8.dp))
+        if (!editing) {
+            TextButton(onClick = { editing = true; draft = savedNotes.orEmpty() }) {
+                Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.size(6.dp))
+                Text(if (savedNotes.isNullOrBlank()) "Add" else "Edit")
+            }
+        }
+    }
+    Spacer(Modifier.height(4.dp))
+
+    if (editing) {
+        OutlinedTextField(
+            value = draft,
+            onValueChange = { draft = it },
+            label = { Text("Notes") },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 3,
+            colors = shelfTextFieldColors(),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+            OutlinedButton(onClick = { editing = false; draft = savedNotes.orEmpty() }) {
+                Text("Cancel")
+            }
+            Button(onClick = { onSave(draft); editing = false }) {
+                Text("Save")
+            }
+        }
+    } else {
+        if (savedNotes.isNullOrBlank()) {
+            Text(
+                text = "No notes yet.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
+            )
+        } else {
+            Text(
+                text = savedNotes,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.45f),
+                        shape = RoundedCornerShape(8.dp),
+                    )
+                    .padding(12.dp),
+            )
         }
     }
 }
