@@ -1,6 +1,5 @@
 -- Migration: relax the `status` CHECK so the column can hold a CSV like 'owned,seen'.
--- Idempotent: safe to re-run.
-BEGIN TRANSACTION;
+-- Idempotent: safe to re-run. (No explicit BEGIN/COMMIT -- D1 wraps the file itself.)
 
 CREATE TABLE IF NOT EXISTS items_new (
   id            TEXT PRIMARY KEY,
@@ -30,5 +29,3 @@ ALTER TABLE items_new RENAME TO items;
 
 CREATE INDEX IF NOT EXISTS items_kind_added ON items(kind, added_at DESC);
 CREATE INDEX IF NOT EXISTS items_title      ON items(title COLLATE NOCASE);
-
-COMMIT;
