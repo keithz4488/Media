@@ -6,7 +6,7 @@ compatibility_date = "2025-01-15"
 [[d1_databases]]
 binding = "DB"
 database_name = "media-shelf"
-database_id = "REPLACE_ME"
+database_id = "197ad9f7-a4d0-4d63-9fac-a0ac6a9c43aa"
 
 # Optional: cover-image storage. Comment out if you don't want R2.
 # [[r2_buckets]]
