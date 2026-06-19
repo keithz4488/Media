@@ -73,6 +73,57 @@ Get keys here:
    ```
 4. Plug in your phone with USB debugging on, hit Run.
 
+## Building a release APK
+
+The release build is configured to read its signing keystore from
+`android/local.properties` (locally) or `KEYSTORE_*` env vars (CI). Once that's
+set up, `gradle assembleRelease` (or `./gradlew assembleRelease`) drops a
+signed APK at `android/app/build/outputs/apk/release/app-release.apk`.
+
+### One-time keystore setup
+
+Generate a keystore and back it up somewhere safe. From PowerShell:
+
+```powershell
+$keystoreDir = "$HOME\Documents\keystores"
+mkdir $keystoreDir -ErrorAction SilentlyContinue
+& "$Env:JAVA_HOME\bin\keytool.exe" -genkeypair -v `
+  -keystore "$keystoreDir\media-shelf.jks" `
+  -alias media-shelf -keyalg RSA -keysize 2048 -validity 25000
+```
+
+If `$Env:JAVA_HOME` isn't set, use the JDK bundled with Android Studio:
+`C:\Program Files\Android\Android Studio\jbr\bin\keytool.exe`.
+
+Then add the credentials to `android/local.properties`:
+
+```
+keystore.path=C\:\\Users\\<you>\\Documents\\keystores\\media-shelf.jks
+keystore.password=<the password you set>
+key.alias=media-shelf
+key.password=<the key password you set>
+```
+
+### CI builds (GitHub Actions)
+
+`.github/workflows/release-apk.yml` builds a signed APK on every push to the
+working branch and attaches it as both a workflow artifact and a GitHub Release.
+
+Configure these repository secrets at
+`Settings -> Secrets and variables -> Actions -> New repository secret`:
+
+| Secret              | Value                                                     |
+| ------------------- | --------------------------------------------------------- |
+| `KEYSTORE_BASE64`   | `base64 -w0 < media-shelf.jks` (one-line base64 of the .jks) |
+| `KEYSTORE_PASSWORD` | the keystore password                                     |
+| `KEY_ALIAS`         | `media-shelf`                                             |
+| `KEY_PASSWORD`      | the key password                                          |
+| `SHELF_API_TOKEN`   | the `SHELF_TOKEN` value from your Cloudflare secret       |
+
+After the workflow runs, find the APK at
+`https://github.com/<you>/<repo>/releases` -> latest Build N -> Assets ->
+`media-shelf-build-N.apk`.
+
 ## Day-to-day usage
 
 - Tap a shelf, then `+`. Choose **Camera** or **Search**.

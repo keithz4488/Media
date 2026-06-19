@@ -16,6 +16,15 @@ val localProps = Properties().apply {
 val shelfApiBase: String = localProps.getProperty("shelf.api.base") ?: "https://media.kzaller.com"
 val shelfApiToken: String = localProps.getProperty("shelf.api.token") ?: ""
 
+// Release signing: read from local.properties locally, or env vars in CI. Either may be absent;
+// if all four are missing we fall back to no signing config and `assembleRelease` warns.
+val keystorePath: String? = localProps.getProperty("keystore.path") ?: System.getenv("KEYSTORE_PATH")
+val keystorePassword: String? = localProps.getProperty("keystore.password") ?: System.getenv("KEYSTORE_PASSWORD")
+val signingKeyAlias: String? = localProps.getProperty("key.alias") ?: System.getenv("KEY_ALIAS")
+val signingKeyPassword: String? = localProps.getProperty("key.password") ?: System.getenv("KEY_PASSWORD")
+val signingConfigured: Boolean = keystorePath != null && keystorePassword != null &&
+        signingKeyAlias != null && signingKeyPassword != null
+
 android {
     namespace = "com.kzaller.shelf"
     compileSdk = 34
@@ -31,10 +40,30 @@ android {
         buildConfigField("String", "API_TOKEN", "\"$shelfApiToken\"")
     }
 
+    signingConfigs {
+        // Define the 'release' config only when all credentials are available; creating
+        // it with nulls throws at evaluation time.
+        if (signingConfigured) {
+            create("release") {
+                storeFile = file(keystorePath!!)
+                storePassword = keystorePassword
+                keyAlias = signingKeyAlias
+                keyPassword = signingKeyPassword
+                enableV1Signing = true
+                enableV2Signing = true
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            if (signingConfigured) {
+                signingConfig = signingConfigs.getByName("release")
+            } else {
+                logger.warn("media-shelf: release build will be UNSIGNED -- set keystore.* in local.properties (or KEYSTORE_* env vars) to sign.")
+            }
         }
     }
 

@@ -12,6 +12,8 @@ android/app/debug/
 *.apk
 *.aab
 *.keystore
+*.jks
+android/app/keystore/
 
 # Gradle wrapper jars are committed; everything else under .gradle is not
 android/.kotlin/
