@@ -136,7 +136,7 @@ async function createItem(req: Request, env: Env): Promise<Response> {
   if (!body.kind || !body.title) return err(400, "kind and title required");
 
   const now = Date.now();
-  const item: Item = {
+  let item: Item = {
     id: body.id || uuid(),
     kind: body.kind,
     title: body.title,
@@ -152,6 +152,11 @@ async function createItem(req: Request, env: Env): Promise<Response> {
     added_at: body.added_at ?? now,
     updated_at: now,
   };
+
+  // Fetch a description (and sometimes a better cover) from the source's detail
+  // endpoint when we don't already have one. Search endpoints return minimal data;
+  // the per-item detail endpoint is where the synopses live.
+  item = await enrichForCreate(item, env);
 
   // ON CONFLICT: if the user re-adds the same external item, just touch updated_at.
   await env.DB.prepare(
@@ -237,7 +242,7 @@ async function searchBooks(url: URL, env: Env): Promise<Response> {
   const api = new URL("https://openlibrary.org/search.json");
   if (isbn) api.searchParams.set("isbn", isbn);
   else api.searchParams.set("q", q!);
-  api.searchParams.set("limit", "12");
+  api.searchParams.set("limit", "20");
   api.searchParams.set(
     "fields",
     "key,title,subtitle,author_name,first_publish_year,isbn,cover_i",
@@ -322,7 +327,7 @@ async function searchGames(url: URL, env: Env): Promise<Response> {
   api.searchParams.set("key", env.RAWG_API_KEY);
   if (q) {
     api.searchParams.set("search", q);
-    api.searchParams.set("page_size", "12");
+    api.searchParams.set("page_size", "20");
   }
 
   const r = await fetch(api.toString());
@@ -428,4 +433,112 @@ async function identifyImage(req: Request, env: Env): Promise<Response> {
     }
   }
   return json({ result: parsed });
+}
+
+// ---------- per-source enrichment at item-create time ----------
+
+/** Cap free-form description fields so a single huge synopsis can't bloat the row. */
+const MAX_DESC_CHARS = 1500;
+
+function trimDescription(s: string | null | undefined): string | null {
+  if (!s) return null;
+  const cleaned = s
+    .replace(/<[^>]+>/g, " ")        // strip simple HTML tags
+    .replace(/\s+/g, " ")            // collapse whitespace
+    .trim();
+  if (!cleaned) return null;
+  return cleaned.length > MAX_DESC_CHARS
+    ? cleaned.slice(0, MAX_DESC_CHARS - 1).trimEnd() + "…"
+    : cleaned;
+}
+
+async function enrichForCreate(item: Item, env: Env): Promise<Item> {
+  // Skip enrichment if the caller already supplied a description or there's no
+  // external reference to look up against.
+  if (item.description && item.description.trim().length > 0) return item;
+  if (!item.external_src || !item.external_id) return item;
+
+  try {
+    switch (item.external_src) {
+      case "open_library":
+        return await enrichOpenLibrary(item);
+      case "rawg":
+        return await enrichRawg(item, env);
+      case "tmdb":
+        return await enrichTmdb(item, env);
+      default:
+        return item;
+    }
+  } catch {
+    return item; // best-effort: enrichment errors never block item creation
+  }
+}
+
+async function enrichOpenLibrary(item: Item): Promise<Item> {
+  // external_id is either an ISBN (digits) or a work id like "OL45804W".
+  const isIsbn = /^\d{10,13}$/.test(item.external_id || "");
+  let workId: string | null = null;
+
+  if (isIsbn) {
+    // ISBN endpoint returns the editions; it points us at the canonical work.
+    const r = await fetch(`https://openlibrary.org/isbn/${item.external_id}.json`, {
+      headers: { "user-agent": "media-shelf/0.1 (kzaller.com)" },
+    });
+    if (r.ok) {
+      const data = (await r.json()) as any;
+      const w = Array.isArray(data?.works) ? data.works[0] : null;
+      if (w?.key) workId = String(w.key).replace("/works/", "");
+    }
+  } else {
+    workId = item.external_id;
+  }
+
+  if (!workId) return item;
+  const wr = await fetch(`https://openlibrary.org/works/${workId}.json`, {
+    headers: { "user-agent": "media-shelf/0.1 (kzaller.com)" },
+  });
+  if (!wr.ok) return item;
+  const w = (await wr.json()) as any;
+
+  // Open Library returns description as either a plain string or an object
+  // { value: "...", type: "/type/text" }.
+  const rawDesc: string | null =
+    typeof w?.description === "string"
+      ? w.description
+      : typeof w?.description?.value === "string"
+        ? w.description.value
+        : null;
+
+  return { ...item, description: trimDescription(rawDesc) ?? item.description };
+}
+
+async function enrichRawg(item: Item, env: Env): Promise<Item> {
+  if (!env.RAWG_API_KEY) return item;
+  const slug = encodeURIComponent(item.external_id || "");
+  const r = await fetch(`https://api.rawg.io/api/games/${slug}?key=${env.RAWG_API_KEY}`);
+  if (!r.ok) return item;
+  const g = (await r.json()) as any;
+
+  return {
+    ...item,
+    description:
+      trimDescription(g.description_raw) ??
+      trimDescription(g.description) ??
+      item.description,
+    // RAWG's detail endpoint often has a higher-quality background image.
+    cover_url: item.cover_url || g.background_image || null,
+  };
+}
+
+async function enrichTmdb(item: Item, env: Env): Promise<Item> {
+  // Most TMDB descriptions are already on the search result `overview`. Re-fetch
+  // only when we somehow ended up without one.
+  if (!env.TMDB_API_KEY) return item;
+  const kindPath = item.kind === "movie" ? "movie" : item.kind === "tv" ? "tv" : null;
+  if (!kindPath) return item;
+  const url = `https://api.themoviedb.org/3/${kindPath}/${item.external_id}?api_key=${env.TMDB_API_KEY}`;
+  const r = await fetch(url);
+  if (!r.ok) return item;
+  const d = (await r.json()) as any;
+  return { ...item, description: trimDescription(d.overview) ?? item.description };
 }
