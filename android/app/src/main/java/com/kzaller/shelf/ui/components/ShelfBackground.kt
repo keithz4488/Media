@@ -4,13 +4,13 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.unit.dp
 import com.kzaller.shelf.ui.theme.LocalShelfFlavor
 import com.kzaller.shelf.ui.theme.ShelfOrnament
 
@@ -21,6 +21,11 @@ import com.kzaller.shelf.ui.theme.ShelfOrnament
 @Composable
 fun ShelfBackground(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     val flavor = LocalShelfFlavor.current
+    // Inset the content past edge ornaments so cards/text don't sit on top of them.
+    val sideInset = when (flavor.ornament) {
+        ShelfOrnament.FILM_STRIP -> FilmStripWidth + 4.dp
+        else -> 0.dp
+    }
     Box(modifier = modifier.fillMaxSize().background(flavor.backgroundBrush)) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             when (flavor.ornament) {
@@ -31,7 +36,9 @@ fun ShelfBackground(modifier: Modifier = Modifier, content: @Composable () -> Un
                 ShelfOrnament.NONE        -> Unit
             }
         }
-        content()
+        Box(modifier = Modifier.fillMaxSize().padding(horizontal = sideInset)) {
+            content()
+        }
     }
 }
 
@@ -75,14 +82,17 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawNeonGrid(major:
     }
 }
 
+/** Film strip width in dp; ShelfScreen/DetailScreen use this to pad content past the strip. */
+val FilmStripWidth = 28.dp
+
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawFilmStrip(color: Color) {
-    val stripW = 36f
-    val sprocketH = 18f
-    val sprocketW = 14f
-    val gap = 26f
+    val stripW = FilmStripWidth.toPx()
+    val sprocketH = 14.dp.toPx()
+    val sprocketW = 12.dp.toPx()
+    val gap = 18.dp.toPx()
     listOf(0f, size.width - stripW).forEach { x ->
         drawRect(color.copy(alpha = color.alpha * 0.6f), topLeft = Offset(x, 0f), size = Size(stripW, size.height))
-        var y = 12f
+        var y = 10.dp.toPx()
         while (y < size.height) {
             drawRect(
                 Color.Black.copy(alpha = 0.55f),
@@ -92,12 +102,4 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawFilmStrip(color
             y += sprocketH + gap
         }
     }
-    // dashed center line
-    drawLine(
-        color.copy(alpha = color.alpha * 0.25f),
-        Offset(size.width / 2, 0f),
-        Offset(size.width / 2, size.height),
-        strokeWidth = 1f,
-        pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 12f), 0f),
-    )
 }

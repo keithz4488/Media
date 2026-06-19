@@ -303,7 +303,7 @@ private fun ManualSection(
                     },
                     label = {
                         Text(
-                            text = Status.label(s),
+                            text = Status.label(s, kind),
                             color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground,
                         )
                     },

@@ -28,18 +28,22 @@ object Status {
         MediaKind.GAME  -> listOf(OWNED, PLAYING, PLAYED, COMPLETE, WISHLIST)
     }
 
-    fun label(code: String): String = when (code) {
-        OWNED    -> "Owned"
-        WISHLIST -> "Wishlist"
-        READING  -> "Reading"
-        READ     -> "Read"
-        WATCHING -> "Watching"
-        WATCHED  -> "Watched"
-        PLAYING  -> "Playing"
-        PLAYED   -> "Played"
-        COMPLETE -> "100%"
-        SEEN     -> "Seen"
-        else     -> code.replaceFirstChar { it.uppercase() }
+    fun label(code: String, kind: MediaKind? = null): String {
+        // Kind-specific overrides come first.
+        if (kind == MediaKind.TV && code == WISHLIST) return "Must Watch"
+        return when (code) {
+            OWNED    -> "Owned"
+            WISHLIST -> "Wishlist"
+            READING  -> "Reading"
+            READ     -> "Read"
+            WATCHING -> "Watching"
+            WATCHED  -> "Watched"
+            PLAYING  -> "Playing"
+            PLAYED   -> "Played"
+            COMPLETE -> "100%"
+            SEEN     -> "Seen"
+            else     -> code.replaceFirstChar { it.uppercase() }
+        }
     }
 
     fun parse(csv: String?): Set<String> =

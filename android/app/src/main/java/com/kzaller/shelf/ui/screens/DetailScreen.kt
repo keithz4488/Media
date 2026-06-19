@@ -155,7 +155,7 @@ fun DetailScreen(vm: DetailViewModel, onBack: () -> Unit) {
                                 onClick = { vm.setStatus(Status.toggle(current.status, s)) },
                                 label = {
                                     Text(
-                                        text = Status.label(s),
+                                        text = Status.label(s, current.kind),
                                         color = if (on) flavor.accent else MaterialTheme.colorScheme.onBackground,
                                     )
                                 },

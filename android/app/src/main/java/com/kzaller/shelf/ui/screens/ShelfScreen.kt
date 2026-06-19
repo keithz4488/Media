@@ -111,6 +111,7 @@ fun ShelfScreen(
                 ) { Icon(Icons.Default.Add, contentDescription = "Add to shelf") }
             },
         ) { padding ->
+            // ShelfBackground inset already pads past edge ornaments (film strip etc).
             ShelfBackground(modifier = Modifier.padding(padding)) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     if (activeFilters.isNotEmpty()) {
@@ -183,7 +184,7 @@ private fun ActiveFilterBar(
             Status.optionsFor(kind).filter { it in active }.forEach { code ->
                 AssistChip(
                     onClick = onClear, // tapping any active chip clears all -- simple
-                    label = { Text(Status.label(code)) },
+                    label = { Text(Status.label(code, kind)) },
                     colors = AssistChipDefaults.assistChipColors(
                         containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
                         labelColor = MaterialTheme.colorScheme.primary,
@@ -239,7 +240,7 @@ private fun FilterSheet(
                 FilterChip(
                     selected = on,
                     onClick = { onToggle(code) },
-                    label = { Text(Status.label(code)) },
+                    label = { Text(Status.label(code, kind)) },
                     leadingIcon = if (on) {
                         { Icon(Icons.Default.Check, contentDescription = null) }
                     } else null,
