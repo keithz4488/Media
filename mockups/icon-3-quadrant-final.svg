@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
+  <!-- Mirror of the Android adaptive-icon: background drawable + foreground drawable.
+       Same paths as the actual XML files so this preview reflects the on-device icon. -->
+
+  <!-- BACKGROUND -->
+  <path fill="#6B3F1C" d="M0,0 L54,0 L54,54 L0,54 Z" />
+  <path fill="#1C2541" d="M54,0 L108,0 L108,54 L54,54 Z" />
+  <path fill="#0F3B22" d="M0,54 L54,54 L54,108 L0,108 Z" />
+  <path fill="#3A0E5C" d="M54,54 L108,54 L108,108 L54,108 Z" />
+  <path fill="#1A1018" fill-opacity="0.6" d="M52,0 L56,0 L56,108 L52,108 Z" />
+  <path fill="#1A1018" fill-opacity="0.6" d="M0,52 L108,52 L108,56 L0,56 Z" />
+
+  <!-- FOREGROUND: glyphs -->
+  <!-- TL Books spines -->
+  <path fill="#B54B2A" d="M19,20 L26,20 L26,45 L19,45 Z" />
+  <path fill="#E3B25A" d="M27,16 L34,16 L34,45 L27,45 Z" />
+  <path fill="#6E3018" d="M35,24 L42,24 L42,45 L35,45 Z" />
+  <path fill="#C9824A" d="M43,18 L50,18 L50,45 L43,45 Z" />
+  <!-- TR Movies bulbs -->
+  <g fill="#FFD56B">
+    <circle cx="66" cy="18" r="2.5"/><circle cx="74" cy="18" r="2.5"/>
+    <circle cx="82" cy="18" r="2.5"/><circle cx="90" cy="18" r="2.5"/>
+    <circle cx="66" cy="26" r="2.5"/><circle cx="74" cy="26" r="2.5"/>
+    <circle cx="82" cy="26" r="2.5"/><circle cx="90" cy="26" r="2.5"/>
+    <circle cx="66" cy="34" r="2.5"/><circle cx="74" cy="34" r="2.5"/>
+    <circle cx="82" cy="34" r="2.5"/><circle cx="90" cy="34" r="2.5"/>
+  </g>
+  <!-- BL TV bars -->
+  <path fill="#C0C0C0" fill-opacity="0.85" d="M18,63 L23,63 L23,90 L18,90 Z"/>
+  <path fill="#C0C000" fill-opacity="0.85" d="M23,63 L28,63 L28,90 L23,90 Z"/>
+  <path fill="#00C0C0" fill-opacity="0.85" d="M28,63 L33,63 L33,90 L28,90 Z"/>
+  <path fill="#00C000" fill-opacity="0.85" d="M33,63 L38,63 L38,90 L33,90 Z"/>
+  <path fill="#C000C0" fill-opacity="0.85" d="M38,63 L43,63 L43,90 L38,90 Z"/>
+  <path fill="#C00000" fill-opacity="0.85" d="M43,63 L47,63 L47,90 L43,90 Z"/>
+  <path fill="#0000C0" fill-opacity="0.85" d="M47,63 L51,63 L51,90 L47,90 Z"/>
+  <!-- BR Games sun -->
+  <circle fill="#FFB6E0" cx="80" cy="76" r="14"/>
+  <rect fill="#3A0E5C" x="66" y="80" width="28" height="2"/>
+  <rect fill="#3A0E5C" x="66" y="84" width="28" height="2"/>
+  <rect fill="#3A0E5C" x="66" y="88" width="28" height="2"/>
+
+  <!-- 72x72 safe-zone overlay for reference (would not appear on device) -->
+  <rect x="18" y="18" width="72" height="72" fill="none" stroke="white" stroke-opacity="0.18" stroke-dasharray="2 2"/>
+</svg>
