@@ -16,6 +16,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -30,6 +33,9 @@ import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -61,6 +67,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.Status
+import com.kzaller.shelf.data.models.CoverOption
 import com.kzaller.shelf.ui.components.ShelfBackground
 import com.kzaller.shelf.ui.components.shelfTextFieldColors
 import com.kzaller.shelf.ui.theme.MediaShelfTheme
@@ -240,9 +247,10 @@ fun DetailScreen(vm: DetailViewModel, onBack: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CoverPickerSheet(
-    covers: List<com.kzaller.shelf.data.models.CoverOption>,
+    covers: List<CoverOption>,
     loading: Boolean,
     onPick: (String) -> Unit,
     onClose: () -> Unit,
@@ -255,24 +263,27 @@ private fun CoverPickerSheet(
         }
         Spacer(Modifier.height(12.dp))
         when {
-            loading -> Box(modifier = Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
-                androidx.compose.material3.CircularProgressIndicator()
+            loading -> Box(
+                modifier = Modifier.fillMaxWidth().padding(40.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator()
             }
             covers.isEmpty() -> Text(
-                "No alternate covers available for this item.",
+                text = "No alternate covers available for this item.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
             )
-            else -> androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
-                columns = androidx.compose.foundation.lazy.grid.GridCells.Adaptive(minSize = 110.dp),
+            else -> LazyVerticalGrid(
+                columns = GridCells.Adaptive(minSize = 110.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.heightIn(max = 480.dp),
             ) {
-                androidx.compose.foundation.lazy.grid.items(covers, key = { it.url }) { option ->
-                    androidx.compose.material3.Card(
+                items(covers, key = { it.url }) { option ->
+                    Card(
                         onClick = { onPick(option.url) },
-                        colors = androidx.compose.material3.CardDefaults.cardColors(
+                        colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant,
                         ),
                     ) {
