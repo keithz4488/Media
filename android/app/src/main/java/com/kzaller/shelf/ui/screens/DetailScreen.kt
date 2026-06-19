@@ -66,6 +66,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.kzaller.shelf.data.MediaKind
+import com.kzaller.shelf.data.Platform
 import com.kzaller.shelf.data.Status
 import com.kzaller.shelf.data.models.CoverOption
 import com.kzaller.shelf.ui.components.ShelfBackground
@@ -191,6 +192,33 @@ fun DetailScreen(vm: DetailViewModel, onBack: () -> Unit) {
                                     containerColor = if (on) flavor.accent.copy(alpha = 0.22f) else Color.Transparent,
                                 ),
                             )
+                        }
+                    }
+
+                    if (current.kind == MediaKind.GAME) {
+                        Spacer(Modifier.height(16.dp))
+                        Text("Console", style = MaterialTheme.typography.titleSmall)
+                        Spacer(Modifier.height(6.dp))
+                        val selectedPlatforms = Platform.parse(current.userPlatform)
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Platform.ALL.forEach { p ->
+                                val on = p in selectedPlatforms
+                                AssistChip(
+                                    onClick = { vm.setPlatform(Platform.toggle(current.userPlatform, p)) },
+                                    label = {
+                                        Text(
+                                            text = Platform.label(p),
+                                            color = if (on) flavor.accent else MaterialTheme.colorScheme.onBackground,
+                                        )
+                                    },
+                                    colors = AssistChipDefaults.assistChipColors(
+                                        containerColor = if (on) flavor.accent.copy(alpha = 0.22f) else Color.Transparent,
+                                    ),
+                                )
+                            }
                         }
                     }
 

@@ -35,6 +35,7 @@ class DetailViewModel(
     fun setRating(rating: Int?) = launchUpdate(UpdateItemRequest(rating = rating), toast = if (rating == null) "Rating cleared" else "Rated $rating")
     fun setNotes(notes: String) = launchUpdate(UpdateItemRequest(notes = notes), toast = "Notes saved")
     fun setCover(url: String) = launchUpdate(UpdateItemRequest(coverUrl = url), toast = "Cover updated")
+    fun setPlatform(csv: String) = launchUpdate(UpdateItemRequest(userPlatform = csv))
 
     private val _covers = MutableStateFlow<List<CoverOption>>(emptyList())
     val covers = _covers.asStateFlow()

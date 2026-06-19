@@ -32,7 +32,7 @@ object Status {
         // Kind-specific overrides come first.
         if (kind == MediaKind.TV && code == WISHLIST) return "Must Watch"
         return when (code) {
-            OWNED    -> "Owned"
+            OWNED    -> "Own"
             WISHLIST -> "Wishlist"
             READING  -> "Reading"
             READ     -> "Read"

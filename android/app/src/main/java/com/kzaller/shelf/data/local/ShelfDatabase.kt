@@ -5,7 +5,7 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [ItemEntity::class], version = 1, exportSchema = false)
+@Database(entities = [ItemEntity::class], version = 2, exportSchema = false)
 abstract class ShelfDatabase : RoomDatabase() {
     abstract fun items(): ItemDao
 
@@ -18,7 +18,12 @@ abstract class ShelfDatabase : RoomDatabase() {
                     context.applicationContext,
                     ShelfDatabase::class.java,
                     "media-shelf.db",
-                ).build().also { INSTANCE = it }
+                )
+                    // Local DB is purely a cache; on schema bump just rebuild it
+                    // and let the next refresh repopulate from the backend.
+                    .fallbackToDestructiveMigration()
+                    .build()
+                    .also { INSTANCE = it }
             }
     }
 }

@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS items (
   rating        INTEGER,        -- 1..5, nullable
   status        TEXT NOT NULL DEFAULT 'owned', -- CSV: any of 'owned','seen','wishlist'
   notes         TEXT,
+  user_platform TEXT,                            -- CSV: any of 'pc','xbox','playstation','nintendo','mobile' (games only)
   added_at      INTEGER NOT NULL,
   updated_at    INTEGER NOT NULL,
   UNIQUE(kind, external_src, external_id)
