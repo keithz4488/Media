@@ -3,7 +3,10 @@ package com.kzaller.shelf.ui
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavBackStackEntry
+import androidx.navigation.NavController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -12,11 +15,11 @@ import androidx.navigation.navArgument
 import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.ShelfRepository
 import com.kzaller.shelf.ui.screens.AddItemScreen
+import com.kzaller.shelf.ui.screens.AddItemViewModel
 import com.kzaller.shelf.ui.screens.DetailScreen
+import com.kzaller.shelf.ui.screens.DetailViewModel
 import com.kzaller.shelf.ui.screens.HomeScreen
 import com.kzaller.shelf.ui.screens.ShelfScreen
-import com.kzaller.shelf.ui.screens.AddItemViewModel
-import com.kzaller.shelf.ui.screens.DetailViewModel
 import com.kzaller.shelf.ui.screens.ShelfViewModel
 import com.kzaller.shelf.ui.theme.MediaShelfTheme
 
@@ -30,6 +33,15 @@ object Routes {
     fun detail(id: String) = "item/$id"
 }
 
+/** Guard against navigations issued during a back-transition: when the user has just
+ *  tapped the back arrow, the previous screen is still visible (and clickable) for
+ *  the duration of the animation. Any click on it should be a no-op, not a real navigation. */
+private fun NavController.navigateIfResumed(from: NavBackStackEntry?, route: String) {
+    if (from?.lifecycle?.currentState?.isAtLeast(Lifecycle.State.RESUMED) == true) {
+        navigate(route)
+    }
+}
+
 @Composable
 fun ShelfApp() {
     val context = LocalContext.current
@@ -38,28 +50,28 @@ fun ShelfApp() {
 
     MediaShelfTheme {
         NavHost(navController = nav, startDestination = Routes.HOME) {
-            composable(Routes.HOME) {
-                HomeScreen(onShelfTap = { nav.navigate(Routes.shelf(it)) })
+            composable(Routes.HOME) { entry ->
+                HomeScreen(onShelfTap = { nav.navigateIfResumed(entry, Routes.shelf(it)) })
             }
             composable(
                 route = Routes.SHELF,
                 arguments = listOf(navArgument("kind") { type = NavType.StringType }),
-            ) { backStack ->
-                val kind = MediaKind.fromWire(backStack.arguments?.getString("kind")!!)
+            ) { entry ->
+                val kind = MediaKind.fromWire(entry.arguments?.getString("kind")!!)
                 val vm: ShelfViewModel = viewModel(factory = ShelfViewModel.factory(repo, kind))
                 ShelfScreen(
                     kind = kind,
                     vm = vm,
                     onBack = { nav.popBackStack() },
-                    onAdd = { nav.navigate(Routes.add(kind)) },
-                    onItem = { nav.navigate(Routes.detail(it)) },
+                    onAdd = { nav.navigateIfResumed(entry, Routes.add(kind)) },
+                    onItem = { nav.navigateIfResumed(entry, Routes.detail(it)) },
                 )
             }
             composable(
                 route = Routes.ADD,
                 arguments = listOf(navArgument("kind") { type = NavType.StringType }),
-            ) { backStack ->
-                val kind = MediaKind.fromWire(backStack.arguments?.getString("kind")!!)
+            ) { entry ->
+                val kind = MediaKind.fromWire(entry.arguments?.getString("kind")!!)
                 val vm: AddItemViewModel = viewModel(factory = AddItemViewModel.factory(repo, kind))
                 AddItemScreen(
                     kind = kind,
@@ -71,8 +83,8 @@ fun ShelfApp() {
             composable(
                 route = Routes.DETAIL,
                 arguments = listOf(navArgument("id") { type = NavType.StringType }),
-            ) { backStack ->
-                val id = backStack.arguments?.getString("id")!!
+            ) { entry ->
+                val id = entry.arguments?.getString("id")!!
                 val vm: DetailViewModel = viewModel(factory = DetailViewModel.factory(repo, id))
                 DetailScreen(vm = vm, onBack = { nav.popBackStack() })
             }
