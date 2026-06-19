@@ -2,7 +2,6 @@ package com.kzaller.shelf.ui.components
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
@@ -12,11 +11,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,33 +29,26 @@ import com.kzaller.shelf.data.models.ItemDto
 import com.kzaller.shelf.ui.theme.LocalShelfFlavor
 import com.kzaller.shelf.ui.theme.ShelfOrnament
 
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ItemCard(
     item: ItemDto,
     modifier: Modifier = Modifier,
-    onClick: () -> Unit = {},
-    onLongClick: () -> Unit = {},
+    onClick: (ItemDto) -> Unit = {},
 ) {
     val flavor = LocalShelfFlavor.current
-    // Snapshot the click callbacks via rememberUpdatedState so the pointer-input
-    // handler always invokes the *current* lambda for this card -- prevents stale
-    // closures from emitting a previous item's id during navigation transitions.
-    val currentOnClick by rememberUpdatedState(onClick)
-    val currentOnLongClick by rememberUpdatedState(onLongClick)
     val aspect = when (item.kind) {
         MediaKind.BOOK -> 2f / 3f
         MediaKind.MOVIE, MediaKind.TV -> 2f / 3f
         MediaKind.GAME -> 3f / 4f
     }
 
+    // Use Card's built-in onClick parameter so click registration is owned by the Card
+    // composable itself, not a modifier chain. The lambda captures `item` from the
+    // current invocation, so the navigation target is always the item currently rendered.
     Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .combinedClickable(
-                onClick = { currentOnClick() },
-                onLongClick = { currentOnLongClick() },
-            ),
+        onClick = { onClick(item) },
+        modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(if (flavor.ornament == ShelfOrnament.NEON_GRID) 4.dp else 10.dp),
         colors = CardDefaults.cardColors(containerColor = flavor.cardSurface),
         border = BorderStroke(1.dp, flavor.cardBorder),

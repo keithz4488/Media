@@ -133,8 +133,16 @@ fun ShelfScreen(
                             verticalArrangement = Arrangement.spacedBy(12.dp),
                             modifier = Modifier.fillMaxSize(),
                         ) {
-                            items(items, key = { it.id }) { item ->
-                                ItemCard(item = item, onClick = { onItem(item.id) })
+                            // Compound key includes kind so a recycled slot can never
+                            // present an item from a different shelf to the click handler.
+                            items(
+                                items,
+                                key = { "${it.kind.wire}:${it.id}" },
+                            ) { item ->
+                                ItemCard(
+                                    item = item,
+                                    onClick = { clickedItem -> onItem(clickedItem.id) },
+                                )
                             }
                         }
                     }
