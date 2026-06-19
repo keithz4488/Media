@@ -24,6 +24,7 @@ export interface Env {
   TMDB_API_KEY: string;
   RAWG_API_KEY: string;
   ANTHROPIC_API_KEY: string;
+  STEAMGRIDDB_API_KEY?: string; // optional: when set, augments game covers with SteamGridDB box art
 }
 
 type Kind = "book" | "movie" | "tv" | "game";
@@ -558,6 +559,11 @@ async function rawgCovers(item: Item, env: Env): Promise<CoverOption[]> {
   const slug = encodeURIComponent(item.external_id);
   const opts: CoverOption[] = [];
 
+  // SteamGridDB box art first (these are the proper game covers users want).
+  // Fail-soft: if the key isn't set or the lookup misses, fall through to RAWG.
+  const sgdb = await steamGridDbCovers(item, env);
+  opts.push(...sgdb);
+
   const detailR = await fetch(`https://api.rawg.io/api/games/${slug}?key=${env.RAWG_API_KEY}`);
   if (detailR.ok) {
     const d = (await detailR.json()) as any;
@@ -577,6 +583,39 @@ async function rawgCovers(item: Item, env: Env): Promise<CoverOption[]> {
   }
 
   return opts;
+}
+
+async function steamGridDbCovers(item: Item, env: Env): Promise<CoverOption[]> {
+  const key = env.STEAMGRIDDB_API_KEY;
+  if (!key || !item.title) return [];
+
+  const auth = { authorization: `Bearer ${key}` };
+
+  // 1) Find the SteamGridDB game id by title.
+  const search = await fetch(
+    `https://www.steamgriddb.com/api/v2/search/autocomplete/${encodeURIComponent(item.title)}`,
+    { headers: auth },
+  );
+  if (!search.ok) return [];
+  const sdata = (await search.json()) as any;
+  const games: any[] = Array.isArray(sdata?.data) ? sdata.data : [];
+  if (games.length === 0) return [];
+
+  // Take the top-matched game.
+  const gameId = games[0].id;
+
+  // 2) Fetch portrait box-art grids (the 600x900 family of dimensions).
+  const grids = await fetch(
+    `https://www.steamgriddb.com/api/v2/grids/game/${gameId}?dimensions=600x900,342x482,660x930&types=static&limit=16`,
+    { headers: auth },
+  );
+  if (!grids.ok) return [];
+  const gdata = (await grids.json()) as any;
+  const list: any[] = Array.isArray(gdata?.data) ? gdata.data : [];
+  return list.slice(0, 12).map((g, i) => ({
+    url: g.url || g.thumb,
+    label: `Box art ${i + 1}`,
+  }));
 }
 
 async function openLibraryCovers(item: Item): Promise<CoverOption[]> {
