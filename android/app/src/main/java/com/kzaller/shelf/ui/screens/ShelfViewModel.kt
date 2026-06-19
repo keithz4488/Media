@@ -27,8 +27,11 @@ class ShelfViewModel(
     /** Items visible on the shelf: full list, intersected with active status filters. */
     val items: StateFlow<List<ItemDto>> =
         combine(repo.observeShelf(kind), _filters) { all, filters ->
-            if (filters.isEmpty()) all
-            else all.filter { item ->
+            // Defensive: the DAO already filters by kind in SQL, but enforce here too
+            // so a stale emission can't slip a different-kind item into the grid.
+            val ofKind = all.filter { it.kind == kind }
+            if (filters.isEmpty()) ofKind
+            else ofKind.filter { item ->
                 val s = Status.parse(item.status)
                 s.any { it in filters }
             }

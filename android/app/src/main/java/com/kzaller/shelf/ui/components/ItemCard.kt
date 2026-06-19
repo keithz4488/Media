@@ -15,6 +15,8 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -38,6 +40,11 @@ fun ItemCard(
     onLongClick: () -> Unit = {},
 ) {
     val flavor = LocalShelfFlavor.current
+    // Snapshot the click callbacks via rememberUpdatedState so the pointer-input
+    // handler always invokes the *current* lambda for this card -- prevents stale
+    // closures from emitting a previous item's id during navigation transitions.
+    val currentOnClick by rememberUpdatedState(onClick)
+    val currentOnLongClick by rememberUpdatedState(onLongClick)
     val aspect = when (item.kind) {
         MediaKind.BOOK -> 2f / 3f
         MediaKind.MOVIE, MediaKind.TV -> 2f / 3f
@@ -47,7 +54,10 @@ fun ItemCard(
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+            .combinedClickable(
+                onClick = { currentOnClick() },
+                onLongClick = { currentOnLongClick() },
+            ),
         shape = RoundedCornerShape(if (flavor.ornament == ShelfOrnament.NEON_GRID) 4.dp else 10.dp),
         colors = CardDefaults.cardColors(containerColor = flavor.cardSurface),
         border = BorderStroke(1.dp, flavor.cardBorder),
