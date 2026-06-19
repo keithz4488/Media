@@ -5,6 +5,8 @@
  *   GET    /items?kind=book|movie|tv|game
  *   POST   /items                       body: Item
  *   PATCH  /items/:id                   body: partial Item
+ *   POST   /items/:id/refresh           re-runs source enrichment on an existing row
+ *   GET    /items/:id/covers            -> { covers: [{url,label}, ...] }
  *   DELETE /items/:id
  *   GET    /search/books?q=...          (or ?isbn=...)
  *   GET    /search/movies?q=...         (or ?id=tmdb_id)
@@ -105,6 +107,12 @@ export default {
         if (req.method === "PATCH") return updateItem(id, req, env);
         if (req.method === "DELETE") return deleteItem(id, env);
       }
+
+      const refreshMatch = url.pathname.match(/^\/items\/([^/]+)\/refresh$/);
+      if (refreshMatch && req.method === "POST") return refreshItem(refreshMatch[1], env);
+
+      const coversMatch = url.pathname.match(/^\/items\/([^/]+)\/covers$/);
+      if (coversMatch && req.method === "GET") return listCovers(coversMatch[1], env);
 
       if (url.pathname === "/search/books") return searchBooks(url, env);
       if (url.pathname === "/search/movies") return searchTmdb(url, env, "movie");
@@ -452,10 +460,10 @@ function trimDescription(s: string | null | undefined): string | null {
     : cleaned;
 }
 
-async function enrichForCreate(item: Item, env: Env): Promise<Item> {
-  // Skip enrichment if the caller already supplied a description or there's no
-  // external reference to look up against.
-  if (item.description && item.description.trim().length > 0) return item;
+async function enrichForCreate(item: Item, env: Env, force = false): Promise<Item> {
+  // Skip enrichment if the caller already supplied a description (unless we're
+  // explicitly forcing a refresh) or if there's no external reference to look up.
+  if (!force && item.description && item.description.trim().length > 0) return item;
   if (!item.external_src || !item.external_id) return item;
 
   try {
@@ -472,6 +480,145 @@ async function enrichForCreate(item: Item, env: Env): Promise<Item> {
   } catch {
     return item; // best-effort: enrichment errors never block item creation
   }
+}
+
+async function refreshItem(id: string, env: Env): Promise<Response> {
+  const row = await env.DB.prepare("SELECT * FROM items WHERE id = ?1").bind(id).first<Item>();
+  if (!row) return err(404, "item not found");
+
+  const refreshed = await enrichForCreate(row, env, /* force */ true);
+
+  await env.DB.prepare(
+    `UPDATE items
+       SET description = ?1,
+           cover_url   = COALESCE(?2, cover_url),
+           updated_at  = ?3
+     WHERE id = ?4`,
+  )
+    .bind(refreshed.description ?? null, refreshed.cover_url ?? null, Date.now(), id)
+    .run();
+
+  const updated = await env.DB.prepare("SELECT * FROM items WHERE id = ?1").bind(id).first<Item>();
+  return json({ item: updated });
+}
+
+interface CoverOption {
+  url: string;
+  label: string;
+}
+
+async function listCovers(id: string, env: Env): Promise<Response> {
+  const row = await env.DB.prepare("SELECT * FROM items WHERE id = ?1").bind(id).first<Item>();
+  if (!row) return err(404, "item not found");
+
+  let covers: CoverOption[] = [];
+  try {
+    switch (row.external_src) {
+      case "tmdb":
+        covers = await tmdbCovers(row, env);
+        break;
+      case "rawg":
+        covers = await rawgCovers(row, env);
+        break;
+      case "open_library":
+        covers = await openLibraryCovers(row);
+        break;
+    }
+  } catch {
+    covers = [];
+  }
+  // Always include the currently-stored cover at the front so the user can revert.
+  if (row.cover_url) {
+    covers = [{ url: row.cover_url, label: "Current" }, ...covers.filter((c) => c.url !== row.cover_url)];
+  }
+  return json({ covers });
+}
+
+async function tmdbCovers(item: Item, env: Env): Promise<CoverOption[]> {
+  if (!env.TMDB_API_KEY) return [];
+  const path = item.kind === "movie" ? "movie" : item.kind === "tv" ? "tv" : null;
+  if (!path) return [];
+  const r = await fetch(
+    `https://api.themoviedb.org/3/${path}/${item.external_id}/images?api_key=${env.TMDB_API_KEY}&include_image_language=en,null`,
+  );
+  if (!r.ok) return [];
+  const d = (await r.json()) as any;
+  const posters: any[] = Array.isArray(d.posters) ? d.posters : [];
+  return posters.slice(0, 16).map((p, i) => ({
+    url: `https://image.tmdb.org/t/p/w500${p.file_path}`,
+    label: p.iso_639_1 ? `Poster (${String(p.iso_639_1).toUpperCase()})` : `Poster ${i + 1}`,
+  }));
+}
+
+async function rawgCovers(item: Item, env: Env): Promise<CoverOption[]> {
+  if (!env.RAWG_API_KEY || !item.external_id) return [];
+  const slug = encodeURIComponent(item.external_id);
+  const opts: CoverOption[] = [];
+
+  const detailR = await fetch(`https://api.rawg.io/api/games/${slug}?key=${env.RAWG_API_KEY}`);
+  if (detailR.ok) {
+    const d = (await detailR.json()) as any;
+    if (d.background_image) opts.push({ url: d.background_image, label: "Main artwork" });
+    if (d.background_image_additional) {
+      opts.push({ url: d.background_image_additional, label: "Alternate artwork" });
+    }
+  }
+
+  const ssR = await fetch(`https://api.rawg.io/api/games/${slug}/screenshots?key=${env.RAWG_API_KEY}`);
+  if (ssR.ok) {
+    const data = (await ssR.json()) as any;
+    const shots: any[] = Array.isArray(data.results) ? data.results : [];
+    shots.slice(0, 10).forEach((s, i) => {
+      if (s?.image) opts.push({ url: s.image, label: `Screenshot ${i + 1}` });
+    });
+  }
+
+  return opts;
+}
+
+async function openLibraryCovers(item: Item): Promise<CoverOption[]> {
+  if (!item.external_id) return [];
+  const isIsbn = /^\d{10,13}$/.test(item.external_id);
+  let workId: string | null = null;
+
+  if (isIsbn) {
+    const r = await fetch(`https://openlibrary.org/isbn/${item.external_id}.json`, {
+      headers: { "user-agent": "media-shelf/0.1 (kzaller.com)" },
+    });
+    if (r.ok) {
+      const data = (await r.json()) as any;
+      const w = Array.isArray(data?.works) ? data.works[0] : null;
+      if (w?.key) workId = String(w.key).replace("/works/", "");
+    }
+  } else {
+    workId = item.external_id;
+  }
+
+  if (!workId) return [];
+  const er = await fetch(`https://openlibrary.org/works/${workId}/editions.json?limit=40`, {
+    headers: { "user-agent": "media-shelf/0.1 (kzaller.com)" },
+  });
+  if (!er.ok) return [];
+  const data = (await er.json()) as any;
+  const editions: any[] = Array.isArray(data.entries) ? data.entries : [];
+
+  const seen = new Set<number>();
+  const opts: CoverOption[] = [];
+  for (const ed of editions) {
+    const covers: number[] = Array.isArray(ed.covers) ? ed.covers : [];
+    for (const c of covers) {
+      if (c > 0 && !seen.has(c)) {
+        seen.add(c);
+        opts.push({
+          url: `https://covers.openlibrary.org/b/id/${c}-L.jpg`,
+          label: ed.publish_date || `Edition`,
+        });
+        if (opts.length >= 16) break;
+      }
+    }
+    if (opts.length >= 16) break;
+  }
+  return opts;
 }
 
 async function enrichOpenLibrary(item: Item): Promise<Item> {

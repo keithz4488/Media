@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -22,6 +23,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.AssistChip
@@ -31,6 +34,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -69,7 +73,10 @@ fun DetailScreen(vm: DetailViewModel, onBack: () -> Unit) {
     val current = item
     val error by vm.error.collectAsState()
     val toast by vm.toast.collectAsState()
+    val covers by vm.covers.collectAsState()
+    val loadingCovers by vm.loadingCovers.collectAsState()
     val snackbar = remember { SnackbarHostState() }
+    var coverSheetOpen by remember { mutableStateOf(false) }
 
     LaunchedEffect(error) { error?.let { snackbar.showSnackbar(it); vm.clearError() } }
     LaunchedEffect(toast) { toast?.let { snackbar.showSnackbar(it); vm.clearToast() } }
@@ -87,6 +94,9 @@ fun DetailScreen(vm: DetailViewModel, onBack: () -> Unit) {
                         IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back") }
                     },
                     actions = {
+                        IconButton(onClick = { vm.refresh() }) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Refresh details")
+                        }
                         IconButton(onClick = { vm.delete(after = onBack) }) {
                             Icon(Icons.Default.Delete, contentDescription = "Delete")
                         }
@@ -126,7 +136,18 @@ fun DetailScreen(vm: DetailViewModel, onBack: () -> Unit) {
                             )
                         }
                     }
-                    Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                        TextButton(onClick = {
+                            coverSheetOpen = true
+                            vm.loadCovers()
+                        }) {
+                            Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.size(6.dp))
+                            Text("Change cover")
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
                     Text(
                         text = current.title,
                         style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
@@ -195,6 +216,87 @@ fun DetailScreen(vm: DetailViewModel, onBack: () -> Unit) {
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.padding(top = 4.dp),
                         )
+                    }
+                }
+            }
+        }
+
+        if (coverSheetOpen) {
+            ModalBottomSheet(
+                onDismissRequest = { coverSheetOpen = false },
+                containerColor = MaterialTheme.colorScheme.surface,
+            ) {
+                CoverPickerSheet(
+                    covers = covers,
+                    loading = loadingCovers,
+                    onPick = { url ->
+                        vm.setCover(url)
+                        coverSheetOpen = false
+                    },
+                    onClose = { coverSheetOpen = false },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CoverPickerSheet(
+    covers: List<com.kzaller.shelf.data.models.CoverOption>,
+    loading: Boolean,
+    onPick: (String) -> Unit,
+    onClose: () -> Unit,
+) {
+    Column(modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 24.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Pick a cover", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.weight(1f))
+            TextButton(onClick = onClose) { Text("Close") }
+        }
+        Spacer(Modifier.height(12.dp))
+        when {
+            loading -> Box(modifier = Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
+                androidx.compose.material3.CircularProgressIndicator()
+            }
+            covers.isEmpty() -> Text(
+                "No alternate covers available for this item.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+            )
+            else -> androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                columns = androidx.compose.foundation.lazy.grid.GridCells.Adaptive(minSize = 110.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.heightIn(max = 480.dp),
+            ) {
+                androidx.compose.foundation.lazy.grid.items(covers, key = { it.url }) { option ->
+                    androidx.compose.material3.Card(
+                        onClick = { onPick(option.url) },
+                        colors = androidx.compose.material3.CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        ),
+                    ) {
+                        Column {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .aspectRatio(2f / 3f)
+                                    .background(Color.Black.copy(alpha = 0.25f)),
+                            ) {
+                                AsyncImage(
+                                    model = option.url,
+                                    contentDescription = option.label,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+                            Text(
+                                text = option.label,
+                                style = MaterialTheme.typography.labelSmall,
+                                maxLines = 1,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+                            )
+                        }
                     }
                 }
             }

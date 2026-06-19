@@ -79,3 +79,14 @@ data class IdentifyResult(
     val title: String,
     val year: Int? = null,
 )
+
+@Serializable
+data class CoverOption(
+    val url: String,
+    val label: String,
+)
+
+@Serializable
+data class CoversResponse(
+    val covers: List<CoverOption> = emptyList(),
+)

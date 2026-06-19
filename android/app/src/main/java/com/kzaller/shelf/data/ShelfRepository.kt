@@ -5,6 +5,7 @@ import android.util.Base64
 import com.kzaller.shelf.data.api.ApiClient
 import com.kzaller.shelf.data.local.ItemEntity
 import com.kzaller.shelf.data.local.ShelfDatabase
+import com.kzaller.shelf.data.models.CoverOption
 import com.kzaller.shelf.data.models.CreateItemRequest
 import com.kzaller.shelf.data.models.IdentifyRequest
 import com.kzaller.shelf.data.models.IdentifyResult
@@ -107,5 +108,15 @@ class ShelfRepository(context: Context) {
     suspend fun identify(jpegBytes: ByteArray): Result<IdentifyResult> = runCatching {
         val b64 = Base64.encodeToString(jpegBytes, Base64.NO_WRAP)
         api.identify(IdentifyRequest(image = b64)).result
+    }
+
+    suspend fun refreshDetails(id: String): Result<ItemDto> = runCatching {
+        val resp = api.refresh(id)
+        db.items().upsert(ItemEntity.fromDto(resp.item))
+        resp.item
+    }
+
+    suspend fun listCovers(id: String): Result<List<CoverOption>> = runCatching {
+        api.covers(id).covers
     }
 }

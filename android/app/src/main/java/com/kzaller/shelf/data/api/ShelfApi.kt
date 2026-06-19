@@ -1,5 +1,6 @@
 package com.kzaller.shelf.data.api
 
+import com.kzaller.shelf.data.models.CoversResponse
 import com.kzaller.shelf.data.models.CreateItemRequest
 import com.kzaller.shelf.data.models.IdentifyRequest
 import com.kzaller.shelf.data.models.IdentifyResponse
@@ -27,6 +28,12 @@ interface ShelfApi {
 
     @DELETE("items/{id}")
     suspend fun delete(@Path("id") id: String)
+
+    @POST("items/{id}/refresh")
+    suspend fun refresh(@Path("id") id: String): ItemResponse
+
+    @GET("items/{id}/covers")
+    suspend fun covers(@Path("id") id: String): CoversResponse
 
     @GET("search/books")
     suspend fun searchBooks(@Query("q") q: String? = null, @Query("isbn") isbn: String? = null): SearchResponse

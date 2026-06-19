@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.kzaller.shelf.data.ShelfRepository
+import com.kzaller.shelf.data.models.CoverOption
 import com.kzaller.shelf.data.models.ItemDto
 import com.kzaller.shelf.data.models.UpdateItemRequest
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,6 +34,34 @@ class DetailViewModel(
     fun setStatus(status: String) = launchUpdate(UpdateItemRequest(status = status))
     fun setRating(rating: Int?) = launchUpdate(UpdateItemRequest(rating = rating), toast = if (rating == null) "Rating cleared" else "Rated $rating")
     fun setNotes(notes: String) = launchUpdate(UpdateItemRequest(notes = notes), toast = "Notes saved")
+    fun setCover(url: String) = launchUpdate(UpdateItemRequest(coverUrl = url), toast = "Cover updated")
+
+    private val _covers = MutableStateFlow<List<CoverOption>>(emptyList())
+    val covers = _covers.asStateFlow()
+
+    private val _loadingCovers = MutableStateFlow(false)
+    val loadingCovers = _loadingCovers.asStateFlow()
+
+    fun loadCovers() {
+        viewModelScope.launch {
+            _loadingCovers.value = true
+            repo.listCovers(id)
+                .onSuccess { _covers.value = it }
+                .onFailure { _error.value = it.message ?: "couldn't load covers" }
+            _loadingCovers.value = false
+        }
+    }
+
+    fun refresh() {
+        viewModelScope.launch {
+            _busy.value = true
+            _toast.value = "Refreshing details…"
+            repo.refreshDetails(id)
+                .onSuccess { _toast.value = "Details refreshed" }
+                .onFailure { _error.value = it.message ?: "refresh failed" }
+            _busy.value = false
+        }
+    }
 
     private fun launchUpdate(req: UpdateItemRequest, toast: String? = null) {
         viewModelScope.launch {
