@@ -107,6 +107,7 @@ fun AddItemScreen(
                     AddItemViewModel.Mode.CAMERA -> CameraScreen(
                         onBarcode = { vm.onBarcode(it) },
                         onText = { vm.onText(it) },
+                        onIdentify = { vm.onIdentify(it) },
                         onClose = { vm.goTo(AddItemViewModel.Mode.CHOOSE) },
                     )
                     AddItemViewModel.Mode.SEARCH -> SearchSection(

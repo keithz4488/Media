@@ -1,6 +1,8 @@
 package com.kzaller.shelf.data.api
 
 import com.kzaller.shelf.data.models.CreateItemRequest
+import com.kzaller.shelf.data.models.IdentifyRequest
+import com.kzaller.shelf.data.models.IdentifyResponse
 import com.kzaller.shelf.data.models.ItemResponse
 import com.kzaller.shelf.data.models.ItemsResponse
 import com.kzaller.shelf.data.models.SearchResponse
@@ -37,4 +39,7 @@ interface ShelfApi {
 
     @GET("search/games")
     suspend fun searchGames(@Query("q") q: String? = null, @Query("slug") slug: String? = null): SearchResponse
+
+    @POST("identify")
+    suspend fun identify(@Body body: IdentifyRequest): IdentifyResponse
 }

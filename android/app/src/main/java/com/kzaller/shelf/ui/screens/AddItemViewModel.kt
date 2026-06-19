@@ -99,6 +99,33 @@ class AddItemViewModel(
         searchNow()
     }
 
+    /** Called from CameraScreen when neither barcode nor OCR worked; the captured JPEG
+     *  frame goes to Claude vision for "what is this?" identification. */
+    fun onIdentify(jpegBytes: ByteArray) {
+        viewModelScope.launch {
+            _searching.value = true
+            _statusMsg.value = "Identifying with AI…"
+            repo.identify(jpegBytes)
+                .onSuccess { result ->
+                    if (result.kind == "unknown" || result.title.isBlank()) {
+                        _statusMsg.value = "Couldn't identify -- try search instead"
+                        _mode.value = Mode.SEARCH
+                    } else {
+                        // Use the identified title to drive a search against the right API.
+                        _query.value = result.title
+                        _mode.value = Mode.SEARCH
+                        _statusMsg.value = "Identified: ${result.title}"
+                        searchNow()
+                    }
+                }
+                .onFailure {
+                    _error.value = it.message ?: "identify failed"
+                    _mode.value = Mode.SEARCH
+                }
+            _searching.value = false
+        }
+    }
+
     fun add(hit: SearchHit, status: String, after: () -> Unit) {
         viewModelScope.launch {
             _searching.value = true

@@ -10,6 +10,7 @@
  *   GET    /search/movies?q=...         (or ?id=tmdb_id)
  *   GET    /search/tv?q=...             (or ?id=tmdb_id)
  *   GET    /search/games?q=...          (or ?slug=rawg_slug)
+ *   POST   /identify                    body: { image: base64-JPEG }  -> Claude Haiku vision
  *   GET    /health
  *
  * Auth: every request must send `Authorization: Bearer <SHELF_TOKEN>`.
@@ -20,6 +21,7 @@ export interface Env {
   SHELF_TOKEN: string;
   TMDB_API_KEY: string;
   RAWG_API_KEY: string;
+  ANTHROPIC_API_KEY: string;
 }
 
 type Kind = "book" | "movie" | "tv" | "game";
@@ -108,6 +110,7 @@ export default {
       if (url.pathname === "/search/movies") return searchTmdb(url, env, "movie");
       if (url.pathname === "/search/tv") return searchTmdb(url, env, "tv");
       if (url.pathname === "/search/games") return searchGames(url, env);
+      if (url.pathname === "/identify" && req.method === "POST") return identifyImage(req, env);
 
       return err(404, "not found");
     } catch (e) {
@@ -342,4 +345,87 @@ async function searchGames(url: URL, env: Env): Promise<Response> {
     };
   });
   return json({ hits });
+}
+
+// ---------- image identify via Claude Haiku vision ----------
+
+interface IdentifyResult {
+  kind: "book" | "movie" | "tv" | "game" | "unknown";
+  title: string;
+  year: number | null;
+}
+
+const IDENTIFY_PROMPT = `You are identifying media in a photograph -- a book cover, movie poster, TV show poster, or video game cover/box art.
+
+Respond with ONLY one line of JSON in exactly this format, no other text:
+{"kind":"book|movie|tv|game|unknown","title":"...","year":<integer or null>}
+
+Rules:
+- kind must be exactly one of: book, movie, tv, game, unknown
+- title is the work's title as it appears (no subtitle unless part of the official title)
+- year is the original release/publication year if you are confident, otherwise null
+- If the image isn't a recognizable cover/poster, or you can't identify the work, return {"kind":"unknown","title":"","year":null}
+- No markdown, no preamble, no explanation`;
+
+async function identifyImage(req: Request, env: Env): Promise<Response> {
+  if (!env.ANTHROPIC_API_KEY) return err(500, "ANTHROPIC_API_KEY not configured");
+
+  const body = (await req.json().catch(() => null)) as { image?: string } | null;
+  const b64 = body?.image;
+  if (!b64) return err(400, "image (base64 JPEG) required");
+
+  const r = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": env.ANTHROPIC_API_KEY,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 200,
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "image",
+              source: { type: "base64", media_type: "image/jpeg", data: b64 },
+            },
+            { type: "text", text: IDENTIFY_PROMPT },
+          ],
+        },
+      ],
+    }),
+  });
+
+  if (!r.ok) {
+    const errBody = await r.text().catch(() => "");
+    return err(502, `claude ${r.status}: ${errBody.slice(0, 200)}`);
+  }
+  const data = (await r.json()) as any;
+  const text = String(data?.content?.[0]?.text ?? "").trim();
+
+  // Be liberal in parsing -- if the model wraps in markdown or adds whitespace.
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  let parsed: IdentifyResult = { kind: "unknown", title: "", year: null };
+  if (jsonMatch) {
+    try {
+      const candidate = JSON.parse(jsonMatch[0]);
+      const kind = ["book", "movie", "tv", "game", "unknown"].includes(candidate.kind)
+        ? candidate.kind
+        : "unknown";
+      parsed = {
+        kind,
+        title: typeof candidate.title === "string" ? candidate.title : "",
+        year:
+          typeof candidate.year === "number" && Number.isFinite(candidate.year)
+            ? candidate.year
+            : null,
+      };
+    } catch {
+      // fall through; parsed stays unknown
+    }
+  }
+  return json({ result: parsed });
 }

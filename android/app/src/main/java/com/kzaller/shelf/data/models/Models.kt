@@ -66,3 +66,16 @@ data class UpdateItemRequest(
     val status: String? = null,
     val notes: String? = null,
 )
+
+@Serializable
+data class IdentifyRequest(val image: String)
+
+@Serializable
+data class IdentifyResponse(val result: IdentifyResult)
+
+@Serializable
+data class IdentifyResult(
+    val kind: String,
+    val title: String,
+    val year: Int? = null,
+)

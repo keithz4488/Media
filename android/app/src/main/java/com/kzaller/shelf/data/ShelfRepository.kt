@@ -1,10 +1,13 @@
 package com.kzaller.shelf.data
 
 import android.content.Context
+import android.util.Base64
 import com.kzaller.shelf.data.api.ApiClient
 import com.kzaller.shelf.data.local.ItemEntity
 import com.kzaller.shelf.data.local.ShelfDatabase
 import com.kzaller.shelf.data.models.CreateItemRequest
+import com.kzaller.shelf.data.models.IdentifyRequest
+import com.kzaller.shelf.data.models.IdentifyResult
 import com.kzaller.shelf.data.models.ItemDto
 import com.kzaller.shelf.data.models.SearchHit
 import com.kzaller.shelf.data.models.UpdateItemRequest
@@ -99,5 +102,10 @@ class ShelfRepository(context: Context) {
 
     suspend fun lookupBookByIsbn(isbn: String): Result<List<SearchHit>> = runCatching {
         api.searchBooks(isbn = isbn).hits
+    }
+
+    suspend fun identify(jpegBytes: ByteArray): Result<IdentifyResult> = runCatching {
+        val b64 = Base64.encodeToString(jpegBytes, Base64.NO_WRAP)
+        api.identify(IdentifyRequest(image = b64)).result
     }
 }
