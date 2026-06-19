@@ -1,6 +1,7 @@
 package com.kzaller.shelf.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
@@ -264,7 +265,13 @@ fun MediaShelfTheme(
     val typography = MaterialTheme.typography.copy(
         headlineMedium = effective.titleStyle,
     )
-    CompositionLocalProvider(LocalShelfFlavor provides effective) {
+    // Default Text color = the active scheme's onBackground. Without this, any Text
+    // that doesn't explicitly set a color falls back to Color.Black (Compose's hard
+    // default) and disappears on every dark themed shelf.
+    CompositionLocalProvider(
+        LocalShelfFlavor provides effective,
+        LocalContentColor provides scheme.onBackground,
+    ) {
         MaterialTheme(colorScheme = scheme, typography = typography, content = content)
     }
 }
