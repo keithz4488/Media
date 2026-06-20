@@ -1,5 +1,6 @@
 package com.kzaller.shelf.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,6 +22,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sort
@@ -82,70 +84,122 @@ fun ShelfScreen(
         val query by vm.query.collectAsState()
         val sort by vm.sort.collectAsState()
         val refreshing by vm.refreshing.collectAsState()
+        val selection by vm.selection.collectAsState()
+        val inSelectionMode = selection.isNotEmpty()
+
+        // System back should exit selection mode first, not navigate up.
+        BackHandler(enabled = inSelectionMode) { vm.clearSelection() }
 
         var sheetOpen by remember { mutableStateOf(false) }
         val sheetState = rememberModalBottomSheetState()
         var searchOpen by remember { mutableStateOf(false) }
         var sortMenuOpen by remember { mutableStateOf(false) }
+        var bulkStatusMenuOpen by remember { mutableStateOf(false) }
 
         Scaffold(
             containerColor = Color.Transparent,
             topBar = {
-                TopAppBar(
-                    title = { Text(kind.label, style = flavor.titleStyle.copy(color = flavor.accent)) },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                        }
-                    },
-                    actions = {
-                        IconButton(onClick = {
-                            if (searchOpen) { vm.clearSearch(); searchOpen = false }
-                            else searchOpen = true
-                        }) {
-                            Icon(
-                                imageVector = if (searchOpen) Icons.Default.Close else Icons.Default.Search,
-                                contentDescription = if (searchOpen) "Close search" else "Search",
+                if (inSelectionMode) {
+                    // Contextual top bar: count + delete + set-status + cancel.
+                    TopAppBar(
+                        title = {
+                            Text(
+                                text = "${selection.size} selected",
+                                style = flavor.titleStyle.copy(color = flavor.accent),
                             )
-                        }
-                        Box {
-                            IconButton(onClick = { sortMenuOpen = true }) {
-                                Icon(Icons.Default.Sort, contentDescription = "Sort")
+                        },
+                        navigationIcon = {
+                            IconButton(onClick = { vm.clearSelection() }) {
+                                Icon(Icons.Default.Close, contentDescription = "Cancel selection")
                             }
-                            DropdownMenu(
-                                expanded = sortMenuOpen,
-                                onDismissRequest = { sortMenuOpen = false },
-                            ) {
-                                SortMode.values().forEach { mode ->
-                                    DropdownMenuItem(
-                                        text = { Text(mode.label) },
-                                        trailingIcon = {
-                                            if (mode == sort) Icon(Icons.Default.Check, contentDescription = null)
-                                        },
-                                        onClick = {
-                                            vm.setSort(mode)
-                                            sortMenuOpen = false
-                                        },
-                                    )
+                        },
+                        actions = {
+                            Box {
+                                IconButton(onClick = { bulkStatusMenuOpen = true }) {
+                                    Icon(Icons.Default.Check, contentDescription = "Set status")
+                                }
+                                DropdownMenu(
+                                    expanded = bulkStatusMenuOpen,
+                                    onDismissRequest = { bulkStatusMenuOpen = false },
+                                ) {
+                                    Status.optionsFor(kind).forEach { code ->
+                                        DropdownMenuItem(
+                                            text = { Text("Set: ${Status.label(code, kind)}") },
+                                            onClick = {
+                                                vm.setStatusForSelected(code)
+                                                bulkStatusMenuOpen = false
+                                            },
+                                        )
+                                    }
                                 }
                             }
-                        }
-                        IconButton(onClick = { sheetOpen = true }) {
-                            BadgedBox(badge = {
-                                if (activeFilters.isNotEmpty()) {
-                                    Badge { Text(activeFilters.size.toString()) }
-                                }
+                            IconButton(onClick = { vm.deleteSelected() }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Delete selected")
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = Color.Transparent,
+                            navigationIconContentColor = MaterialTheme.colorScheme.onBackground,
+                            actionIconContentColor = MaterialTheme.colorScheme.onBackground,
+                        ),
+                    )
+                } else {
+                    TopAppBar(
+                        title = { Text(kind.label, style = flavor.titleStyle.copy(color = flavor.accent)) },
+                        navigationIcon = {
+                            IconButton(onClick = onBack) {
+                                Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                            }
+                        },
+                        actions = {
+                            IconButton(onClick = {
+                                if (searchOpen) { vm.clearSearch(); searchOpen = false }
+                                else searchOpen = true
                             }) {
-                                Icon(Icons.Default.FilterList, contentDescription = "Filter")
+                                Icon(
+                                    imageVector = if (searchOpen) Icons.Default.Close else Icons.Default.Search,
+                                    contentDescription = if (searchOpen) "Close search" else "Search",
+                                )
                             }
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color.Transparent,
-                        navigationIconContentColor = MaterialTheme.colorScheme.onBackground,
-                        actionIconContentColor = MaterialTheme.colorScheme.onBackground,
-                    ),
-                )
+                            Box {
+                                IconButton(onClick = { sortMenuOpen = true }) {
+                                    Icon(Icons.Default.Sort, contentDescription = "Sort")
+                                }
+                                DropdownMenu(
+                                    expanded = sortMenuOpen,
+                                    onDismissRequest = { sortMenuOpen = false },
+                                ) {
+                                    SortMode.values().forEach { mode ->
+                                        DropdownMenuItem(
+                                            text = { Text(mode.label) },
+                                            trailingIcon = {
+                                                if (mode == sort) Icon(Icons.Default.Check, contentDescription = null)
+                                            },
+                                            onClick = {
+                                                vm.setSort(mode)
+                                                sortMenuOpen = false
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+                            IconButton(onClick = { sheetOpen = true }) {
+                                BadgedBox(badge = {
+                                    if (activeFilters.isNotEmpty()) {
+                                        Badge { Text(activeFilters.size.toString()) }
+                                    }
+                                }) {
+                                    Icon(Icons.Default.FilterList, contentDescription = "Filter")
+                                }
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = Color.Transparent,
+                            navigationIconContentColor = MaterialTheme.colorScheme.onBackground,
+                            actionIconContentColor = MaterialTheme.colorScheme.onBackground,
+                        ),
+                    )
+                }
             },
             floatingActionButton = {
                 FloatingActionButton(
@@ -214,7 +268,12 @@ fun ShelfScreen(
                                 ) { item ->
                                     ItemCard(
                                         item = item,
-                                        onClick = { clickedItem -> onItem(clickedItem.id) },
+                                        selected = item.id in selection,
+                                        onClick = { clicked ->
+                                            if (inSelectionMode) vm.toggleSelection(clicked.id)
+                                            else onItem(clicked.id)
+                                        },
+                                        onLongClick = { clicked -> vm.toggleSelection(clicked.id) },
                                     )
                                 }
                             }

@@ -92,6 +92,26 @@ class ShelfRepository(context: Context) {
         db.items().delete(id)
     }
 
+    suspend fun deleteMany(ids: Collection<String>): Result<Int> = runCatching {
+        ids.forEach { id ->
+            runCatching {
+                api.delete(id)
+                db.items().delete(id)
+            }
+        }
+        ids.size
+    }
+
+    suspend fun setStatusMany(ids: Collection<String>, status: String): Result<Int> = runCatching {
+        ids.forEach { id ->
+            runCatching {
+                val resp = api.update(id, UpdateItemRequest(status = status))
+                db.items().upsert(ItemEntity.fromDto(resp.item))
+            }
+        }
+        ids.size
+    }
+
     suspend fun search(kind: MediaKind, query: String): Result<List<SearchHit>> = runCatching {
         when (kind) {
             MediaKind.BOOK  -> api.searchBooks(q = query).hits

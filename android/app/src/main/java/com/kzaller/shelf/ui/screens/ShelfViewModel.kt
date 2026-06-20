@@ -81,6 +81,10 @@ class ShelfViewModel(
     private val _error = MutableStateFlow<String?>(null)
     val error = _error.asStateFlow()
 
+    /** Set of selected item ids; non-empty means selection mode is active. */
+    private val _selection = MutableStateFlow<Set<String>>(emptySet())
+    val selection: StateFlow<Set<String>> = _selection.asStateFlow()
+
     init { refresh() }
 
     fun refresh() {
@@ -104,6 +108,32 @@ class ShelfViewModel(
 
     fun setSort(mode: SortMode) {
         viewModelScope.launch { prefs.setSort(kind, mode) }
+    }
+
+    fun toggleSelection(id: String) {
+        _selection.value = _selection.value.toMutableSet().apply {
+            if (!add(id)) remove(id)
+        }
+    }
+
+    fun clearSelection() { _selection.value = emptySet() }
+
+    fun deleteSelected() {
+        val ids = _selection.value
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            repo.deleteMany(ids).onFailure { _error.value = it.message }
+            _selection.value = emptySet()
+        }
+    }
+
+    fun setStatusForSelected(status: String) {
+        val ids = _selection.value
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            repo.setStatusMany(ids, status).onFailure { _error.value = it.message }
+            _selection.value = emptySet()
+        }
     }
 
     fun clearError() { _error.value = null }
