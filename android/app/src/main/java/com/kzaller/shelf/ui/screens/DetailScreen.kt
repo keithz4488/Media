@@ -70,8 +70,12 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.Platform
+import com.kzaller.shelf.data.ShelfRepository
 import com.kzaller.shelf.data.Status
 import com.kzaller.shelf.data.models.CoverOption
 import com.kzaller.shelf.ui.components.ShelfBackground
@@ -79,9 +83,39 @@ import com.kzaller.shelf.ui.components.shelfTextFieldColors
 import com.kzaller.shelf.ui.theme.MediaShelfTheme
 import com.kzaller.shelf.ui.theme.flavorFor
 
+/**
+ * Public entry point. Wraps a HorizontalPager over the shelf's items so swiping left/right
+ * navigates between siblings. Each page owns its own DetailViewModel keyed by item id, so
+ * its loading state (covers, refresh) doesn't bleed across pages.
+ */
+@Composable
+fun DetailScreen(
+    initialId: String,
+    kind: MediaKind,
+    repo: ShelfRepository,
+    onBack: () -> Unit,
+) {
+    val items by repo.observeShelf(kind).collectAsState(initial = emptyList())
+    if (items.isEmpty()) return // initial load hasn't populated cache yet; brief blank
+    val initialIndex = items.indexOfFirst { it.id == initialId }.coerceAtLeast(0)
+    val pagerState = rememberPagerState(initialPage = initialIndex) { items.size }
+
+    HorizontalPager(
+        state = pagerState,
+        key = { idx -> items[idx].id },
+    ) { page ->
+        val pageItem = items[page]
+        val vm: DetailViewModel = viewModel(
+            key = "detail-${pageItem.id}",
+            factory = DetailViewModel.factory(repo, pageItem.id),
+        )
+        DetailPage(vm = vm, onBack = onBack)
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun DetailScreen(vm: DetailViewModel, onBack: () -> Unit) {
+private fun DetailPage(vm: DetailViewModel, onBack: () -> Unit) {
     val item by vm.item.collectAsState()
     val current = item
     val error by vm.error.collectAsState()

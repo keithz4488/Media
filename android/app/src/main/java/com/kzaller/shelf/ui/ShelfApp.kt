@@ -18,7 +18,6 @@ import com.kzaller.shelf.data.preferences.AppPreferences
 import com.kzaller.shelf.ui.screens.AddItemScreen
 import com.kzaller.shelf.ui.screens.AddItemViewModel
 import com.kzaller.shelf.ui.screens.DetailScreen
-import com.kzaller.shelf.ui.screens.DetailViewModel
 import com.kzaller.shelf.ui.screens.HomeScreen
 import com.kzaller.shelf.ui.screens.ShelfScreen
 import com.kzaller.shelf.ui.screens.ShelfViewModel
@@ -30,8 +29,8 @@ object Routes {
     fun shelf(k: MediaKind) = "shelf/${k.wire}"
     const val ADD = "add/{kind}"
     fun add(k: MediaKind) = "add/${k.wire}"
-    const val DETAIL = "item/{id}"
-    fun detail(id: String) = "item/$id"
+    const val DETAIL = "item/{kind}/{id}"
+    fun detail(k: MediaKind, id: String) = "item/${k.wire}/$id"
 }
 
 /** Guard against navigations issued during a back-transition: when the user has just
@@ -66,7 +65,7 @@ fun ShelfApp() {
                     vm = vm,
                     onBack = { nav.popBackStack() },
                     onAdd = { nav.navigateIfResumed(entry, Routes.add(kind)) },
-                    onItem = { nav.navigateIfResumed(entry, Routes.detail(it)) },
+                    onItem = { nav.navigateIfResumed(entry, Routes.detail(kind, it)) },
                 )
             }
             composable(
@@ -84,11 +83,19 @@ fun ShelfApp() {
             }
             composable(
                 route = Routes.DETAIL,
-                arguments = listOf(navArgument("id") { type = NavType.StringType }),
+                arguments = listOf(
+                    navArgument("kind") { type = NavType.StringType },
+                    navArgument("id") { type = NavType.StringType },
+                ),
             ) { entry ->
+                val kind = MediaKind.fromWire(entry.arguments?.getString("kind")!!)
                 val id = entry.arguments?.getString("id")!!
-                val vm: DetailViewModel = viewModel(factory = DetailViewModel.factory(repo, id))
-                DetailScreen(vm = vm, onBack = { nav.popBackStack() })
+                DetailScreen(
+                    initialId = id,
+                    kind = kind,
+                    repo = repo,
+                    onBack = { nav.popBackStack() },
+                )
             }
         }
     }
