@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -48,6 +49,7 @@ import com.kzaller.shelf.ui.theme.flavorFor
 fun HomeScreen(
     onShelfTap: (MediaKind) -> Unit,
     onSearchAll: () -> Unit,
+    onStats: () -> Unit,
 ) {
     val context = LocalContext.current
     val repo = remember { ShelfRepository(context) }
@@ -82,6 +84,13 @@ fun HomeScreen(
                                     fontWeight = FontWeight.Light,
                                     fontSize = 28.sp,
                                 ),
+                            )
+                        }
+                        IconButton(onClick = onStats) {
+                            Icon(
+                                imageVector = Icons.Default.BarChart,
+                                contentDescription = "Stats",
+                                tint = Color(0xFFE5C07B),
                             )
                         }
                         IconButton(onClick = onSearchAll) {

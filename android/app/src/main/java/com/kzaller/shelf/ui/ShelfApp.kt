@@ -23,6 +23,8 @@ import com.kzaller.shelf.ui.screens.SearchAllScreen
 import com.kzaller.shelf.ui.screens.SearchAllViewModel
 import com.kzaller.shelf.ui.screens.ShelfScreen
 import com.kzaller.shelf.ui.screens.ShelfViewModel
+import com.kzaller.shelf.ui.screens.StatsScreen
+import com.kzaller.shelf.ui.screens.StatsViewModel
 import com.kzaller.shelf.ui.theme.MediaShelfTheme
 
 object Routes {
@@ -34,6 +36,7 @@ object Routes {
     const val DETAIL = "item/{kind}/{id}"
     fun detail(k: MediaKind, id: String) = "item/${k.wire}/$id"
     const val SEARCH_ALL = "search"
+    const val STATS = "stats"
 }
 
 /** Guard against navigations issued during a back-transition: when the user has just
@@ -58,6 +61,15 @@ fun ShelfApp() {
                 HomeScreen(
                     onShelfTap = { nav.navigateIfResumed(entry, Routes.shelf(it)) },
                     onSearchAll = { nav.navigateIfResumed(entry, Routes.SEARCH_ALL) },
+                    onStats = { nav.navigateIfResumed(entry, Routes.STATS) },
+                )
+            }
+            composable(Routes.STATS) { entry ->
+                val vm: StatsViewModel = viewModel(factory = StatsViewModel.factory(repo))
+                StatsScreen(
+                    vm = vm,
+                    onBack = { nav.popBackStack() },
+                    onShelfTap = { nav.navigateIfResumed(entry, Routes.shelf(it)) },
                 )
             }
             composable(Routes.SEARCH_ALL) { entry ->
