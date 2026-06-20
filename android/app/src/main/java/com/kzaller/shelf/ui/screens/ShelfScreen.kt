@@ -20,11 +20,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -33,6 +38,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -53,6 +59,7 @@ import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.Status
 import com.kzaller.shelf.ui.components.ItemCard
 import com.kzaller.shelf.ui.components.ShelfBackground
+import com.kzaller.shelf.ui.components.shelfTextFieldColors
 import com.kzaller.shelf.ui.theme.MediaShelfTheme
 import com.kzaller.shelf.ui.theme.flavorFor
 
@@ -71,9 +78,13 @@ fun ShelfScreen(
         val items by vm.items.collectAsState()
         val total by vm.totalCount.collectAsState()
         val activeFilters by vm.filters.collectAsState()
+        val query by vm.query.collectAsState()
+        val sort by vm.sort.collectAsState()
 
         var sheetOpen by remember { mutableStateOf(false) }
         val sheetState = rememberModalBottomSheetState()
+        var searchOpen by remember { mutableStateOf(false) }
+        var sortMenuOpen by remember { mutableStateOf(false) }
 
         Scaffold(
             containerColor = Color.Transparent,
@@ -86,6 +97,37 @@ fun ShelfScreen(
                         }
                     },
                     actions = {
+                        IconButton(onClick = {
+                            if (searchOpen) { vm.clearSearch(); searchOpen = false }
+                            else searchOpen = true
+                        }) {
+                            Icon(
+                                imageVector = if (searchOpen) Icons.Default.Close else Icons.Default.Search,
+                                contentDescription = if (searchOpen) "Close search" else "Search",
+                            )
+                        }
+                        Box {
+                            IconButton(onClick = { sortMenuOpen = true }) {
+                                Icon(Icons.Default.Sort, contentDescription = "Sort")
+                            }
+                            DropdownMenu(
+                                expanded = sortMenuOpen,
+                                onDismissRequest = { sortMenuOpen = false },
+                            ) {
+                                SortMode.values().forEach { mode ->
+                                    DropdownMenuItem(
+                                        text = { Text(mode.label) },
+                                        trailingIcon = {
+                                            if (mode == sort) Icon(Icons.Default.Check, contentDescription = null)
+                                        },
+                                        onClick = {
+                                            vm.setSort(mode)
+                                            sortMenuOpen = false
+                                        },
+                                    )
+                                }
+                            }
+                        }
                         IconButton(onClick = { sheetOpen = true }) {
                             BadgedBox(badge = {
                                 if (activeFilters.isNotEmpty()) {
@@ -114,6 +156,25 @@ fun ShelfScreen(
             // ShelfBackground inset already pads past edge ornaments (film strip etc).
             ShelfBackground(modifier = Modifier.padding(padding)) {
                 Column(modifier = Modifier.fillMaxSize()) {
+                    if (searchOpen) {
+                        OutlinedTextField(
+                            value = query,
+                            onValueChange = vm::setSearch,
+                            placeholder = { Text("Search ${kind.label.lowercase()}") },
+                            singleLine = true,
+                            colors = shelfTextFieldColors(),
+                            trailingIcon = {
+                                if (query.isNotEmpty()) {
+                                    IconButton(onClick = { vm.clearSearch() }) {
+                                        Icon(Icons.Default.Close, contentDescription = "Clear")
+                                    }
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                        )
+                    }
                     if (activeFilters.isNotEmpty()) {
                         ActiveFilterBar(
                             kind = kind,
@@ -124,7 +185,10 @@ fun ShelfScreen(
                         )
                     }
                     if (items.isEmpty()) {
-                        EmptyState(filtered = activeFilters.isNotEmpty())
+                        EmptyState(
+                            filtered = activeFilters.isNotEmpty(),
+                            searching = query.isNotBlank(),
+                        )
                     } else {
                         LazyVerticalGrid(
                             columns = GridCells.Adaptive(minSize = 140.dp),
@@ -205,16 +269,22 @@ private fun ActiveFilterBar(
 }
 
 @Composable
-private fun EmptyState(filtered: Boolean) {
+private fun EmptyState(filtered: Boolean, searching: Boolean) {
+    val (title, sub) = when {
+        searching && filtered -> "No matches" to "Try a different filter or search"
+        searching             -> "No matches" to "Try a different search term"
+        filtered              -> "Nothing matches this filter" to "Try a different combination"
+        else                  -> "Nothing here yet" to "Tap + to scan or search"
+    }
     Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
-                text = if (filtered) "Nothing matches this filter" else "Nothing here yet",
+                text = title,
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onBackground,
             )
             Text(
-                text = if (filtered) "Try a different combination" else "Tap + to scan or search",
+                text = sub,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
             )
