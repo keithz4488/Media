@@ -128,4 +128,6 @@ dependencies {
     implementation(libs.mlkit.text.recognition)
 
     implementation(libs.accompanist.permissions)
+
+    implementation(libs.androidx.datastore.preferences)
 }

@@ -7,6 +7,7 @@ import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.ShelfRepository
 import com.kzaller.shelf.data.Status
 import com.kzaller.shelf.data.models.ItemDto
+import com.kzaller.shelf.data.preferences.AppPreferences
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -26,6 +27,7 @@ enum class SortMode(val label: String) {
 
 class ShelfViewModel(
     private val repo: ShelfRepository,
+    private val prefs: AppPreferences,
     private val kind: MediaKind,
 ) : ViewModel() {
 
@@ -35,12 +37,13 @@ class ShelfViewModel(
     private val _query = MutableStateFlow("")
     val query: StateFlow<String> = _query.asStateFlow()
 
-    private val _sort = MutableStateFlow(SortMode.RECENT)
-    val sort: StateFlow<SortMode> = _sort.asStateFlow()
+    /** Sort mode persists per-kind in DataStore so it survives app restarts. */
+    val sort: StateFlow<SortMode> =
+        prefs.observeSort(kind).stateIn(viewModelScope, SharingStarted.Eagerly, SortMode.RECENT)
 
     /** Items visible on the shelf: kind -> status filter -> text search -> sort. */
     val items: StateFlow<List<ItemDto>> =
-        combine(repo.observeShelf(kind), _filters, _query, _sort) { all, filters, query, sort ->
+        combine(repo.observeShelf(kind), _filters, _query, sort) { all, filters, query, sort ->
             // Defensive: the DAO already filters by kind in SQL, but enforce here too
             // so a stale emission can't slip a different-kind item into the grid.
             val ofKind = all.filter { it.kind == kind }
@@ -99,16 +102,18 @@ class ShelfViewModel(
     fun setSearch(q: String) { _query.value = q }
     fun clearSearch() { _query.value = "" }
 
-    fun setSort(mode: SortMode) { _sort.value = mode }
+    fun setSort(mode: SortMode) {
+        viewModelScope.launch { prefs.setSort(kind, mode) }
+    }
 
     fun clearError() { _error.value = null }
 
     companion object {
-        fun factory(repo: ShelfRepository, kind: MediaKind): ViewModelProvider.Factory =
+        fun factory(repo: ShelfRepository, prefs: AppPreferences, kind: MediaKind): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                    ShelfViewModel(repo, kind) as T
+                    ShelfViewModel(repo, prefs, kind) as T
             }
     }
 }

@@ -19,6 +19,7 @@ data class ItemDto(
     val status: String? = "owned",
     val notes: String? = null,
     @SerialName("user_platform") val userPlatform: String? = null,
+    @SerialName("completed_at") val completedAt: Long? = null,
     @SerialName("added_at")   val addedAt: Long? = null,
     @SerialName("updated_at") val updatedAt: Long? = null,
 )
@@ -67,6 +68,7 @@ data class UpdateItemRequest(
     val status: String? = null,
     val notes: String? = null,
     @SerialName("user_platform") val userPlatform: String? = null,
+    @SerialName("completed_at") val completedAt: Long? = null,
 )
 
 @Serializable

@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS items (
   status        TEXT NOT NULL DEFAULT 'owned', -- CSV: any of 'owned','seen','wishlist'
   notes         TEXT,
   user_platform TEXT,                            -- CSV: any of 'pc','xbox','playstation','nintendo','mobile' (games only)
+  completed_at  INTEGER,                         -- epoch ms when the user marked the item as finished/read/watched/played
   added_at      INTEGER NOT NULL,
   updated_at    INTEGER NOT NULL,
   UNIQUE(kind, external_src, external_id)

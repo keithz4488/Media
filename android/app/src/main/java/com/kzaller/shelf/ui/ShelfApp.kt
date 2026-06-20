@@ -14,6 +14,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.ShelfRepository
+import com.kzaller.shelf.data.preferences.AppPreferences
 import com.kzaller.shelf.ui.screens.AddItemScreen
 import com.kzaller.shelf.ui.screens.AddItemViewModel
 import com.kzaller.shelf.ui.screens.DetailScreen
@@ -46,6 +47,7 @@ private fun NavController.navigateIfResumed(from: NavBackStackEntry?, route: Str
 fun ShelfApp() {
     val context = LocalContext.current
     val repo = remember { ShelfRepository(context) }
+    val prefs = remember { AppPreferences(context) }
     val nav = rememberNavController()
 
     MediaShelfTheme {
@@ -58,7 +60,7 @@ fun ShelfApp() {
                 arguments = listOf(navArgument("kind") { type = NavType.StringType }),
             ) { entry ->
                 val kind = MediaKind.fromWire(entry.arguments?.getString("kind")!!)
-                val vm: ShelfViewModel = viewModel(factory = ShelfViewModel.factory(repo, kind))
+                val vm: ShelfViewModel = viewModel(factory = ShelfViewModel.factory(repo, prefs, kind))
                 ShelfScreen(
                     kind = kind,
                     vm = vm,

@@ -24,6 +24,7 @@ data class ItemEntity(
     val status: String,
     val notes: String?,
     val userPlatform: String?,
+    val completedAt: Long?,
     val addedAt: Long,
     val updatedAt: Long,
 ) {
@@ -41,6 +42,7 @@ data class ItemEntity(
         status = status,
         notes = notes,
         userPlatform = userPlatform,
+        completedAt = completedAt,
         addedAt = addedAt,
         updatedAt = updatedAt,
     )
@@ -60,6 +62,7 @@ data class ItemEntity(
             status = dto.status ?: "owned",
             notes = dto.notes,
             userPlatform = dto.userPlatform,
+            completedAt = dto.completedAt,
             addedAt = dto.addedAt ?: System.currentTimeMillis(),
             updatedAt = dto.updatedAt ?: System.currentTimeMillis(),
         )

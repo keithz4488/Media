@@ -36,6 +36,8 @@ class DetailViewModel(
     fun setNotes(notes: String) = launchUpdate(UpdateItemRequest(notes = notes), toast = "Notes saved")
     fun setCover(url: String) = launchUpdate(UpdateItemRequest(coverUrl = url), toast = "Cover updated")
     fun setPlatform(csv: String) = launchUpdate(UpdateItemRequest(userPlatform = csv))
+    fun setCompletedAt(millis: Long?) =
+        launchUpdate(UpdateItemRequest(completedAt = millis), toast = if (millis == null) "Cleared completion" else "Marked complete")
 
     private val _covers = MutableStateFlow<List<CoverOption>>(emptyList())
     val covers = _covers.asStateFlow()

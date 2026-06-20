@@ -24,6 +24,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
@@ -36,7 +38,10 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -237,6 +242,12 @@ fun DetailScreen(vm: DetailViewModel, onBack: () -> Unit) {
                         }
                     }
 
+                    Spacer(Modifier.height(16.dp))
+                    CompletedSection(
+                        completedAt = current.completedAt,
+                        onSet = { vm.setCompletedAt(it) },
+                    )
+
                     Spacer(Modifier.height(8.dp))
                     NotesSection(
                         savedNotes = current.notes,
@@ -344,6 +355,69 @@ private fun CoverPickerSheet(
             }
         }
     }
+}
+
+/**
+ * Completion-date editor. Tap "Mark complete" to set to today; tap the date to open a
+ * picker and choose a different one. Stored as epoch ms in the DB so we can do "year in
+ * review" math without timezone games.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CompletedSection(
+    completedAt: Long?,
+    onSet: (Long?) -> Unit,
+) {
+    var pickerOpen by remember { mutableStateOf(false) }
+
+    Text("Completed", style = MaterialTheme.typography.titleSmall)
+    Spacer(Modifier.height(4.dp))
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (completedAt == null) {
+            AssistChip(
+                onClick = { onSet(System.currentTimeMillis()) },
+                label = { Text("Mark complete") },
+                leadingIcon = { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) },
+            )
+            Spacer(Modifier.size(8.dp))
+            TextButton(onClick = { pickerOpen = true }) {
+                Icon(Icons.Default.CalendarToday, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.size(6.dp))
+                Text("Pick a date")
+            }
+        } else {
+            AssistChip(
+                onClick = { pickerOpen = true },
+                label = { Text(formatDate(completedAt)) },
+                leadingIcon = { Icon(Icons.Default.CalendarToday, contentDescription = null, modifier = Modifier.size(16.dp)) },
+            )
+        }
+    }
+
+    if (pickerOpen) {
+        val pickerState = rememberDatePickerState(initialSelectedDateMillis = completedAt ?: System.currentTimeMillis())
+        DatePickerDialog(
+            onDismissRequest = { pickerOpen = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    pickerState.selectedDateMillis?.let { onSet(it) }
+                    pickerOpen = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pickerOpen = false }) { Text("Cancel") }
+            },
+        ) {
+            DatePicker(state = pickerState)
+        }
+    }
+}
+
+private fun formatDate(epochMs: Long): String {
+    val instant = java.time.Instant.ofEpochMilli(epochMs)
+    val date = instant.atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+    val fmt = java.time.format.DateTimeFormatter.ofPattern("MMM d, yyyy")
+    return date.format(fmt)
 }
 
 /**
