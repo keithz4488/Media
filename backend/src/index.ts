@@ -354,10 +354,12 @@ async function searchGames(url: URL, env: Env): Promise<Response> {
   }
 
   // Run RAWG and IGDB in parallel; either failing is non-fatal.
-  const [rawgHits, igdbHits] = await Promise.all([
-    rawgSearch(q!, env).catch(() => [] as SearchHit[]),
-    igdbSearch(q!, env).catch(() => [] as SearchHit[]),
+  const [rawgResult, igdbResult] = await Promise.allSettled([
+    rawgSearch(q!, env),
+    igdbSearch(q!, env),
   ]);
+  const rawgHits = rawgResult.status === "fulfilled" ? rawgResult.value : [];
+  const igdbHits = igdbResult.status === "fulfilled" ? igdbResult.value : [];
 
   // Dedupe by lowercased title, preferring RAWG (since RAWG-backed items get richer
   // cover options via SteamGridDB and the existing /games/:slug detail endpoint).
@@ -369,7 +371,16 @@ async function searchGames(url: URL, env: Env): Promise<Response> {
     seen.add(key);
     merged.push(h);
   }
-  return json({ hits: merged.slice(0, 30) });
+  return json({
+    hits: merged.slice(0, 30),
+    _sources: {
+      rawg: rawgHits.length,
+      igdb: igdbHits.length,
+      rawg_error: rawgResult.status === "rejected" ? String(rawgResult.reason).slice(0, 120) : null,
+      igdb_error: igdbResult.status === "rejected" ? String(igdbResult.reason).slice(0, 120) : null,
+      igdb_configured: !!(env.IGDB_CLIENT_ID && env.IGDB_CLIENT_SECRET),
+    },
+  });
 }
 
 function rawgGameToHit(g: any): SearchHit {
@@ -422,8 +433,11 @@ async function igdbToken(env: Env): Promise<string | null> {
 }
 
 async function igdbSearch(query: string, env: Env): Promise<SearchHit[]> {
+  if (!env.IGDB_CLIENT_ID || !env.IGDB_CLIENT_SECRET) {
+    throw new Error("igdb: IGDB_CLIENT_ID or IGDB_CLIENT_SECRET not set");
+  }
   const token = await igdbToken(env);
-  if (!token || !env.IGDB_CLIENT_ID) return [];
+  if (!token) throw new Error("igdb: twitch token request failed");
   // IGDB uses an apicalypse-style query language in the request body.
   const safe = query.replace(/"/g, '\\"');
   const body =
@@ -439,9 +453,14 @@ async function igdbSearch(query: string, env: Env): Promise<SearchHit[]> {
     },
     body,
   });
-  // 401 here means the cached token has gone stale -- nuke it so the next call refetches.
-  if (r.status === 401) igdbTokenCache = null;
-  if (!r.ok) return [];
+  if (r.status === 401) {
+    igdbTokenCache = null;
+    throw new Error("igdb: 401 (cached token stale, will refetch)");
+  }
+  if (!r.ok) {
+    const errBody = await r.text().catch(() => "");
+    throw new Error(`igdb ${r.status}: ${errBody.slice(0, 100)}`);
+  }
   const list = (await r.json()) as any[];
   return list.map((g: any): SearchHit => {
     const platforms: string[] = Array.isArray(g.platforms)
