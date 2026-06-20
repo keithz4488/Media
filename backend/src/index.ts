@@ -535,6 +535,16 @@ async function listCovers(id: string, env: Env): Promise<Response> {
   if (row.cover_url) {
     covers = [{ url: row.cover_url, label: "Current" }, ...covers.filter((c) => c.url !== row.cover_url)];
   }
+  // Dedupe by url; multiple sources can hand back the same image (especially when
+  // SteamGridDB and RAWG agree, or when an upstream returns the same grid twice).
+  // Without this the LazyGrid in the app crashes from duplicate item keys.
+  const seenUrls = new Set<string>();
+  covers = covers.filter((c) => {
+    if (!c.url) return false;
+    if (seenUrls.has(c.url)) return false;
+    seenUrls.add(c.url);
+    return true;
+  });
   return json({ covers });
 }
 

@@ -18,7 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -308,7 +308,10 @@ private fun CoverPickerSheet(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.heightIn(max = 480.dp),
             ) {
-                items(covers, key = { it.url }) { option ->
+                // Key by index, not url. Duplicate urls can sneak through if upstream
+                // sources hand back the same image; using url as the key crashes the
+                // grid when the dupe scrolls into view.
+                itemsIndexed(covers) { _, option ->
                     Card(
                         onClick = { onPick(option.url) },
                         colors = CardDefaults.cardColors(
