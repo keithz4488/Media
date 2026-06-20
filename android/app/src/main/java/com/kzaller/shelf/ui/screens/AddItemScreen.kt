@@ -37,7 +37,9 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -80,6 +82,7 @@ fun AddItemScreen(
         val searching by vm.searching.collectAsState()
         val error by vm.error.collectAsState()
         val statusMsg by vm.statusMsg.collectAsState()
+        val bulkMode by vm.bulkMode.collectAsState()
         val snackbar = remember { SnackbarHostState() }
 
         LaunchedEffect(error) { error?.let { snackbar.showSnackbar(it); vm.clearError() } }
@@ -91,6 +94,16 @@ fun AddItemScreen(
                 TopAppBar(
                     title = { Text("Add to ${kind.label}") },
                     navigationIcon = { IconButton(onClick = onClose) { Icon(Icons.Default.Close, "Close") } },
+                    actions = {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 8.dp)) {
+                            Text("Bulk", style = MaterialTheme.typography.labelMedium)
+                            Spacer(Modifier.size(6.dp))
+                            Switch(
+                                checked = bulkMode,
+                                onCheckedChange = vm::setBulkMode,
+                            )
+                        }
+                    },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                 )
             },
@@ -100,6 +113,7 @@ fun AddItemScreen(
                 when (mode) {
                     AddItemViewModel.Mode.CHOOSE -> ChooseSection(
                         kind = kind,
+                        bulkMode = bulkMode,
                         onCamera = { vm.goTo(AddItemViewModel.Mode.CAMERA) },
                         onSearch = { vm.goTo(AddItemViewModel.Mode.SEARCH) },
                         onManual = { vm.goTo(AddItemViewModel.Mode.MANUAL) },
@@ -114,10 +128,12 @@ fun AddItemScreen(
                         query = query,
                         searching = searching,
                         hits = hits,
+                        bulkMode = bulkMode,
                         onQuery = vm::setQuery,
                         onSubmit = { vm.searchNow() },
                         onPick = { vm.add(it, status = "owned", after = onAdded) },
                         onManual = { vm.goTo(AddItemViewModel.Mode.MANUAL) },
+                        onDone = onAdded,
                     )
                     AddItemViewModel.Mode.MANUAL -> ManualSection(
                         seed = query,
@@ -136,6 +152,7 @@ fun AddItemScreen(
 @Composable
 private fun ChooseSection(
     kind: MediaKind,
+    bulkMode: Boolean,
     onCamera: () -> Unit,
     onSearch: () -> Unit,
     onManual: () -> Unit,
@@ -148,6 +165,13 @@ private fun ChooseSection(
             "How would you like to add ${kind.label.lowercase()}?",
             style = MaterialTheme.typography.titleMedium,
         )
+        if (bulkMode) {
+            Text(
+                "Bulk mode is on -- after each add, you'll stay here to add another.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
         BigChoice(icon = Icons.Default.PhotoCamera, label = "Camera", subtitle = "Scan a barcode or read a cover", onClick = onCamera)
         BigChoice(icon = Icons.Default.Search, label = "Search", subtitle = "Type a title", onClick = onSearch)
         BigChoice(icon = Icons.Default.Edit, label = "Enter manually", subtitle = "Skip lookup", onClick = onManual)
@@ -183,10 +207,12 @@ private fun SearchSection(
     query: String,
     searching: Boolean,
     hits: List<SearchHit>,
+    bulkMode: Boolean,
     onQuery: (String) -> Unit,
     onSubmit: () -> Unit,
     onPick: (SearchHit) -> Unit,
     onManual: () -> Unit,
+    onDone: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         OutlinedTextField(
@@ -201,6 +227,13 @@ private fun SearchSection(
             },
         )
         Spacer(Modifier.height(12.dp))
+        if (bulkMode) {
+            // In bulk mode the user wants explicit control of when to exit, so surface a Done.
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = onDone) { Text("Done adding") }
+            }
+            Spacer(Modifier.height(8.dp))
+        }
         if (hits.isEmpty() && !searching && query.isNotBlank()) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth().padding(top = 32.dp)) {
                 Text("No matches", style = MaterialTheme.typography.titleSmall)

@@ -37,9 +37,24 @@ class AddItemViewModel(
     private val _statusMsg = MutableStateFlow<String?>(null)
     val statusMsg = _statusMsg.asStateFlow()
 
+    private val _bulkMode = MutableStateFlow(false)
+    val bulkMode = _bulkMode.asStateFlow()
+
+    /** Tracks whether the user's current SEARCH session originated from the camera flow,
+     *  so a bulk add can return them to the camera instead of the bare search box. */
+    private val _fromCamera = MutableStateFlow(false)
+
     private var searchJob: Job? = null
 
-    fun goTo(mode: Mode) { _mode.value = mode }
+    fun goTo(mode: Mode) {
+        if (mode != Mode.SEARCH && mode != Mode.MANUAL) _fromCamera.value = false
+        if (mode == Mode.SEARCH || mode == Mode.MANUAL) {
+            // Explicit user navigation into search/manual -- not from camera.
+            _fromCamera.value = false
+        }
+        _mode.value = mode
+    }
+    fun setBulkMode(on: Boolean) { _bulkMode.value = on }
 
     fun setQuery(q: String) {
         _query.value = q
@@ -67,6 +82,7 @@ class AddItemViewModel(
 
     /** Called from CameraScreen when ML Kit reads a barcode. */
     fun onBarcode(value: String) {
+        _fromCamera.value = true
         viewModelScope.launch {
             _searching.value = true
             _statusMsg.value = "Looking up $value"
@@ -92,6 +108,7 @@ class AddItemViewModel(
 
     /** Called from CameraScreen when ML Kit reads text. */
     fun onText(text: String) {
+        _fromCamera.value = true
         val cleaned = text.lines().joinToString(" ") { it.trim() }.take(60)
         if (cleaned.isBlank()) return
         _query.value = cleaned
@@ -102,6 +119,7 @@ class AddItemViewModel(
     /** Called from CameraScreen when neither barcode nor OCR worked; the captured JPEG
      *  frame goes to Claude vision for "what is this?" identification. */
     fun onIdentify(jpegBytes: ByteArray) {
+        _fromCamera.value = true
         viewModelScope.launch {
             _searching.value = true
             _statusMsg.value = "Identifying with AI…"
@@ -130,7 +148,23 @@ class AddItemViewModel(
         viewModelScope.launch {
             _searching.value = true
             repo.add(kind, hit, status)
-                .onSuccess { after() }
+                .onSuccess { dto ->
+                    if (_bulkMode.value) {
+                        _statusMsg.value = "Added \"${dto.title}\""
+                        _query.value = ""
+                        _hits.value = emptyList()
+                        // Camera-originated bulk adds go back to the camera so the next
+                        // scan can fire immediately; pure search bulk stays in search.
+                        if (_fromCamera.value) {
+                            _mode.value = Mode.CAMERA
+                            _fromCamera.value = false // next scan starts a fresh attempt
+                        } else {
+                            _mode.value = Mode.SEARCH
+                        }
+                    } else {
+                        after()
+                    }
+                }
                 .onFailure { _error.value = it.message }
             _searching.value = false
         }
@@ -140,7 +174,17 @@ class AddItemViewModel(
         viewModelScope.launch {
             _searching.value = true
             repo.addManual(kind, title.trim(), subtitle?.trim()?.ifBlank { null }, year, null, status)
-                .onSuccess { after() }
+                .onSuccess { dto ->
+                    if (_bulkMode.value) {
+                        _statusMsg.value = "Added \"${dto.title}\""
+                        _query.value = ""
+                        _hits.value = emptyList()
+                        // Manual entry always stays in SEARCH/MANUAL flow.
+                        _mode.value = Mode.MANUAL
+                    } else {
+                        after()
+                    }
+                }
                 .onFailure { _error.value = it.message }
             _searching.value = false
         }
