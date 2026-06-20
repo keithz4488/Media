@@ -139,8 +139,8 @@ fun ShelfScreen(
                         },
                         colors = TopAppBarDefaults.topAppBarColors(
                             containerColor = Color.Transparent,
-                            navigationIconContentColor = MaterialTheme.colorScheme.onBackground,
-                            actionIconContentColor = MaterialTheme.colorScheme.onBackground,
+                            navigationIconContentColor = flavor.accent,
+                            actionIconContentColor = flavor.accent,
                         ),
                     )
                 } else {
@@ -195,8 +195,8 @@ fun ShelfScreen(
                         },
                         colors = TopAppBarDefaults.topAppBarColors(
                             containerColor = Color.Transparent,
-                            navigationIconContentColor = MaterialTheme.colorScheme.onBackground,
-                            actionIconContentColor = MaterialTheme.colorScheme.onBackground,
+                            navigationIconContentColor = flavor.accent,
+                            actionIconContentColor = flavor.accent,
                         ),
                     )
                 }

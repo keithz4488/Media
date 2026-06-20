@@ -148,7 +148,11 @@ private fun DetailPage(vm: DetailViewModel, onBack: () -> Unit) {
                             Icon(Icons.Default.Delete, contentDescription = "Delete")
                         }
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                        navigationIconContentColor = flavor.accent,
+                        actionIconContentColor = flavor.accent,
+                    ),
                 )
             },
             snackbarHost = { SnackbarHost(snackbar) },
