@@ -361,11 +361,12 @@ async function searchGames(url: URL, env: Env): Promise<Response> {
   const rawgHits = rawgResult.status === "fulfilled" ? rawgResult.value : [];
   const igdbHits = igdbResult.status === "fulfilled" ? igdbResult.value : [];
 
-  // Dedupe by lowercased title, preferring RAWG (since RAWG-backed items get richer
-  // cover options via SteamGridDB and the existing /games/:slug detail endpoint).
+  // Dedupe by lowercased title. IGDB processed first wins on tiebreak (its titles
+  // are usually more canonical, e.g. consistent "Halo 5: Guardians" capitalization);
+  // RAWG fills in titles IGDB doesn't have.
   const merged: SearchHit[] = [];
   const seen = new Set<string>();
-  for (const h of rawgHits.concat(igdbHits)) {
+  for (const h of igdbHits.concat(rawgHits)) {
     const key = h.title.trim().toLowerCase();
     if (!key || seen.has(key)) continue;
     seen.add(key);
