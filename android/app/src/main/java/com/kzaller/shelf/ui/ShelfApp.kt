@@ -19,6 +19,8 @@ import com.kzaller.shelf.ui.screens.AddItemScreen
 import com.kzaller.shelf.ui.screens.AddItemViewModel
 import com.kzaller.shelf.ui.screens.DetailScreen
 import com.kzaller.shelf.ui.screens.HomeScreen
+import com.kzaller.shelf.ui.screens.SearchAllScreen
+import com.kzaller.shelf.ui.screens.SearchAllViewModel
 import com.kzaller.shelf.ui.screens.ShelfScreen
 import com.kzaller.shelf.ui.screens.ShelfViewModel
 import com.kzaller.shelf.ui.theme.MediaShelfTheme
@@ -31,6 +33,7 @@ object Routes {
     fun add(k: MediaKind) = "add/${k.wire}"
     const val DETAIL = "item/{kind}/{id}"
     fun detail(k: MediaKind, id: String) = "item/${k.wire}/$id"
+    const val SEARCH_ALL = "search"
 }
 
 /** Guard against navigations issued during a back-transition: when the user has just
@@ -52,7 +55,18 @@ fun ShelfApp() {
     MediaShelfTheme {
         NavHost(navController = nav, startDestination = Routes.HOME) {
             composable(Routes.HOME) { entry ->
-                HomeScreen(onShelfTap = { nav.navigateIfResumed(entry, Routes.shelf(it)) })
+                HomeScreen(
+                    onShelfTap = { nav.navigateIfResumed(entry, Routes.shelf(it)) },
+                    onSearchAll = { nav.navigateIfResumed(entry, Routes.SEARCH_ALL) },
+                )
+            }
+            composable(Routes.SEARCH_ALL) { entry ->
+                val vm: SearchAllViewModel = viewModel(factory = SearchAllViewModel.factory(repo))
+                SearchAllScreen(
+                    vm = vm,
+                    onBack = { nav.popBackStack() },
+                    onItem = { k, id -> nav.navigateIfResumed(entry, Routes.detail(k, id)) },
+                )
             }
             composable(
                 route = Routes.SHELF,

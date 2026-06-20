@@ -15,6 +15,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -41,7 +45,10 @@ import com.kzaller.shelf.ui.theme.MediaShelfTheme
 import com.kzaller.shelf.ui.theme.flavorFor
 
 @Composable
-fun HomeScreen(onShelfTap: (MediaKind) -> Unit) {
+fun HomeScreen(
+    onShelfTap: (MediaKind) -> Unit,
+    onSearchAll: () -> Unit,
+) {
     val context = LocalContext.current
     val repo = remember { ShelfRepository(context) }
     val vm: HomeViewModel = viewModel(factory = HomeViewModel.factory(repo))
@@ -57,23 +64,34 @@ fun HomeScreen(onShelfTap: (MediaKind) -> Unit) {
             ) {
                 Column(modifier = Modifier.fillMaxSize().padding(horizontal = 18.dp)) {
                     Spacer(Modifier.height(24.dp))
-                    Text(
-                        text = "MEDIA",
-                        style = MaterialTheme.typography.headlineMedium.copy(
-                            color = Color(0xFFE5C07B),
-                            letterSpacing = 6.sp,
-                            fontWeight = FontWeight.Black,
-                        ),
-                    )
-                    Text(
-                        text = "shelf",
-                        style = MaterialTheme.typography.headlineMedium.copy(
-                            color = Color(0xFFE8E8EA),
-                            letterSpacing = 2.sp,
-                            fontWeight = FontWeight.Light,
-                            fontSize = 28.sp,
-                        ),
-                    )
+                    Row(verticalAlignment = Alignment.Top) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "MEDIA",
+                                style = MaterialTheme.typography.headlineMedium.copy(
+                                    color = Color(0xFFE5C07B),
+                                    letterSpacing = 6.sp,
+                                    fontWeight = FontWeight.Black,
+                                ),
+                            )
+                            Text(
+                                text = "shelf",
+                                style = MaterialTheme.typography.headlineMedium.copy(
+                                    color = Color(0xFFE8E8EA),
+                                    letterSpacing = 2.sp,
+                                    fontWeight = FontWeight.Light,
+                                    fontSize = 28.sp,
+                                ),
+                            )
+                        }
+                        IconButton(onClick = onSearchAll) {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = "Search all shelves",
+                                tint = Color(0xFFE5C07B),
+                            )
+                        }
+                    }
                     Spacer(Modifier.height(18.dp))
                     CubbyUnit(
                         counts = counts,

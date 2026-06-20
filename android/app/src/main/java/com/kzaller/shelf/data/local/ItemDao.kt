@@ -11,6 +11,9 @@ interface ItemDao {
     @Query("SELECT * FROM items WHERE kind = :kind ORDER BY addedAt DESC")
     fun observeByKind(kind: String): Flow<List<ItemEntity>>
 
+    @Query("SELECT * FROM items ORDER BY addedAt DESC")
+    fun observeAll(): Flow<List<ItemEntity>>
+
     @Query("SELECT kind, COUNT(*) as n FROM items GROUP BY kind")
     fun observeCounts(): Flow<List<KindCount>>
 

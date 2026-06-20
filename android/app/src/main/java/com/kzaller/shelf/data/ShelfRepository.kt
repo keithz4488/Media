@@ -30,6 +30,10 @@ class ShelfRepository(context: Context) {
             rows.associate { MediaKind.fromWire(it.kind) to it.n }
         }
 
+    /** Every item on every shelf, newest-first. Backs the cross-shelf search screen. */
+    fun observeAll(): Flow<List<ItemDto>> =
+        db.items().observeAll().map { rows -> rows.map(ItemEntity::toDto) }
+
     suspend fun refreshAll(): Result<Unit> = runCatching {
         MediaKind.values().forEach { refresh(it).getOrThrow() }
     }
