@@ -13,9 +13,11 @@
  *   GET    /search/tv?q=...             (or ?id=tmdb_id)
  *   GET    /search/games?q=...          (or ?slug=rawg_slug)
  *   POST   /identify                    body: { image: base64-JPEG }  -> Claude Haiku vision
+ *   GET    /k                           public read-only HTML view of all shelves
  *   GET    /health
  *
- * Auth: every request must send `Authorization: Bearer <SHELF_TOKEN>`.
+ * Auth: every request must send `Authorization: Bearer <SHELF_TOKEN>`. The /k namespace
+ * and /health are the exceptions; both are intentionally public.
  */
 
 export interface Env {
@@ -95,6 +97,8 @@ export default {
     }
 
     if (url.pathname === "/health") return json({ ok: true });
+    // Public read-only shelf view -- intentionally pre-auth.
+    if (url.pathname === "/k" || url.pathname === "/k/") return publicShelves(env);
 
     if (!authed(req, env)) return err(401, "unauthorized");
 
@@ -743,4 +747,96 @@ async function enrichTmdb(item: Item, env: Env): Promise<Item> {
   if (!r.ok) return item;
   const d = (await r.json()) as any;
   return { ...item, description: trimDescription(d.overview) ?? item.description };
+}
+
+// ---------- public read-only HTML view at /k ----------
+
+async function publicShelves(env: Env): Promise<Response> {
+  const { results } = await env.DB
+    .prepare("SELECT * FROM items ORDER BY kind, added_at DESC")
+    .all<Item>();
+  return new Response(renderShelvesHtml(results || []), {
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "public, max-age=60",
+    },
+  });
+}
+
+function htmlEscape(s: string | null | undefined): string {
+  if (s == null) return "";
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+}
+
+const KIND_META: Record<string, { label: string; accent: string; bg: string }> = {
+  book:  { label: "Books",  accent: "#E5C07B", bg: "linear-gradient(180deg,#3B2310,#A56A2C)" },
+  movie: { label: "Movies", accent: "#E4C46B", bg: "linear-gradient(180deg,#050714,#1C2541)" },
+  tv:    { label: "TV",     accent: "#52FF8A", bg: "linear-gradient(180deg,#021008,#0F3B22)" },
+  game:  { label: "Games",  accent: "#FF3DBE", bg: "linear-gradient(180deg,#06021A,#3A0E5C)" },
+};
+
+function renderShelvesHtml(items: Item[]): string {
+  const groups: Record<string, Item[]> = { book: [], movie: [], tv: [], game: [] };
+  for (const it of items) {
+    if (it.kind in groups) groups[it.kind].push(it);
+  }
+
+  let body = "";
+  for (const kind of ["book", "movie", "tv", "game"] as const) {
+    const list = groups[kind];
+    if (list.length === 0) continue;
+    const meta = KIND_META[kind];
+    body += `<section class="shelf" style="background:${meta.bg}">
+      <h2 style="color:${meta.accent}">${meta.label} <span class="count">${list.length}</span></h2>
+      <div class="grid">`;
+    for (const it of list) {
+      const cover = it.cover_url
+        ? `<div class="cover"><img src="${htmlEscape(it.cover_url)}" alt="" loading="lazy"></div>`
+        : `<div class="cover no-cover" style="color:${meta.accent}">${htmlEscape(it.title.slice(0, 2).toUpperCase())}</div>`;
+      const sub = [it.subtitle, it.year].filter(Boolean).join(" · ");
+      body += `<article class="card">${cover}<h3>${htmlEscape(it.title)}</h3>${sub ? `<p>${htmlEscape(sub)}</p>` : ""}</article>`;
+    }
+    body += "</div></section>";
+  }
+
+  if (body === "") {
+    body = `<section class="shelf" style="background:#171423">
+      <p style="color:#bbb;padding:24px">Nothing on the shelves yet.</p>
+    </section>`;
+  }
+
+  const css = `
+    *,*::before,*::after { box-sizing: border-box; }
+    body { margin: 0; background: #0E0F14; color: #E8E8EA; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    header { padding: 28px 20px 12px; }
+    h1 { margin: 0; font-size: 28px; letter-spacing: 6px; color: #E5C07B; font-weight: 900; }
+    h1 span { display: block; font-weight: 300; letter-spacing: 2px; font-size: 20px; color: #E8E8EA; margin-top: 4px; }
+    .shelf { margin: 16px; padding: 18px 16px 22px; border-radius: 16px; }
+    .shelf h2 { margin: 0 0 14px; font-size: 22px; }
+    .shelf h2 .count { font-size: 14px; opacity: 0.7; font-weight: 400; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 14px; }
+    .card { background: rgba(0,0,0,0.35); border-radius: 8px; overflow: hidden; padding-bottom: 8px; }
+    .cover { width: 100%; aspect-ratio: 2/3; background: rgba(0,0,0,0.25); display: grid; place-items: center; }
+    .cover.no-cover { font-weight: 900; font-size: 28px; }
+    .cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .card h3 { margin: 8px 10px 2px; font-size: 14px; font-weight: 600; }
+    .card p { margin: 0 10px; font-size: 12px; color: rgba(255,255,255,0.6); }
+    footer { padding: 24px 20px 32px; color: rgba(255,255,255,0.5); font-size: 12px; }
+  `;
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Media Shelf</title>
+<style>${css}</style>
+</head>
+<body>
+<header><h1>MEDIA<span>shelf</span></h1></header>
+${body}
+<footer>Read-only public view. Sharing is from media.kzaller.com.</footer>
+</body>
+</html>`;
 }
