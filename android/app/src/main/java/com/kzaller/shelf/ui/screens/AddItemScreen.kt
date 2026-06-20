@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PhotoCamera
@@ -83,6 +84,7 @@ fun AddItemScreen(
         val error by vm.error.collectAsState()
         val statusMsg by vm.statusMsg.collectAsState()
         val bulkMode by vm.bulkMode.collectAsState()
+        val pendingHits by vm.pendingHits.collectAsState()
         val snackbar = remember { SnackbarHostState() }
 
         LaunchedEffect(error) { error?.let { snackbar.showSnackbar(it); vm.clearError() } }
@@ -129,11 +131,13 @@ fun AddItemScreen(
                         searching = searching,
                         hits = hits,
                         bulkMode = bulkMode,
+                        pendingCount = pendingHits.size,
+                        isPending = { vm.isPending(it) },
                         onQuery = vm::setQuery,
                         onSubmit = { vm.searchNow() },
-                        onPick = { vm.add(it, status = "owned", after = onAdded) },
+                        onPick = { vm.onSearchPick(it, after = onAdded) },
                         onManual = { vm.goTo(AddItemViewModel.Mode.MANUAL) },
-                        onDone = onAdded,
+                        onDone = { vm.commitPending(onAdded) },
                     )
                     AddItemViewModel.Mode.MANUAL -> ManualSection(
                         seed = query,
@@ -208,6 +212,8 @@ private fun SearchSection(
     searching: Boolean,
     hits: List<SearchHit>,
     bulkMode: Boolean,
+    pendingCount: Int,
+    isPending: (SearchHit) -> Boolean,
     onQuery: (String) -> Unit,
     onSubmit: () -> Unit,
     onPick: (SearchHit) -> Unit,
@@ -228,9 +234,14 @@ private fun SearchSection(
         )
         Spacer(Modifier.height(12.dp))
         if (bulkMode) {
-            // In bulk mode the user wants explicit control of when to exit, so surface a Done.
+            // The basket survives across searches; "Done adding (N)" commits all at once.
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onDone) { Text("Done adding") }
+                Button(
+                    onClick = onDone,
+                    enabled = pendingCount > 0,
+                ) {
+                    Text(if (pendingCount == 0) "Done adding" else "Done adding ($pendingCount)")
+                }
             }
             Spacer(Modifier.height(8.dp))
         }
@@ -244,17 +255,27 @@ private fun SearchSection(
         }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxSize()) {
             items(hits, key = { "${it.externalSrc}:${it.externalId}" }) { hit ->
-                HitRow(hit = hit, onPick = { onPick(hit) })
+                HitRow(
+                    hit = hit,
+                    selected = isPending(hit),
+                    onPick = { onPick(hit) },
+                )
             }
         }
     }
 }
 
 @Composable
-private fun HitRow(hit: SearchHit, onPick: () -> Unit) {
+private fun HitRow(
+    hit: SearchHit,
+    selected: Boolean = false,
+    onPick: () -> Unit,
+) {
+    val container = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
+                    else MaterialTheme.colorScheme.surface
     Card(
         onClick = onPick,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        colors = CardDefaults.cardColors(containerColor = container),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -269,6 +290,24 @@ private fun HitRow(hit: SearchHit, onPick: () -> Unit) {
                     AsyncImage(model = hit.coverUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                 } else {
                     Text(hit.title.take(2).uppercase(), color = MaterialTheme.colorScheme.primary)
+                }
+                if (selected) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
+                    )
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = "Selected",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(2.dp)
+                            .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(50))
+                            .padding(1.dp)
+                            .size(18.dp),
+                    )
                 }
             }
             Spacer(Modifier.size(12.dp))

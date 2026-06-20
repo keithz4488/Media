@@ -40,6 +40,11 @@ class AddItemViewModel(
     private val _bulkMode = MutableStateFlow(false)
     val bulkMode = _bulkMode.asStateFlow()
 
+    /** Hits selected for a multi-item bulk-add commit. Persisted across search queries
+     *  so the user can build a basket from multiple searches before hitting Done. */
+    private val _pendingHits = MutableStateFlow<List<SearchHit>>(emptyList())
+    val pendingHits: StateFlow<List<SearchHit>> = _pendingHits.asStateFlow()
+
     /** Tracks whether the user's current SEARCH session originated from the camera flow,
      *  so a bulk add can return them to the camera instead of the bare search box. */
     private val _fromCamera = MutableStateFlow(false)
@@ -54,7 +59,10 @@ class AddItemViewModel(
         }
         _mode.value = mode
     }
-    fun setBulkMode(on: Boolean) { _bulkMode.value = on }
+    fun setBulkMode(on: Boolean) {
+        _bulkMode.value = on
+        if (!on) _pendingHits.value = emptyList() // turning off bulk discards the basket
+    }
 
     fun setQuery(q: String) {
         _query.value = q
@@ -141,6 +149,55 @@ class AddItemViewModel(
                     _mode.value = Mode.SEARCH
                 }
             _searching.value = false
+        }
+    }
+
+    private fun hitKey(hit: SearchHit): String = "${hit.externalSrc}:${hit.externalId}"
+
+    /** Entry point used by SearchSection when the user taps a hit. In bulk-mode SEARCH
+     *  origin we accumulate into pendingHits instead of committing one at a time. The
+     *  camera flow keeps its existing "pick -> add -> back to camera" loop. */
+    fun onSearchPick(hit: SearchHit, after: () -> Unit) {
+        if (_bulkMode.value && !_fromCamera.value) {
+            togglePending(hit)
+        } else {
+            add(hit, status = "owned", after = after)
+        }
+    }
+
+    fun togglePending(hit: SearchHit) {
+        val key = hitKey(hit)
+        val current = _pendingHits.value
+        _pendingHits.value = if (current.any { hitKey(it) == key }) {
+            current.filterNot { hitKey(it) == key }
+        } else {
+            current + hit
+        }
+    }
+
+    fun isPending(hit: SearchHit): Boolean {
+        val key = hitKey(hit)
+        return _pendingHits.value.any { hitKey(it) == key }
+    }
+
+    /** Commits every pending hit in one batch. If there are none, behaves like a normal
+     *  Done button (just navigates back). */
+    fun commitPending(after: () -> Unit) {
+        val pending = _pendingHits.value
+        if (pending.isEmpty()) { after(); return }
+        viewModelScope.launch {
+            _searching.value = true
+            var added = 0
+            var failed = 0
+            for (hit in pending) {
+                repo.add(kind, hit, "owned")
+                    .onSuccess { added++ }
+                    .onFailure { failed++ }
+            }
+            _pendingHits.value = emptyList()
+            _statusMsg.value = if (failed == 0) "Added $added items" else "Added $added, $failed failed"
+            _searching.value = false
+            after()
         }
     }
 
