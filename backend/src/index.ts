@@ -27,6 +27,8 @@ export interface Env {
   RAWG_API_KEY: string;
   ANTHROPIC_API_KEY: string;
   STEAMGRIDDB_API_KEY?: string; // optional: when set, augments game covers with SteamGridDB box art
+  IGDB_CLIENT_ID?: string;      // optional: when both set, game search augments RAWG with IGDB
+  IGDB_CLIENT_SECRET?: string;
 }
 
 type Kind = "book" | "movie" | "tv" | "game";
@@ -340,35 +342,127 @@ async function searchGames(url: URL, env: Env): Promise<Response> {
   if (!env.RAWG_API_KEY) return err(500, "RAWG_API_KEY not configured");
   if (!slug && !q) return err(400, "q or slug required");
 
-  const api = slug
-    ? new URL(`https://api.rawg.io/api/games/${slug}`)
-    : new URL("https://api.rawg.io/api/games");
-  api.searchParams.set("key", env.RAWG_API_KEY);
-  if (q) {
-    api.searchParams.set("search", q);
-    api.searchParams.set("page_size", "20");
+  // Direct slug lookup is always against RAWG (since the slug only identifies a RAWG game).
+  if (slug) {
+    const r = await fetch(`https://api.rawg.io/api/games/${encodeURIComponent(slug)}?key=${env.RAWG_API_KEY}`);
+    if (!r.ok) {
+      const body = await r.text().catch(() => "");
+      return err(502, `rawg ${r.status}: ${body.slice(0, 200)}`);
+    }
+    const data = (await r.json()) as any;
+    return json({ hits: [data].map(rawgGameToHit) });
   }
 
-  const r = await fetch(api.toString());
-  if (!r.ok) {
-    const body = await r.text().catch(() => "");
-    return err(502, `rawg ${r.status}: ${body.slice(0, 200)}`);
+  // Run RAWG and IGDB in parallel; either failing is non-fatal.
+  const [rawgHits, igdbHits] = await Promise.all([
+    rawgSearch(q!, env).catch(() => [] as SearchHit[]),
+    igdbSearch(q!, env).catch(() => [] as SearchHit[]),
+  ]);
+
+  // Dedupe by lowercased title, preferring RAWG (since RAWG-backed items get richer
+  // cover options via SteamGridDB and the existing /games/:slug detail endpoint).
+  const merged: SearchHit[] = [];
+  const seen = new Set<string>();
+  for (const h of rawgHits.concat(igdbHits)) {
+    const key = h.title.trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    merged.push(h);
   }
+  return json({ hits: merged.slice(0, 30) });
+}
+
+function rawgGameToHit(g: any): SearchHit {
+  const platforms = (g.platforms || []).map((p: any) => p.platform?.name).filter(Boolean);
+  return {
+    external_id: g.slug || String(g.id),
+    external_src: "rawg",
+    title: g.name || "Untitled",
+    subtitle: platforms.length ? platforms.join(", ") : null,
+    year: g.released ? Number(g.released.slice(0, 4)) || null : null,
+    cover_url: g.background_image || null,
+    description: g.description_raw || g.description || null,
+  };
+}
+
+async function rawgSearch(query: string, env: Env): Promise<SearchHit[]> {
+  const api = new URL("https://api.rawg.io/api/games");
+  api.searchParams.set("key", env.RAWG_API_KEY);
+  api.searchParams.set("search", query);
+  api.searchParams.set("page_size", "20");
+  const r = await fetch(api.toString());
+  if (!r.ok) return [];
   const data = (await r.json()) as any;
-  const list = slug ? [data] : data.results || [];
-  const hits: SearchHit[] = list.map((g: any): SearchHit => {
-    const platforms = (g.platforms || []).map((p: any) => p.platform?.name).filter(Boolean);
+  const list: any[] = Array.isArray(data.results) ? data.results : [];
+  return list.map(rawgGameToHit);
+}
+
+// ---------- IGDB via Twitch OAuth ----------
+
+let igdbTokenCache: { token: string; expiresAt: number } | null = null;
+
+async function igdbToken(env: Env): Promise<string | null> {
+  if (!env.IGDB_CLIENT_ID || !env.IGDB_CLIENT_SECRET) return null;
+  const now = Date.now();
+  // 60s grace window so we don't return a token that'll expire mid-call.
+  if (igdbTokenCache && igdbTokenCache.expiresAt > now + 60_000) {
+    return igdbTokenCache.token;
+  }
+  const url = new URL("https://id.twitch.tv/oauth2/token");
+  url.searchParams.set("client_id", env.IGDB_CLIENT_ID);
+  url.searchParams.set("client_secret", env.IGDB_CLIENT_SECRET);
+  url.searchParams.set("grant_type", "client_credentials");
+  const r = await fetch(url.toString(), { method: "POST" });
+  if (!r.ok) return null;
+  const data = (await r.json()) as any;
+  if (!data.access_token) return null;
+  const ttlMs = Math.max(60_000, Number(data.expires_in || 3600) * 1000);
+  igdbTokenCache = { token: data.access_token, expiresAt: now + ttlMs };
+  return data.access_token;
+}
+
+async function igdbSearch(query: string, env: Env): Promise<SearchHit[]> {
+  const token = await igdbToken(env);
+  if (!token || !env.IGDB_CLIENT_ID) return [];
+  // IGDB uses an apicalypse-style query language in the request body.
+  const safe = query.replace(/"/g, '\\"');
+  const body =
+    `search "${safe}";` +
+    ` fields id,name,first_release_date,summary,cover.image_id,platforms.name;` +
+    ` limit 25;`;
+  const r = await fetch("https://api.igdb.com/v4/games", {
+    method: "POST",
+    headers: {
+      "Client-ID": env.IGDB_CLIENT_ID,
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "text/plain",
+    },
+    body,
+  });
+  // 401 here means the cached token has gone stale -- nuke it so the next call refetches.
+  if (r.status === 401) igdbTokenCache = null;
+  if (!r.ok) return [];
+  const list = (await r.json()) as any[];
+  return list.map((g: any): SearchHit => {
+    const platforms: string[] = Array.isArray(g.platforms)
+      ? g.platforms.map((p: any) => p.name).filter(Boolean)
+      : [];
+    const year = typeof g.first_release_date === "number"
+      ? new Date(g.first_release_date * 1000).getUTCFullYear()
+      : null;
+    const cover = g.cover?.image_id
+      ? `https://images.igdb.com/igdb/image/upload/t_cover_big/${g.cover.image_id}.jpg`
+      : null;
     return {
-      external_id: g.slug || String(g.id),
-      external_src: "rawg",
+      external_id: String(g.id),
+      external_src: "igdb",
       title: g.name || "Untitled",
       subtitle: platforms.length ? platforms.join(", ") : null,
-      year: g.released ? Number(g.released.slice(0, 4)) || null : null,
-      cover_url: g.background_image || null,
-      description: g.description_raw || g.description || null,
+      year,
+      cover_url: cover,
+      description: typeof g.summary === "string" ? g.summary : null,
     };
   });
-  return json({ hits });
 }
 
 // ---------- image identify via Claude Haiku vision ----------
@@ -531,6 +625,9 @@ async function listCovers(id: string, env: Env): Promise<Response> {
       case "rawg":
         covers = await rawgCovers(row, env);
         break;
+      case "igdb":
+        covers = await igdbCovers(row, env);
+        break;
       case "open_library":
         covers = await openLibraryCovers(row);
         break;
@@ -598,6 +695,52 @@ async function rawgCovers(item: Item, env: Env): Promise<CoverOption[]> {
       if (s?.image) opts.push({ url: s.image, label: `Screenshot ${i + 1}` });
     });
   }
+
+  return opts;
+}
+
+async function igdbCovers(item: Item, env: Env): Promise<CoverOption[]> {
+  const opts: CoverOption[] = [];
+
+  // SteamGridDB by title first (its box art is title-keyed, so it works for
+  // any source).
+  opts.push(...(await steamGridDbCovers(item, env)));
+
+  if (!env.IGDB_CLIENT_ID || !item.external_id) return opts;
+  const token = await igdbToken(env);
+  if (!token) return opts;
+
+  // One call returns cover + every artwork + every screenshot for the game.
+  const body = `fields cover.image_id,artworks.image_id,screenshots.image_id; where id = ${Number(item.external_id) || 0};`;
+  const r = await fetch("https://api.igdb.com/v4/games", {
+    method: "POST",
+    headers: {
+      "Client-ID": env.IGDB_CLIENT_ID,
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "text/plain",
+    },
+    body,
+  });
+  if (r.status === 401) igdbTokenCache = null;
+  if (!r.ok) return opts;
+  const list = (await r.json()) as any[];
+  const g = list[0];
+  if (!g) return opts;
+
+  const toUrl = (imageId: string) =>
+    `https://images.igdb.com/igdb/image/upload/t_1080p/${imageId}.jpg`;
+
+  if (g.cover?.image_id) opts.push({ url: toUrl(g.cover.image_id), label: "Main cover" });
+
+  const artworks: any[] = Array.isArray(g.artworks) ? g.artworks : [];
+  artworks.slice(0, 8).forEach((a, i) => {
+    if (a?.image_id) opts.push({ url: toUrl(a.image_id), label: `Artwork ${i + 1}` });
+  });
+
+  const screenshots: any[] = Array.isArray(g.screenshots) ? g.screenshots : [];
+  screenshots.slice(0, 8).forEach((s, i) => {
+    if (s?.image_id) opts.push({ url: toUrl(s.image_id), label: `Screenshot ${i + 1}` });
+  });
 
   return opts;
 }
