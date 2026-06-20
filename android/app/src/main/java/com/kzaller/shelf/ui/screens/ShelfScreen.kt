@@ -44,6 +44,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -80,6 +81,7 @@ fun ShelfScreen(
         val activeFilters by vm.filters.collectAsState()
         val query by vm.query.collectAsState()
         val sort by vm.sort.collectAsState()
+        val refreshing by vm.refreshing.collectAsState()
 
         var sheetOpen by remember { mutableStateOf(false) }
         val sheetState = rememberModalBottomSheetState()
@@ -184,29 +186,37 @@ fun ShelfScreen(
                             onClear = vm::clearFilters,
                         )
                     }
-                    if (items.isEmpty()) {
-                        EmptyState(
-                            filtered = activeFilters.isNotEmpty(),
-                            searching = query.isNotBlank(),
-                        )
-                    } else {
-                        LazyVerticalGrid(
-                            columns = GridCells.Adaptive(minSize = 140.dp),
-                            contentPadding = PaddingValues(16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier.fillMaxSize(),
-                        ) {
-                            // Compound key includes kind so a recycled slot can never
-                            // present an item from a different shelf to the click handler.
-                            items(
-                                items,
-                                key = { "${it.kind.wire}:${it.id}" },
-                            ) { item ->
-                                ItemCard(
-                                    item = item,
-                                    onClick = { clickedItem -> onItem(clickedItem.id) },
-                                )
+                    // Pull-to-refresh wraps the grid (and the empty state) so the gesture
+                    // works whether or not items are present.
+                    PullToRefreshBox(
+                        isRefreshing = refreshing,
+                        onRefresh = { vm.refresh() },
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        if (items.isEmpty()) {
+                            EmptyState(
+                                filtered = activeFilters.isNotEmpty(),
+                                searching = query.isNotBlank(),
+                            )
+                        } else {
+                            LazyVerticalGrid(
+                                columns = GridCells.Adaptive(minSize = 140.dp),
+                                contentPadding = PaddingValues(16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier.fillMaxSize(),
+                            ) {
+                                // Compound key includes kind so a recycled slot can never
+                                // present an item from a different shelf to the click handler.
+                                items(
+                                    items,
+                                    key = { "${it.kind.wire}:${it.id}" },
+                                ) { item ->
+                                    ItemCard(
+                                        item = item,
+                                        onClick = { clickedItem -> onItem(clickedItem.id) },
+                                    )
+                                }
                             }
                         }
                     }
