@@ -1,5 +1,6 @@
 package com.kzaller.shelf.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -271,11 +272,19 @@ private fun HitRow(
     selected: Boolean = false,
     onPick: () -> Unit,
 ) {
-    val container = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
+    // Selected state needs to read clearly *after* the touch ripple fades, so it's a strong
+    // tinted container + a primary-color border + a check icon next to the title -- not a
+    // subtle alpha that the ripple animation eclipses.
+    val container = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
                     else MaterialTheme.colorScheme.surface
+    val border = if (selected)
+        BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+    else null
+
     Card(
         onClick = onPick,
         colors = CardDefaults.cardColors(containerColor = container),
+        border = border,
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -295,28 +304,38 @@ private fun HitRow(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
                     )
                     Icon(
                         imageVector = Icons.Default.CheckCircle,
                         contentDescription = "Selected",
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(2.dp)
-                            .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(50))
-                            .padding(1.dp)
-                            .size(18.dp),
+                            .align(Alignment.Center)
+                            .size(28.dp),
                     )
                 }
             }
             Spacer(Modifier.size(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(hit.title, style = MaterialTheme.typography.titleSmall, maxLines = 2)
+                Text(
+                    text = hit.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                )
                 val secondary = listOfNotNull(hit.subtitle, hit.year?.toString()).joinToString(" · ")
                 if (secondary.isNotBlank()) {
                     Text(secondary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f), maxLines = 1)
                 }
+            }
+            if (selected) {
+                Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp),
+                )
             }
         }
     }
