@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
@@ -44,6 +45,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.Icon
@@ -429,12 +431,12 @@ private fun CoverPickerSheet(
 }
 
 /**
- * Per-platform console selector. Trigger is an outlined button "Nintendo (3) ▼" that opens
- * a DropdownMenu of checkboxable consoles -- the menu stays open across toggles so the user
- * can rapid-fire-check several, then taps outside (or Done) to close. After the menu closes,
- * the picked consoles render as a single comma-separated line under the button.
+ * Per-platform console selector. Selected consoles show as compact chips you can tap-to-
+ * remove (X icon). A trailing "+" chip opens a DropdownMenu that lists ONLY the consoles
+ * *not* already picked -- so the menu shrinks as you select and the user never sees a
+ * console they've already added in the list of options.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun ConsoleDropdown(
     platform: String,
@@ -444,62 +446,58 @@ private fun ConsoleDropdown(
     onToggle: (String) -> Unit,
 ) {
     val picked = consoles.filter { it in selected }
+    val unpicked = consoles.filter { it !in selected }
     var menuOpen by remember(platform) { mutableStateOf(false) }
 
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Box {
-            OutlinedButton(
-                onClick = { menuOpen = true },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(
-                        text = "${Platform.label(platform)} (${picked.size})",
-                        modifier = Modifier.weight(1f),
-                        color = if (picked.isNotEmpty()) accent else MaterialTheme.colorScheme.onBackground,
-                    )
+    Text(
+        text = Platform.label(platform),
+        style = MaterialTheme.typography.labelMedium.copy(
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+        ),
+    )
+    Spacer(Modifier.height(4.dp))
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        picked.forEach { code ->
+            AssistChip(
+                onClick = { onToggle(code) }, // tap a selected chip to remove it
+                label = { Text(Console.label(code), color = accent) },
+                trailingIcon = {
                     Icon(
-                        imageVector = Icons.Default.ArrowDropDown,
-                        contentDescription = "Choose consoles",
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Remove",
+                        modifier = Modifier.size(14.dp),
+                        tint = accent,
                     )
-                }
-            }
-            DropdownMenu(
-                expanded = menuOpen,
-                onDismissRequest = { menuOpen = false },
-            ) {
-                consoles.forEach { code ->
-                    val on = code in selected
-                    // Custom Row instead of DropdownMenuItem so tapping doesn't dismiss the
-                    // menu -- the user wants to flip several at once.
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onToggle(code) }
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
-                    ) {
-                        Checkbox(checked = on, onCheckedChange = null)
-                        Spacer(Modifier.size(8.dp))
-                        Text(Console.label(code))
+                },
+                colors = AssistChipDefaults.assistChipColors(
+                    containerColor = accent.copy(alpha = 0.22f),
+                ),
+            )
+        }
+        if (unpicked.isNotEmpty()) {
+            Box {
+                AssistChip(
+                    onClick = { menuOpen = true },
+                    label = { Text(if (picked.isEmpty()) "+ Add" else "+") },
+                )
+                DropdownMenu(
+                    expanded = menuOpen,
+                    onDismissRequest = { menuOpen = false },
+                ) {
+                    unpicked.forEach { code ->
+                        DropdownMenuItem(
+                            text = { Text(Console.label(code)) },
+                            onClick = {
+                                onToggle(code)
+                                menuOpen = false
+                            },
+                        )
                     }
                 }
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = { menuOpen = false }) { Text("Done") }
-                }
             }
-        }
-        if (picked.isNotEmpty()) {
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = picked.joinToString(", ") { Console.label(it) },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
-                modifier = Modifier.padding(start = 12.dp),
-            )
         }
     }
 }
