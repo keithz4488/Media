@@ -92,7 +92,6 @@ jobs:
           body: |
             Automated release APK from commit ${{ github.sha }}.
             Install on your phone: open the link on the phone, tap Assets, download the .apk, tap to install.
-          prerelease: true
           files: ${{ steps.locate.outputs.apk }}
           fail_on_unmatched_files: true
 

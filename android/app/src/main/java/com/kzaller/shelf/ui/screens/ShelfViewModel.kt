@@ -25,6 +25,8 @@ enum class SortMode(val label: String) {
     YEAR_ASC("Year (oldest)"),
 }
 
+enum class ViewMode { GRID, LIST }
+
 class ShelfViewModel(
     private val repo: ShelfRepository,
     private val prefs: AppPreferences,
@@ -40,6 +42,10 @@ class ShelfViewModel(
     /** Sort mode persists per-kind in DataStore so it survives app restarts. */
     val sort: StateFlow<SortMode> =
         prefs.observeSort(kind).stateIn(viewModelScope, SharingStarted.Eagerly, SortMode.RECENT)
+
+    /** Grid vs list view also persists per-kind so different shelves can prefer different layouts. */
+    val viewMode: StateFlow<ViewMode> =
+        prefs.observeViewMode(kind).stateIn(viewModelScope, SharingStarted.Eagerly, ViewMode.GRID)
 
     /** Items visible on the shelf: kind -> status filter -> text search -> sort. */
     val items: StateFlow<List<ItemDto>> =
@@ -108,6 +114,10 @@ class ShelfViewModel(
 
     fun setSort(mode: SortMode) {
         viewModelScope.launch { prefs.setSort(kind, mode) }
+    }
+
+    fun setViewMode(mode: ViewMode) {
+        viewModelScope.launch { prefs.setViewMode(kind, mode) }
     }
 
     fun toggleSelection(id: String) {

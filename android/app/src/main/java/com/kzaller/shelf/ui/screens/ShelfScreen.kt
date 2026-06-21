@@ -14,9 +14,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items as listItems
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
@@ -24,8 +26,10 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sort
+import androidx.compose.material.icons.filled.ViewList
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Badge
@@ -61,6 +65,7 @@ import androidx.compose.ui.unit.dp
 import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.Status
 import com.kzaller.shelf.ui.components.ItemCard
+import com.kzaller.shelf.ui.components.ItemListRow
 import com.kzaller.shelf.ui.components.ShelfBackground
 import com.kzaller.shelf.ui.components.shelfTextFieldColors
 import com.kzaller.shelf.ui.theme.MediaShelfTheme
@@ -83,6 +88,7 @@ fun ShelfScreen(
         val activeFilters by vm.filters.collectAsState()
         val query by vm.query.collectAsState()
         val sort by vm.sort.collectAsState()
+        val viewMode by vm.viewMode.collectAsState()
         val refreshing by vm.refreshing.collectAsState()
         val selection by vm.selection.collectAsState()
         val inSelectionMode = selection.isNotEmpty()
@@ -159,6 +165,14 @@ fun ShelfScreen(
                                 Icon(
                                     imageVector = if (searchOpen) Icons.Default.Close else Icons.Default.Search,
                                     contentDescription = if (searchOpen) "Close search" else "Search",
+                                )
+                            }
+                            IconButton(onClick = {
+                                vm.setViewMode(if (viewMode == ViewMode.GRID) ViewMode.LIST else ViewMode.GRID)
+                            }) {
+                                Icon(
+                                    imageVector = if (viewMode == ViewMode.GRID) Icons.Default.ViewList else Icons.Default.GridView,
+                                    contentDescription = if (viewMode == ViewMode.GRID) "Switch to list view" else "Switch to grid view",
                                 )
                             }
                             Box {
@@ -252,7 +266,7 @@ fun ShelfScreen(
                                 filtered = activeFilters.isNotEmpty(),
                                 searching = query.isNotBlank(),
                             )
-                        } else {
+                        } else if (viewMode == ViewMode.GRID) {
                             LazyVerticalGrid(
                                 columns = GridCells.Adaptive(minSize = 140.dp),
                                 contentPadding = PaddingValues(16.dp),
@@ -267,6 +281,27 @@ fun ShelfScreen(
                                     key = { "${it.kind.wire}:${it.id}" },
                                 ) { item ->
                                     ItemCard(
+                                        item = item,
+                                        selected = item.id in selection,
+                                        onClick = { clicked ->
+                                            if (inSelectionMode) vm.toggleSelection(clicked.id)
+                                            else onItem(clicked.id)
+                                        },
+                                        onLongClick = { clicked -> vm.toggleSelection(clicked.id) },
+                                    )
+                                }
+                            }
+                        } else {
+                            LazyColumn(
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxSize(),
+                            ) {
+                                listItems(
+                                    items,
+                                    key = { "${it.kind.wire}:${it.id}" },
+                                ) { item ->
+                                    ItemListRow(
                                         item = item,
                                         selected = item.id in selection,
                                         onClick = { clicked ->
