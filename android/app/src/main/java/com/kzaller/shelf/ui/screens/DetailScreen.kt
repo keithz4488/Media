@@ -73,6 +73,7 @@ import coil.compose.AsyncImage
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.kzaller.shelf.data.Console
 import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.Platform
 import com.kzaller.shelf.data.ShelfRepository
@@ -240,9 +241,10 @@ private fun DetailPage(vm: DetailViewModel, onBack: () -> Unit) {
 
                     if (current.kind == MediaKind.GAME) {
                         Spacer(Modifier.height(16.dp))
-                        Text("Console", style = MaterialTheme.typography.titleSmall)
+                        Text("Platform", style = MaterialTheme.typography.titleSmall)
                         Spacer(Modifier.height(6.dp))
                         val selectedPlatforms = Platform.parse(current.userPlatform)
+                        val selectedConsoles = Console.parse(current.consoles)
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -250,7 +252,17 @@ private fun DetailPage(vm: DetailViewModel, onBack: () -> Unit) {
                             Platform.ALL.forEach { p ->
                                 val on = p in selectedPlatforms
                                 AssistChip(
-                                    onClick = { vm.setPlatform(Platform.toggle(current.userPlatform, p)) },
+                                    onClick = {
+                                        val newPlatforms = Platform.toggle(current.userPlatform, p)
+                                        // If a platform got removed, strip its consoles too.
+                                        val newPlatformSet = Platform.parse(newPlatforms)
+                                        val newConsoles = Console.pruneToPlatforms(current.consoles, newPlatformSet)
+                                        if (newConsoles == (current.consoles ?: "")) {
+                                            vm.setPlatform(newPlatforms)
+                                        } else {
+                                            vm.setPlatformAndConsoles(newPlatforms, newConsoles)
+                                        }
+                                    },
                                     label = {
                                         Text(
                                             text = Platform.label(p),
@@ -261,6 +273,43 @@ private fun DetailPage(vm: DetailViewModel, onBack: () -> Unit) {
                                         containerColor = if (on) flavor.accent.copy(alpha = 0.22f) else Color.Transparent,
                                     ),
                                 )
+                            }
+                        }
+                        // Console sub-sections: only for selected platforms that have any consoles.
+                        // PC and Mobile don't have a sub-list, so they stay flat.
+                        Platform.ALL.forEach { p ->
+                            if (p !in selectedPlatforms) return@forEach
+                            val consoles = Console.forPlatform(p)
+                            if (consoles.isEmpty()) return@forEach
+                            Spacer(Modifier.height(10.dp))
+                            Text(
+                                text = Platform.label(p),
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+                                ),
+                                modifier = Modifier.padding(start = 4.dp),
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.padding(start = 4.dp),
+                            ) {
+                                consoles.forEach { c ->
+                                    val on = c in selectedConsoles
+                                    AssistChip(
+                                        onClick = { vm.setConsoles(Console.toggle(current.consoles, c)) },
+                                        label = {
+                                            Text(
+                                                text = Console.label(c),
+                                                color = if (on) flavor.accent else MaterialTheme.colorScheme.onBackground,
+                                            )
+                                        },
+                                        colors = AssistChipDefaults.assistChipColors(
+                                            containerColor = if (on) flavor.accent.copy(alpha = 0.22f) else Color.Transparent,
+                                        ),
+                                    )
+                                }
                             }
                         }
                     }

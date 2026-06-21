@@ -36,6 +36,11 @@ class DetailViewModel(
     fun setNotes(notes: String) = launchUpdate(UpdateItemRequest(notes = notes), toast = "Notes saved")
     fun setCover(url: String) = launchUpdate(UpdateItemRequest(coverUrl = url), toast = "Cover updated")
     fun setPlatform(csv: String) = launchUpdate(UpdateItemRequest(userPlatform = csv))
+    /** Update both platform + consoles atomically. Used when a platform toggle off
+     *  also needs to strip its now-orphaned consoles. */
+    fun setPlatformAndConsoles(platformsCsv: String, consolesCsv: String) =
+        launchUpdate(UpdateItemRequest(userPlatform = platformsCsv, consoles = consolesCsv))
+    fun setConsoles(csv: String) = launchUpdate(UpdateItemRequest(consoles = csv))
     fun setCompletedAt(millis: Long?) =
         launchUpdate(UpdateItemRequest(completedAt = millis), toast = if (millis == null) "Cleared completion" else "Marked complete")
 
