@@ -133,7 +133,9 @@ fun AddItemScreen(
                         hits = hits,
                         bulkMode = bulkMode,
                         pendingCount = pendingHits.size,
-                        isPending = { vm.isPending(it) },
+                        selectedKeys = remember(pendingHits) {
+                            pendingHits.mapTo(HashSet()) { "${it.externalSrc}:${it.externalId}" }
+                        },
                         onQuery = vm::setQuery,
                         onSubmit = { vm.searchNow() },
                         onPick = { vm.onSearchPick(it, after = onAdded) },
@@ -214,7 +216,7 @@ private fun SearchSection(
     hits: List<SearchHit>,
     bulkMode: Boolean,
     pendingCount: Int,
-    isPending: (SearchHit) -> Boolean,
+    selectedKeys: Set<String>,
     onQuery: (String) -> Unit,
     onSubmit: () -> Unit,
     onPick: (SearchHit) -> Unit,
@@ -256,9 +258,10 @@ private fun SearchSection(
         }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxSize()) {
             items(hits, key = { "${it.externalSrc}:${it.externalId}" }) { hit ->
+                val key = "${hit.externalSrc}:${hit.externalId}"
                 HitRow(
                     hit = hit,
-                    selected = isPending(hit),
+                    selected = key in selectedKeys,
                     onPick = { onPick(hit) },
                 )
             }

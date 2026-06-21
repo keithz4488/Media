@@ -95,3 +95,40 @@ jobs:
           prerelease: true
           files: ${{ steps.locate.outputs.apk }}
           fail_on_unmatched_files: true
+
+      - name: Prune old build releases
+        # Keep only the most recent N build-* releases; delete the rest plus their tags.
+        # This runs after Create release, so the just-created build counts toward "kept".
+        uses: actions/github-script@v7
+        env:
+          KEEP_COUNT: "5"
+        with:
+          script: |
+            const keep = parseInt(process.env.KEEP_COUNT, 10);
+            const { data: releases } = await github.rest.repos.listReleases({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 100,
+            });
+            const builds = releases
+              .filter(r => /^build-\d+$/.test(r.tag_name))
+              .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+            const toDelete = builds.slice(keep);
+            console.log(`Found ${builds.length} build releases, keeping ${Math.min(keep, builds.length)}, deleting ${toDelete.length}.`);
+            for (const r of toDelete) {
+              console.log(`Deleting release ${r.tag_name} (id ${r.id})`);
+              await github.rest.repos.deleteRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                release_id: r.id,
+              });
+              try {
+                await github.rest.git.deleteRef({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ref: `tags/${r.tag_name}`,
+                });
+              } catch (e) {
+                console.log(`Tag delete failed for ${r.tag_name} (probably already gone): ${e.message}`);
+              }
+            }
