@@ -1,6 +1,7 @@
 package com.kzaller.shelf.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
@@ -37,9 +39,11 @@ import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.Icon
@@ -275,42 +279,22 @@ private fun DetailPage(vm: DetailViewModel, onBack: () -> Unit) {
                                 )
                             }
                         }
-                        // Console sub-sections: only for selected platforms that have any consoles.
-                        // PC and Mobile don't have a sub-list, so they stay flat.
+                        // Console sub-sections: only for selected platforms that have any
+                        // sub-consoles. PC and Mobile stay flat (no dropdown).
                         Platform.ALL.forEach { p ->
                             if (p !in selectedPlatforms) return@forEach
                             val consoles = Console.forPlatform(p)
                             if (consoles.isEmpty()) return@forEach
                             Spacer(Modifier.height(10.dp))
-                            Text(
-                                text = Platform.label(p),
-                                style = MaterialTheme.typography.labelMedium.copy(
-                                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
-                                ),
-                                modifier = Modifier.padding(start = 4.dp),
+                            ConsoleDropdown(
+                                platform = p,
+                                consoles = consoles,
+                                selected = selectedConsoles,
+                                accent = flavor.accent,
+                                onToggle = { code ->
+                                    vm.setConsoles(Console.toggle(current.consoles, code))
+                                },
                             )
-                            Spacer(Modifier.height(4.dp))
-                            FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier.padding(start = 4.dp),
-                            ) {
-                                consoles.forEach { c ->
-                                    val on = c in selectedConsoles
-                                    AssistChip(
-                                        onClick = { vm.setConsoles(Console.toggle(current.consoles, c)) },
-                                        label = {
-                                            Text(
-                                                text = Console.label(c),
-                                                color = if (on) flavor.accent else MaterialTheme.colorScheme.onBackground,
-                                            )
-                                        },
-                                        colors = AssistChipDefaults.assistChipColors(
-                                            containerColor = if (on) flavor.accent.copy(alpha = 0.22f) else Color.Transparent,
-                                        ),
-                                    )
-                                }
-                            }
                         }
                     }
 
@@ -440,6 +424,82 @@ private fun CoverPickerSheet(
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Per-platform console selector. Trigger is an outlined button "Nintendo (3) ▼" that opens
+ * a DropdownMenu of checkboxable consoles -- the menu stays open across toggles so the user
+ * can rapid-fire-check several, then taps outside (or Done) to close. After the menu closes,
+ * the picked consoles render as a single comma-separated line under the button.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ConsoleDropdown(
+    platform: String,
+    consoles: List<String>,
+    selected: Set<String>,
+    accent: Color,
+    onToggle: (String) -> Unit,
+) {
+    val picked = consoles.filter { it in selected }
+    var menuOpen by remember(platform) { mutableStateOf(false) }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Box {
+            OutlinedButton(
+                onClick = { menuOpen = true },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        text = "${Platform.label(platform)} (${picked.size})",
+                        modifier = Modifier.weight(1f),
+                        color = if (picked.isNotEmpty()) accent else MaterialTheme.colorScheme.onBackground,
+                    )
+                    Icon(
+                        imageVector = Icons.Default.ArrowDropDown,
+                        contentDescription = "Choose consoles",
+                    )
+                }
+            }
+            DropdownMenu(
+                expanded = menuOpen,
+                onDismissRequest = { menuOpen = false },
+            ) {
+                consoles.forEach { code ->
+                    val on = code in selected
+                    // Custom Row instead of DropdownMenuItem so tapping doesn't dismiss the
+                    // menu -- the user wants to flip several at once.
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onToggle(code) }
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                    ) {
+                        Checkbox(checked = on, onCheckedChange = null)
+                        Spacer(Modifier.size(8.dp))
+                        Text(Console.label(code))
+                    }
+                }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = { menuOpen = false }) { Text("Done") }
+                }
+            }
+        }
+        if (picked.isNotEmpty()) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = picked.joinToString(", ") { Console.label(it) },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
+                modifier = Modifier.padding(start = 12.dp),
+            )
         }
     }
 }
