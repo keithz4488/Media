@@ -36,7 +36,6 @@ import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
-import androidx.compose.material.icons.filled.ViewInAr
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
@@ -69,7 +68,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -91,13 +89,10 @@ import com.kzaller.shelf.data.Platform
 import com.kzaller.shelf.data.ShelfRepository
 import com.kzaller.shelf.data.Status
 import com.kzaller.shelf.data.models.CoverOption
-import com.kzaller.shelf.data.preferences.AppPreferences
-import com.kzaller.shelf.ui.components.BoxModel3D
 import com.kzaller.shelf.ui.components.WoodBackground
 import com.kzaller.shelf.ui.components.shelfTextFieldColors
 import com.kzaller.shelf.ui.theme.MediaShelfTheme
 import com.kzaller.shelf.ui.theme.flavorFor
-import kotlinx.coroutines.launch
 
 /**
  * Public entry point. Wraps a HorizontalPager over the shelf's items so swiping left/right
@@ -109,15 +104,12 @@ fun DetailScreen(
     initialId: String,
     kind: MediaKind,
     repo: ShelfRepository,
-    prefs: AppPreferences,
     onBack: () -> Unit,
 ) {
     val items by repo.observeShelf(kind).collectAsState(initial = emptyList())
     if (items.isEmpty()) return // initial load hasn't populated cache yet; brief blank
     val initialIndex = items.indexOfFirst { it.id == initialId }.coerceAtLeast(0)
     val pagerState = rememberPagerState(initialPage = initialIndex) { items.size }
-    val box3d by prefs.observeBox3d().collectAsState(initial = false)
-    val scope = rememberCoroutineScope()
 
     HorizontalPager(
         state = pagerState,
@@ -128,12 +120,7 @@ fun DetailScreen(
             key = "detail-${pageItem.id}",
             factory = DetailViewModel.factory(repo, pageItem.id),
         )
-        DetailPage(
-            vm = vm,
-            onBack = onBack,
-            box3d = box3d,
-            onToggleBox3d = { scope.launch { prefs.setBox3d(!box3d) } },
-        )
+        DetailPage(vm = vm, onBack = onBack)
     }
 }
 
@@ -142,8 +129,6 @@ fun DetailScreen(
 private fun DetailPage(
     vm: DetailViewModel,
     onBack: () -> Unit,
-    box3d: Boolean,
-    onToggleBox3d: () -> Unit,
 ) {
     val item by vm.item.collectAsState()
     val current = item
@@ -200,54 +185,33 @@ private fun DetailPage(
                         .verticalScroll(rememberScrollState())
                         .padding(20.dp),
                 ) {
-                    // Hero cover. With the 3D toggle on, render a rotatable box; otherwise the
-                    // flat standing cover.
-                    if (box3d) {
-                        BoxModel3D(
-                            coverUrl = current.coverUrl,
-                            title = current.title,
-                            kind = current.kind,
-                            accent = flavor.accent,
-                            modifier = Modifier
-                                .fillMaxWidth(0.62f)
-                                .align(Alignment.CenterHorizontally),
-                        )
-                    } else {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(0.66f)
-                                .align(Alignment.CenterHorizontally)
-                                .aspectRatio(if (current.kind == MediaKind.GAME) 3f / 4f else 2f / 3f)
-                                .shadow(16.dp, RoundedCornerShape(12.dp), clip = false)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(Color.Black.copy(alpha = 0.25f)),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            if (current.coverUrl != null) {
-                                AsyncImage(
-                                    model = current.coverUrl,
-                                    contentDescription = current.title,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize(),
-                                )
-                            } else {
-                                Text(
-                                    text = current.title.take(2).uppercase(),
-                                    style = flavor.titleStyle.copy(color = flavor.accent),
-                                )
-                            }
+                    // Hero cover, centered and standing with a soft shadow like on the shelf.
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(0.66f)
+                            .align(Alignment.CenterHorizontally)
+                            .aspectRatio(if (current.kind == MediaKind.GAME) 3f / 4f else 2f / 3f)
+                            .shadow(16.dp, RoundedCornerShape(12.dp), clip = false)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color.Black.copy(alpha = 0.25f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (current.coverUrl != null) {
+                            AsyncImage(
+                                model = current.coverUrl,
+                                contentDescription = current.title,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        } else {
+                            Text(
+                                text = current.title.take(2).uppercase(),
+                                style = flavor.titleStyle.copy(color = flavor.accent),
+                            )
                         }
                     }
                     Spacer(Modifier.height(6.dp))
-                    Row(
-                        modifier = Modifier.align(Alignment.CenterHorizontally),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        TextButton(onClick = onToggleBox3d) {
-                            Icon(Icons.Default.ViewInAr, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.size(6.dp))
-                            Text(if (box3d) "Flat" else "3D")
-                        }
+                    Box(modifier = Modifier.align(Alignment.CenterHorizontally)) {
                         TextButton(onClick = {
                             coverSheetOpen = true
                             vm.loadCovers()

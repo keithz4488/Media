@@ -141,7 +141,6 @@ fun ShelfApp() {
                     initialId = id,
                     kind = kind,
                     repo = repo,
-                    prefs = prefs,
                     onBack = { nav.popBackStack() },
                 )
             }
