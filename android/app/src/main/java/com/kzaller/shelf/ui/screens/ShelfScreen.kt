@@ -15,9 +15,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items as listItems
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -64,9 +61,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.Status
-import com.kzaller.shelf.ui.components.ItemCard
 import com.kzaller.shelf.ui.components.ItemListRow
-import com.kzaller.shelf.ui.components.ShelfBackground
+import com.kzaller.shelf.ui.components.ShelfPill
+import com.kzaller.shelf.ui.components.ShelfWoodGrid
+import com.kzaller.shelf.ui.components.WoodBackground
 import com.kzaller.shelf.ui.components.shelfTextFieldColors
 import com.kzaller.shelf.ui.theme.MediaShelfTheme
 import com.kzaller.shelf.ui.theme.flavorFor
@@ -79,6 +77,7 @@ fun ShelfScreen(
     onBack: () -> Unit,
     onAdd: () -> Unit,
     onItem: (String) -> Unit,
+    onSwitchShelf: (MediaKind) -> Unit = {},
 ) {
     val dark = isSystemInDarkTheme()
     val flavor = flavorFor(kind, dark)
@@ -151,7 +150,13 @@ fun ShelfScreen(
                     )
                 } else {
                     TopAppBar(
-                        title = { Text(kind.label, style = flavor.titleStyle.copy(color = flavor.accent)) },
+                        title = {
+                            ShelfPill(
+                                current = kind,
+                                accent = flavor.accent,
+                                onSwitch = onSwitchShelf,
+                            )
+                        },
                         navigationIcon = {
                             IconButton(onClick = onBack) {
                                 Icon(Icons.Default.ArrowBack, contentDescription = "Back")
@@ -223,8 +228,7 @@ fun ShelfScreen(
                 ) { Icon(Icons.Default.Add, contentDescription = "Add to shelf") }
             },
         ) { padding ->
-            // ShelfBackground inset already pads past edge ornaments (film strip etc).
-            ShelfBackground(modifier = Modifier.padding(padding)) {
+            WoodBackground(modifier = Modifier.padding(padding)) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     if (searchOpen) {
                         OutlinedTextField(
@@ -267,30 +271,16 @@ fun ShelfScreen(
                                 searching = query.isNotBlank(),
                             )
                         } else if (viewMode == ViewMode.GRID) {
-                            LazyVerticalGrid(
-                                columns = GridCells.Adaptive(minSize = 140.dp),
-                                contentPadding = PaddingValues(16.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                            // Cibby-style: standing covers resting on wooden planks.
+                            ShelfWoodGrid(
+                                items = items,
+                                kind = kind,
+                                selection = selection,
+                                inSelectionMode = inSelectionMode,
+                                onItem = onItem,
+                                onToggle = vm::toggleSelection,
                                 modifier = Modifier.fillMaxSize(),
-                            ) {
-                                // Compound key includes kind so a recycled slot can never
-                                // present an item from a different shelf to the click handler.
-                                items(
-                                    items,
-                                    key = { "${it.kind.wire}:${it.id}" },
-                                ) { item ->
-                                    ItemCard(
-                                        item = item,
-                                        selected = item.id in selection,
-                                        onClick = { clicked ->
-                                            if (inSelectionMode) vm.toggleSelection(clicked.id)
-                                            else onItem(clicked.id)
-                                        },
-                                        onLongClick = { clicked -> vm.toggleSelection(clicked.id) },
-                                    )
-                                }
-                            }
+                            )
                         } else {
                             LazyColumn(
                                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),

@@ -92,6 +92,13 @@ fun ShelfApp() {
                     onBack = { nav.popBackStack() },
                     onAdd = { nav.navigateIfResumed(entry, Routes.add(kind)) },
                     onItem = { nav.navigateIfResumed(entry, Routes.detail(kind, it)) },
+                    onSwitchShelf = { target ->
+                        // Swap shelves without stacking: pop back to home, then open the target.
+                        if (entry.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                            nav.popBackStack(Routes.HOME, inclusive = false)
+                            nav.navigate(Routes.shelf(target))
+                        }
+                    },
                 )
             }
             composable(

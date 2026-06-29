@@ -34,6 +34,12 @@ data class ShelfFlavor(
     val displayFont: FontFamily,
     val titleStyle: TextStyle,
     val ornament: ShelfOrnament,
+    // Cibby-style wood theme: a per-shelf-tinted wood backdrop + shelf planks. Defaults are
+    // a neutral honey wood; each shelf builder shifts these toward its signature color.
+    val woodTop: Color = Color(0xFFB58A57),
+    val woodBottom: Color = Color(0xFF6E4A28),
+    val plank: Color = Color(0xFF855E34),
+    val plankEdge: Color = Color(0xFF4F3619),
 )
 
 enum class ShelfOrnament { WOOD_PLANKS, FILM_STRIP, SCANLINES, NEON_GRID, NONE }
@@ -153,6 +159,11 @@ private fun booksFlavor(dark: Boolean): ShelfFlavor {
         displayFont = FontFamily.Serif,
         titleStyle = titleStyleFor(FontFamily.Serif, italic = false, weight = FontWeight.Bold),
         ornament = ShelfOrnament.WOOD_PLANKS,
+        // Warm honey library wood.
+        woodTop = Color(0xFFC79A63),
+        woodBottom = Color(0xFF6E4A28),
+        plank = Color(0xFF8A5E32),
+        plankEdge = Color(0xFF4F3619),
     )
 }
 
@@ -172,6 +183,11 @@ private fun moviesFlavor(dark: Boolean): ShelfFlavor {
         displayFont = FontFamily.Serif,
         titleStyle = titleStyleFor(FontFamily.Serif, italic = true, weight = FontWeight.Black),
         ornament = ShelfOrnament.FILM_STRIP,
+        // Cool dark walnut, faint red undertone for the noir feel.
+        woodTop = Color(0xFF5E4038),
+        woodBottom = Color(0xFF2A1A1A),
+        plank = Color(0xFF4A2F2A),
+        plankEdge = Color(0xFF24161A),
     )
 }
 
@@ -191,6 +207,11 @@ private fun tvFlavor(dark: Boolean): ShelfFlavor {
         displayFont = FontFamily.Monospace,
         titleStyle = titleStyleFor(FontFamily.Monospace, italic = false, weight = FontWeight.Bold).copy(letterSpacing = 2.sp),
         ornament = ShelfOrnament.SCANLINES,
+        // Green-tinted stained oak.
+        woodTop = Color(0xFF5C7048),
+        woodBottom = Color(0xFF243A22),
+        plank = Color(0xFF3F5A30),
+        plankEdge = Color(0xFF1F3018),
     )
 }
 
@@ -210,6 +231,11 @@ private fun gamesFlavor(dark: Boolean): ShelfFlavor {
         displayFont = FontFamily.SansSerif,
         titleStyle = titleStyleFor(FontFamily.SansSerif, weight = FontWeight.Black).copy(letterSpacing = 1.sp),
         ornament = ShelfOrnament.NEON_GRID,
+        // Purple-stained wood.
+        woodTop = Color(0xFF5A4070),
+        woodBottom = Color(0xFF241638),
+        plank = Color(0xFF40285C),
+        plankEdge = Color(0xFF1C1030),
     )
 }
 

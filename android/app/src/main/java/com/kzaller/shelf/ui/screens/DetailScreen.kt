@@ -71,9 +71,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import androidx.compose.foundation.pager.HorizontalPager
@@ -85,7 +87,7 @@ import com.kzaller.shelf.data.Platform
 import com.kzaller.shelf.data.ShelfRepository
 import com.kzaller.shelf.data.Status
 import com.kzaller.shelf.data.models.CoverOption
-import com.kzaller.shelf.ui.components.ShelfBackground
+import com.kzaller.shelf.ui.components.WoodBackground
 import com.kzaller.shelf.ui.components.shelfTextFieldColors
 import com.kzaller.shelf.ui.theme.MediaShelfTheme
 import com.kzaller.shelf.ui.theme.flavorFor
@@ -164,18 +166,21 @@ private fun DetailPage(vm: DetailViewModel, onBack: () -> Unit) {
             },
             snackbarHost = { SnackbarHost(snackbar) },
         ) { padding ->
-            ShelfBackground(modifier = Modifier.padding(padding)) {
-                if (current == null) return@ShelfBackground
+            WoodBackground(modifier = Modifier.padding(padding)) {
+                if (current == null) return@WoodBackground
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .verticalScroll(rememberScrollState())
                         .padding(20.dp),
                 ) {
+                    // Hero cover, centered and standing with a soft shadow like on the shelf.
                     Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .aspectRatio(3f / 4f)
+                            .fillMaxWidth(0.66f)
+                            .align(Alignment.CenterHorizontally)
+                            .aspectRatio(if (current.kind == MediaKind.GAME) 3f / 4f else 2f / 3f)
+                            .shadow(16.dp, RoundedCornerShape(12.dp), clip = false)
                             .clip(RoundedCornerShape(12.dp))
                             .background(Color.Black.copy(alpha = 0.25f)),
                         contentAlignment = Alignment.Center,
@@ -184,7 +189,7 @@ private fun DetailPage(vm: DetailViewModel, onBack: () -> Unit) {
                             AsyncImage(
                                 model = current.coverUrl,
                                 contentDescription = current.title,
-                                contentScale = ContentScale.Fit,
+                                contentScale = ContentScale.Crop,
                                 modifier = Modifier.fillMaxSize(),
                             )
                         } else {
@@ -194,8 +199,8 @@ private fun DetailPage(vm: DetailViewModel, onBack: () -> Unit) {
                             )
                         }
                     }
-                    Spacer(Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                    Spacer(Modifier.height(6.dp))
+                    Box(modifier = Modifier.align(Alignment.CenterHorizontally)) {
                         TextButton(onClick = {
                             coverSheetOpen = true
                             vm.loadCovers()
@@ -205,10 +210,12 @@ private fun DetailPage(vm: DetailViewModel, onBack: () -> Unit) {
                             Text("Change cover")
                         }
                     }
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(4.dp))
                     Text(
                         text = current.title,
                         style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
                     )
                     val secondary = listOfNotNull(current.subtitle, current.year?.toString()).joinToString(" · ")
                     if (secondary.isNotBlank()) {
@@ -216,6 +223,8 @@ private fun DetailPage(vm: DetailViewModel, onBack: () -> Unit) {
                             text = secondary,
                             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
                             style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth(),
                         )
                     }
 

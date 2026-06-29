@@ -249,8 +249,9 @@ private fun tagline(kind: MediaKind): String = when (kind) {
 
 // ---------------------------------------------------------------- brushes
 
+// Warm wooden room (was a dark navy wall) so home matches the Cibby-style shelves.
 private fun wallBrush() = Brush.verticalGradient(
-    colors = listOf(Color(0xFF0E0F14), Color(0xFF16121D), Color(0xFF1A1424)),
+    colors = listOf(Color(0xFF6E4E2E), Color(0xFF4A331C), Color(0xFF2E1F11)),
 )
 
 private fun woodBrush() = Brush.verticalGradient(
