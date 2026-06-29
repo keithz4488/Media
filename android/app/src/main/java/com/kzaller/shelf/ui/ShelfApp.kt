@@ -15,6 +15,8 @@ import androidx.navigation.navArgument
 import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.ShelfRepository
 import com.kzaller.shelf.data.preferences.AppPreferences
+import com.kzaller.shelf.ui.screens.AchievementsScreen
+import com.kzaller.shelf.ui.screens.AchievementsViewModel
 import com.kzaller.shelf.ui.screens.AddItemScreen
 import com.kzaller.shelf.ui.screens.AddItemViewModel
 import com.kzaller.shelf.ui.screens.DetailScreen
@@ -37,6 +39,7 @@ object Routes {
     fun detail(k: MediaKind, id: String) = "item/${k.wire}/$id"
     const val SEARCH_ALL = "search"
     const val STATS = "stats"
+    const val ACHIEVEMENTS = "achievements"
 }
 
 /** Guard against navigations issued during a back-transition: when the user has just
@@ -62,7 +65,13 @@ fun ShelfApp() {
                     onShelfTap = { nav.navigateIfResumed(entry, Routes.shelf(it)) },
                     onSearchAll = { nav.navigateIfResumed(entry, Routes.SEARCH_ALL) },
                     onStats = { nav.navigateIfResumed(entry, Routes.STATS) },
+                    onAchievements = { nav.navigateIfResumed(entry, Routes.ACHIEVEMENTS) },
                 )
+            }
+            composable(Routes.ACHIEVEMENTS) {
+                val vm: AchievementsViewModel =
+                    viewModel(factory = AchievementsViewModel.factory(repo, prefs))
+                AchievementsScreen(vm = vm, onBack = { nav.popBackStack() })
             }
             composable(Routes.STATS) { entry ->
                 val vm: StatsViewModel = viewModel(factory = StatsViewModel.factory(repo))

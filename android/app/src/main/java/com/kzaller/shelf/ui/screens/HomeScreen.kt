@@ -17,13 +17,17 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -42,6 +46,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.ShelfRepository
+import com.kzaller.shelf.data.preferences.AppPreferences
 import com.kzaller.shelf.ui.theme.MediaShelfTheme
 import com.kzaller.shelf.ui.theme.flavorFor
 
@@ -50,14 +55,32 @@ fun HomeScreen(
     onShelfTap: (MediaKind) -> Unit,
     onSearchAll: () -> Unit,
     onStats: () -> Unit,
+    onAchievements: () -> Unit,
 ) {
     val context = LocalContext.current
     val repo = remember { ShelfRepository(context) }
+    val prefs = remember { AppPreferences(context) }
     val vm: HomeViewModel = viewModel(factory = HomeViewModel.factory(repo))
+    val achievementsVm: AchievementsViewModel =
+        viewModel(factory = AchievementsViewModel.factory(repo, prefs))
     val counts by vm.counts.collectAsState()
+    val unlockQueue by achievementsVm.queue.collectAsState()
+    val snackbar = remember { SnackbarHostState() }
+
+    // Pop a toast for each newly-unlocked achievement, one at a time.
+    LaunchedEffect(unlockQueue) {
+        val next = unlockQueue.firstOrNull()
+        if (next != null) {
+            snackbar.showSnackbar("${next.emoji}  ${next.title} unlocked!")
+            achievementsVm.consume()
+        }
+    }
 
     MediaShelfTheme(dark = true) {
-        Scaffold(containerColor = Color.Transparent) { padding ->
+        Scaffold(
+            containerColor = Color.Transparent,
+            snackbarHost = { SnackbarHost(snackbar) },
+        ) { padding ->
             Box(
                 modifier = Modifier
                     .padding(padding)
@@ -84,6 +107,13 @@ fun HomeScreen(
                                     fontWeight = FontWeight.Light,
                                     fontSize = 28.sp,
                                 ),
+                            )
+                        }
+                        IconButton(onClick = onAchievements) {
+                            Icon(
+                                imageVector = Icons.Default.EmojiEvents,
+                                contentDescription = "Achievements",
+                                tint = Color(0xFFE5C07B),
                             )
                         }
                         IconButton(onClick = onStats) {

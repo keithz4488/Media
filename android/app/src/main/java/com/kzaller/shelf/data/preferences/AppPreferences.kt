@@ -41,6 +41,27 @@ class AppPreferences(private val context: Context) {
         context.dataStore.edit { it[box3dKey] = enabled }
     }
 
+    private val unlockedKey = stringPreferencesKey("achievements_unlocked")
+
+    /** Set of achievement ids already unlocked (so we only toast newly-earned ones). */
+    fun observeUnlockedAchievements(): Flow<Set<String>> =
+        context.dataStore.data.map { prefs ->
+            prefs[unlockedKey]?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet().orEmpty()
+        }
+
+    suspend fun setUnlockedAchievements(ids: Set<String>) {
+        context.dataStore.edit { it[unlockedKey] = ids.joinToString(",") }
+    }
+
+    private val seededKey = booleanPreferencesKey("achievements_seeded")
+
+    fun observeAchievementsSeeded(): Flow<Boolean> =
+        context.dataStore.data.map { it[seededKey] ?: false }
+
+    suspend fun setAchievementsSeeded() {
+        context.dataStore.edit { it[seededKey] = true }
+    }
+
     fun observeViewMode(kind: MediaKind): Flow<ViewMode> =
         context.dataStore.data.map { prefs ->
             val raw = prefs[viewKey(kind)] ?: return@map ViewMode.GRID
