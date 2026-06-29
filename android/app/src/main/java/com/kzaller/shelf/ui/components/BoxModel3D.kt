@@ -28,6 +28,20 @@ import androidx.compose.foundation.Image
 import com.kzaller.shelf.data.MediaKind
 import kotlinx.coroutines.launch
 
+private fun lighten(c: Color, t: Float) = Color(
+    red = c.red + (1f - c.red) * t,
+    green = c.green + (1f - c.green) * t,
+    blue = c.blue + (1f - c.blue) * t,
+    alpha = c.alpha,
+)
+
+private fun darken(c: Color, t: Float) = Color(
+    red = c.red * (1f - t),
+    green = c.green * (1f - t),
+    blue = c.blue * (1f - t),
+    alpha = c.alpha,
+)
+
 /**
  * A rotatable 3D case built from three perspective-projected faces (front, right spine, top)
  * hinged at the front face's edges via graphicsLayer 3D rotations + cameraDistance. Drag to
@@ -44,9 +58,9 @@ fun BoxModel3D(
     accent: Color,
     modifier: Modifier = Modifier,
 ) {
-    // Resting 3/4 view; drag adjusts from here.
-    val restYaw = -26f   // negative so the right spine faces the viewer
-    val restPitch = -10f
+    // Resting 3/4 view; drag adjusts from here. A bit more turn so the spine/top read.
+    val restYaw = -34f   // negative so the right spine faces the viewer
+    val restPitch = -12f
     val yaw = remember { Animatable(restYaw) }
     val pitch = remember { Animatable(restPitch) }
     val scope = rememberCoroutineScope()
@@ -55,12 +69,21 @@ fun BoxModel3D(
     // behind the camera and collapses. ~900dp*density keeps perspective gentle but present.
     val cam = density.density * 900f
 
-    // Depth of the case as a fraction of the front width, per kind.
+    // Depth of the case as a fraction of the front width, per kind. Beefed up so the box
+    // clearly reads as a 3D case rather than a sheet.
     val depthFraction = when (kind) {
-        MediaKind.BOOK -> 0.12f      // chunky hardcover
-        MediaKind.GAME -> 0.085f     // game box
-        else -> 0.06f                // DVD / Blu-ray case
+        MediaKind.BOOK -> 0.20f      // chunky hardcover
+        MediaKind.GAME -> 0.16f      // game box
+        else -> 0.12f                // DVD / Blu-ray case
     }
+    // A solid case-edge color (darkened accent) reads better than stretching cover art onto
+    // the thin spine/top faces.
+    val edgeColor = Color(
+        red = accent.red * 0.35f,
+        green = accent.green * 0.35f,
+        blue = accent.blue * 0.35f,
+        alpha = 1f,
+    )
     val aspect = if (kind == MediaKind.GAME) 3f / 4f else 2f / 3f
 
     val painter = rememberAsyncImagePainter(model = coverUrl)
@@ -93,7 +116,8 @@ fun BoxModel3D(
                     cameraDistance = cam
                 },
         ) {
-            // ---- Top face: hinged at the front's top edge, swung back/up.
+            // ---- Top face: hinged at the front's top edge, swung back/up. Solid case edge,
+            // lit a touch lighter than the spine since it faces up toward the light.
             Box(
                 modifier = Modifier
                     .size(frontW, depth)
@@ -102,22 +126,17 @@ fun BoxModel3D(
                         transformOrigin = TransformOrigin(0.5f, 1f) // hinge at bottom edge
                         rotationX = -90f
                         cameraDistance = cam
-                    },
-            ) {
-                if (coverUrl != null) {
-                    Image(
-                        painter = painter,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        alignment = Alignment.TopCenter, // sample the top strip of the cover
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
-                // shade the top a bit darker than the front
-                Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.28f)))
-            }
+                    }
+                    .background(
+                        Brush.verticalGradient(
+                            0f to lighten(edgeColor, 0.18f),
+                            1f to edgeColor,
+                        ),
+                    ),
+            )
 
-            // ---- Right spine: hinged at the front's right edge, swung back.
+            // ---- Right spine: hinged at the front's right edge, swung back. Solid case edge
+            // with a soft vertical sheen so it looks molded.
             Box(
                 modifier = Modifier
                     .size(depth, frontH)
@@ -126,21 +145,14 @@ fun BoxModel3D(
                         transformOrigin = TransformOrigin(0f, 0.5f) // hinge at left edge
                         rotationY = 90f
                         cameraDistance = cam
-                    },
-            ) {
-                if (coverUrl != null) {
-                    Image(
-                        painter = painter,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        alignment = Alignment.CenterEnd, // sample the right strip
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                } else {
-                    Box(Modifier.fillMaxSize().background(accent))
-                }
-                Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.40f)))
-            }
+                    }
+                    .background(
+                        Brush.horizontalGradient(
+                            0f to lighten(edgeColor, 0.12f),
+                            1f to darken(edgeColor, 0.25f),
+                        ),
+                    ),
+            )
 
             // ---- Front face.
             Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.25f))) {
