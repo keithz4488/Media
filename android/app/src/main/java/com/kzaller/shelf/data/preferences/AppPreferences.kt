@@ -1,6 +1,7 @@
 package com.kzaller.shelf.data.preferences
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -28,6 +29,16 @@ class AppPreferences(private val context: Context) {
 
     suspend fun setSort(kind: MediaKind, mode: SortMode) {
         context.dataStore.edit { it[sortKey(kind)] = mode.name }
+    }
+
+    private val box3dKey = booleanPreferencesKey("box3d_enabled")
+
+    /** Global toggle: render the detail hero cover as a rotatable 3D box. */
+    fun observeBox3d(): Flow<Boolean> =
+        context.dataStore.data.map { it[box3dKey] ?: false }
+
+    suspend fun setBox3d(enabled: Boolean) {
+        context.dataStore.edit { it[box3dKey] = enabled }
     }
 
     fun observeViewMode(kind: MediaKind): Flow<ViewMode> =
