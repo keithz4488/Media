@@ -45,12 +45,15 @@ fun BoxModel3D(
     modifier: Modifier = Modifier,
 ) {
     // Resting 3/4 view; drag adjusts from here.
-    val restYaw = 28f
-    val restPitch = -14f
+    val restYaw = -26f   // negative so the right spine faces the viewer
+    val restPitch = -10f
     val yaw = remember { Animatable(restYaw) }
     val pitch = remember { Animatable(restPitch) }
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
+    // Camera distance must be LARGE relative to the cover (~700px), or geometry projects
+    // behind the camera and collapses. ~900dp*density keeps perspective gentle but present.
+    val cam = density.density * 900f
 
     // Depth of the case as a fraction of the front width, per kind.
     val depthFraction = when (kind) {
@@ -87,7 +90,7 @@ fun BoxModel3D(
                 .graphicsLayer {
                     rotationY = yaw.value
                     rotationX = pitch.value
-                    cameraDistance = 14f * density.density
+                    cameraDistance = cam
                 },
         ) {
             // ---- Top face: hinged at the front's top edge, swung back/up.
@@ -98,7 +101,7 @@ fun BoxModel3D(
                     .graphicsLayer {
                         transformOrigin = TransformOrigin(0.5f, 1f) // hinge at bottom edge
                         rotationX = -90f
-                        cameraDistance = 14f * density.density
+                        cameraDistance = cam
                     },
             ) {
                 if (coverUrl != null) {
@@ -122,7 +125,7 @@ fun BoxModel3D(
                     .graphicsLayer {
                         transformOrigin = TransformOrigin(0f, 0.5f) // hinge at left edge
                         rotationY = 90f
-                        cameraDistance = 14f * density.density
+                        cameraDistance = cam
                     },
             ) {
                 if (coverUrl != null) {
