@@ -98,8 +98,8 @@ private fun ShelfRow(
                 .fillMaxWidth()
                 // plank drawn behind, anchored to the bottom of this row
                 .drawBehind {
-                    val plankTopThickness = 16.dp.toPx()
-                    val plankFront = 12.dp.toPx()
+                    val plankTopThickness = 14.dp.toPx()
+                    val plankFront = 20.dp.toPx()
                     val plankTop = size.height - plankTopThickness - plankFront
                     drawPlank(
                         flavor = flavor,
@@ -110,7 +110,7 @@ private fun ShelfRow(
                         frontThickness = plankFront,
                     )
                 }
-                .padding(bottom = 28.dp), // leave room for the plank under the covers
+                .padding(bottom = 34.dp), // leave room for the plank under the covers
             verticalAlignment = Alignment.Bottom,
         ) {
             for (col in 0 until COLUMNS) {

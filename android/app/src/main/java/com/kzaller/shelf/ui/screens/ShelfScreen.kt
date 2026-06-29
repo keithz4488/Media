@@ -79,7 +79,9 @@ fun ShelfScreen(
     onItem: (String) -> Unit,
     onSwitchShelf: (MediaKind) -> Unit = {},
 ) {
-    val dark = isSystemInDarkTheme()
+    // Always use the dark (light-text) scheme: the wood backdrop is dark/saturated, so text
+    // must stay cream regardless of the phone's light/dark setting.
+    val dark = true
     val flavor = flavorFor(kind, dark)
     MediaShelfTheme(flavor = flavor, dark = dark) {
         val items by vm.items.collectAsState()

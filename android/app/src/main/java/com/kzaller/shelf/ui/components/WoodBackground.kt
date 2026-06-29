@@ -70,10 +70,6 @@ private fun DrawScope.drawWoodRoom(flavor: ShelfFlavor) {
         i++
     }
 
-    // a couple of soft knots for character
-    drawKnot(Offset(size.width * 0.22f, size.height * 0.30f), size.width * 0.05f)
-    drawKnot(Offset(size.width * 0.78f, size.height * 0.66f), size.width * 0.04f)
-
     // bottom vignette to ground the scene
     drawRect(
         brush = Brush.verticalGradient(
@@ -84,13 +80,11 @@ private fun DrawScope.drawWoodRoom(flavor: ShelfFlavor) {
     )
 }
 
-private fun DrawScope.drawKnot(center: Offset, radius: Float) {
-    drawCircle(Color.Black.copy(alpha = 0.10f), radius = radius, center = center)
-    drawCircle(Color.Black.copy(alpha = 0.08f), radius = radius * 0.6f, center = center)
-    drawCircle(Color.White.copy(alpha = 0.04f), radius = radius * 0.25f, center = center)
-}
-
-/** Draws a single wooden shelf plank with a 3D front edge, spanning the given width band. */
+/**
+ * Draws a single wooden shelf board with real depth: a soft contact shadow where the covers
+ * meet the shelf, a lit top surface with a bright front lip, a tall front face with vertical
+ * grain, and a drop shadow cast below onto the wall.
+ */
 fun DrawScope.drawPlank(
     flavor: ShelfFlavor,
     topY: Float,
@@ -100,27 +94,76 @@ fun DrawScope.drawPlank(
     frontThickness: Float,
 ) {
     val width = right - left
-    // top face
+
+    // 1) contact shadow: a soft dark band just above the shelf, so covers look like they
+    //    rest on it rather than float over a bar.
+    val contactH = topThickness * 1.6f
     drawRect(
         brush = Brush.verticalGradient(
-            0f to lerp(flavor.plank, Color.White, 0.10f),
-            1f to flavor.plank,
+            0f to Color.Transparent,
+            1f to Color.Black.copy(alpha = 0.30f),
+            startY = topY - contactH,
+            endY = topY,
+        ),
+        topLeft = Offset(left, topY - contactH),
+        size = Size(width, contactH),
+    )
+
+    // 2) top surface of the board, lighter toward the front edge where light lands
+    drawRect(
+        brush = Brush.verticalGradient(
+            0f to lerp(flavor.plank, Color.Black, 0.18f),   // back of the surface, shaded
+            1f to lerp(flavor.plank, Color.White, 0.18f),   // front of the surface, lit
             startY = topY,
             endY = topY + topThickness,
         ),
         topLeft = Offset(left, topY),
         size = Size(width, topThickness),
     )
-    // front edge (darker, the lip the covers sit in front of)
+    // bright lip line along the very front-top edge
+    drawRect(
+        color = lerp(flavor.plank, Color.White, 0.40f),
+        topLeft = Offset(left, topY + topThickness - 1.5f),
+        size = Size(width, 2f),
+    )
+
+    // 3) front face of the board (the thickness you see), darker, with vertical grain ticks
+    val faceTop = topY + topThickness
     drawRect(
         brush = Brush.verticalGradient(
             0f to flavor.plank,
             1f to flavor.plankEdge,
-            startY = topY + topThickness,
-            endY = topY + topThickness + frontThickness,
+            startY = faceTop,
+            endY = faceTop + frontThickness,
         ),
-        topLeft = Offset(left, topY + topThickness),
+        topLeft = Offset(left, faceTop),
         size = Size(width, frontThickness),
+    )
+    val grain = lerp(flavor.plankEdge, Color.Black, 0.25f)
+    var gx = left + 18f
+    var k = 0
+    while (gx < right) {
+        val h = if (k % 2 == 0) frontThickness * 0.55f else frontThickness * 0.35f
+        drawRect(
+            color = grain.copy(alpha = 0.35f),
+            topLeft = Offset(gx, faceTop + (frontThickness - h) / 2f),
+            size = Size(1.5f, h),
+        )
+        gx += 34f
+        k++
+    }
+
+    // 4) drop shadow under the board, onto the wall below
+    val shadowH = frontThickness * 1.2f
+    drawRect(
+        brush = Brush.verticalGradient(
+            0f to Color.Black.copy(alpha = 0.28f),
+            1f to Color.Transparent,
+            startY = faceTop + frontThickness,
+            endY = faceTop + frontThickness + shadowH,
+        ),
+        topLeft = Offset(left, faceTop + frontThickness),
+        size = Size(width, shadowH),
     )
 }
 

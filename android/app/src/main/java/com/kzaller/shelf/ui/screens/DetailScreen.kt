@@ -137,7 +137,8 @@ private fun DetailPage(vm: DetailViewModel, onBack: () -> Unit) {
     LaunchedEffect(error) { error?.let { snackbar.showSnackbar(it); vm.clearError() } }
     LaunchedEffect(toast) { toast?.let { snackbar.showSnackbar(it); vm.clearToast() } }
 
-    val dark = isSystemInDarkTheme()
+    // Force the dark (light-text) scheme so text stays readable on the wood backdrop.
+    val dark = true
     val flavor = current?.let { flavorFor(it.kind, dark) } ?: flavorFor(MediaKind.BOOK, dark)
 
     MediaShelfTheme(flavor = flavor, dark = dark) {
