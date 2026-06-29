@@ -73,9 +73,20 @@ fun AddItemScreen(
     vm: AddItemViewModel,
     onClose: () -> Unit,
     onAdded: () -> Unit,
+    startMode: String = "choose",
 ) {
     val dark = isSystemInDarkTheme()
     val flavor = flavorFor(kind, dark)
+
+    // Deep-link from the radial add button: jump straight to camera/search/manual once.
+    LaunchedEffect(Unit) {
+        when (startMode) {
+            "camera" -> vm.goTo(AddItemViewModel.Mode.CAMERA)
+            "search" -> vm.goTo(AddItemViewModel.Mode.SEARCH)
+            "manual" -> vm.goTo(AddItemViewModel.Mode.MANUAL)
+            else -> {}
+        }
+    }
 
     MediaShelfTheme(flavor = flavor, dark = dark) {
         val mode by vm.mode.collectAsState()

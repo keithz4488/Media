@@ -61,6 +61,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.Status
+import com.kzaller.shelf.ui.components.ExpandingAddFab
 import com.kzaller.shelf.ui.components.ItemListRow
 import com.kzaller.shelf.ui.components.ShelfPill
 import com.kzaller.shelf.ui.components.ShelfWoodGrid
@@ -75,7 +76,7 @@ fun ShelfScreen(
     kind: MediaKind,
     vm: ShelfViewModel,
     onBack: () -> Unit,
-    onAdd: () -> Unit,
+    onAdd: (String) -> Unit,
     onItem: (String) -> Unit,
     onSwitchShelf: (MediaKind) -> Unit = {},
 ) {
@@ -222,15 +223,9 @@ fun ShelfScreen(
                     )
                 }
             },
-            floatingActionButton = {
-                FloatingActionButton(
-                    onClick = onAdd,
-                    containerColor = flavor.accent,
-                    contentColor = flavor.onAccent,
-                ) { Icon(Icons.Default.Add, contentDescription = "Add to shelf") }
-            },
         ) { padding ->
-            WoodBackground(modifier = Modifier.padding(padding)) {
+          Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+            WoodBackground {
                 Column(modifier = Modifier.fillMaxSize()) {
                     if (searchOpen) {
                         OutlinedTextField(
@@ -308,6 +303,17 @@ fun ShelfScreen(
                     }
                 }
             }
+            // Radial add button overlay (hidden while multi-selecting).
+            if (!inSelectionMode) {
+                ExpandingAddFab(
+                    accent = flavor.accent,
+                    onAccent = flavor.onAccent,
+                    onScan = { onAdd("camera") },
+                    onSearch = { onAdd("search") },
+                    onManual = { onAdd("manual") },
+                )
+            }
+          }
         }
 
         if (sheetOpen) {

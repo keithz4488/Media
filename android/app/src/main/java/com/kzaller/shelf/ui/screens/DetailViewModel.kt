@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.kzaller.shelf.data.ShelfRepository
 import com.kzaller.shelf.data.models.CoverOption
 import com.kzaller.shelf.data.models.ItemDto
+import com.kzaller.shelf.data.models.Scores
 import com.kzaller.shelf.data.models.UpdateItemRequest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -30,6 +31,17 @@ class DetailViewModel(
 
     private val _toast = MutableStateFlow<String?>(null)
     val toast = _toast.asStateFlow()
+
+    private val _scores = MutableStateFlow<Scores?>(null)
+    val scores = _scores.asStateFlow()
+
+    /** Fetch IGDB review scores once. No-op result for non-game / non-IGDB items. */
+    fun loadScores() {
+        if (_scores.value != null) return
+        viewModelScope.launch {
+            repo.loadScores(id).onSuccess { _scores.value = it }
+        }
+    }
 
     fun setStatus(status: String) = launchUpdate(UpdateItemRequest(status = status))
     fun setRating(rating: Int?) = launchUpdate(UpdateItemRequest(rating = rating), toast = if (rating == null) "Rating cleared" else "Rated $rating")

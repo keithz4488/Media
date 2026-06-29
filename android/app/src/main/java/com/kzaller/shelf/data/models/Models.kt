@@ -96,3 +96,16 @@ data class CoverOption(
 data class CoversResponse(
     val covers: List<CoverOption> = emptyList(),
 )
+
+@Serializable
+data class ScoresResponse(val scores: Scores)
+
+@Serializable
+data class Scores(
+    val players: Int? = null,
+    val playersCount: Int? = null,
+    val critics: Int? = null,
+    val criticsCount: Int? = null,
+) {
+    val hasAny: Boolean get() = players != null || critics != null
+}

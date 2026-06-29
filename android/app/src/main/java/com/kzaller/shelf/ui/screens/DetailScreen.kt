@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -76,6 +77,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import androidx.compose.foundation.pager.HorizontalPager
@@ -131,11 +133,16 @@ private fun DetailPage(vm: DetailViewModel, onBack: () -> Unit) {
     val toast by vm.toast.collectAsState()
     val covers by vm.covers.collectAsState()
     val loadingCovers by vm.loadingCovers.collectAsState()
+    val scores by vm.scores.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     var coverSheetOpen by remember { mutableStateOf(false) }
 
     LaunchedEffect(error) { error?.let { snackbar.showSnackbar(it); vm.clearError() } }
     LaunchedEffect(toast) { toast?.let { snackbar.showSnackbar(it); vm.clearToast() } }
+    // Pull review scores for games (no-op for other kinds / non-IGDB items).
+    LaunchedEffect(current?.id, current?.kind) {
+        if (current?.kind == MediaKind.GAME) vm.loadScores()
+    }
 
     // Force the dark (light-text) scheme so text stays readable on the wood backdrop.
     val dark = true
@@ -337,14 +344,25 @@ private fun DetailPage(vm: DetailViewModel, onBack: () -> Unit) {
                         onSave = { vm.setNotes(it) },
                     )
 
+                    val s = scores
+                    if (current.kind == MediaKind.GAME && s != null && s.hasAny) {
+                        Spacer(Modifier.height(20.dp))
+                        Text("Scores", style = MaterialTheme.typography.titleSmall)
+                        Spacer(Modifier.height(6.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            if (s.critics != null) {
+                                ScoreBadge(score = s.critics!!, label = "Critics", count = s.criticsCount)
+                            }
+                            if (s.players != null) {
+                                ScoreBadge(score = s.players!!, label = "Players", count = s.playersCount)
+                            }
+                        }
+                    }
+
                     if (!current.description.isNullOrBlank()) {
                         Spacer(Modifier.height(20.dp))
                         Text("About", style = MaterialTheme.typography.titleSmall)
-                        Text(
-                            text = current.description!!,
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(top = 4.dp),
-                        )
+                        AboutText(text = current.description!!)
                     }
                 }
             }
@@ -508,6 +526,76 @@ private fun ConsoleDropdown(
                     }
                 }
             }
+        }
+    }
+}
+
+/** A colored review-score chip: number on a tinted square + label and (optional) rating count. */
+@Composable
+private fun ScoreBadge(score: Int, label: String, count: Int?) {
+    val bg = when {
+        score >= 75 -> Color(0xFF2E7D32) // green
+        score >= 50 -> Color(0xFFB8860B) // amber
+        else -> Color(0xFFB23B3B)        // red
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(bg)
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+        ) {
+            Text(
+                text = score.toString(),
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black),
+                color = Color.White,
+            )
+        }
+        Spacer(Modifier.size(8.dp))
+        Column {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+            if (count != null && count > 0) {
+                Text(
+                    text = "$count ratings",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Description that collapses to a handful of lines with a "Read more" / "Read less" toggle.
+ * Only shows the toggle when the text actually overflows the collapsed line count.
+ */
+@Composable
+private fun AboutText(text: String) {
+    var expanded by remember(text) { mutableStateOf(false) }
+    var hasOverflow by remember(text) { mutableStateOf(false) }
+    val collapsedLines = 4
+
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.85f),
+        maxLines = if (expanded) Int.MAX_VALUE else collapsedLines,
+        overflow = TextOverflow.Ellipsis,
+        onTextLayout = { result ->
+            if (!expanded) hasOverflow = result.hasVisualOverflow
+        },
+        modifier = Modifier.padding(top = 4.dp),
+    )
+    if (hasOverflow || expanded) {
+        TextButton(
+            onClick = { expanded = !expanded },
+            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 2.dp),
+        ) {
+            Text(if (expanded) "Read less" else "Read more")
         }
     }
 }

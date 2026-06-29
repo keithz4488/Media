@@ -35,6 +35,9 @@ interface ShelfApi {
     @GET("items/{id}/covers")
     suspend fun covers(@Path("id") id: String): CoversResponse
 
+    @GET("items/{id}/scores")
+    suspend fun scores(@Path("id") id: String): com.kzaller.shelf.data.models.ScoresResponse
+
     @GET("search/books")
     suspend fun searchBooks(@Query("q") q: String? = null, @Query("isbn") isbn: String? = null): SearchResponse
 

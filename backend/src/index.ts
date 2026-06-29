@@ -124,6 +124,9 @@ export default {
       const coversMatch = url.pathname.match(/^\/items\/([^/]+)\/covers$/);
       if (coversMatch && req.method === "GET") return listCovers(coversMatch[1], env);
 
+      const scoresMatch = url.pathname.match(/^\/items\/([^/]+)\/scores$/);
+      if (scoresMatch && req.method === "GET") return itemScores(scoresMatch[1], env);
+
       if (url.pathname === "/search/books") return searchBooks(url, env);
       if (url.pathname === "/search/movies") return searchTmdb(url, env, "movie");
       if (url.pathname === "/search/tv") return searchTmdb(url, env, "tv");
@@ -720,6 +723,51 @@ async function rawgCovers(item: Item, env: Env): Promise<CoverOption[]> {
   }
 
   return opts;
+}
+
+/**
+ * Review scores for a game. IGDB exposes two aggregate ratings (0-100): `rating` (IGDB
+ * users) and `aggregated_rating` (external critics). We surface both with their counts.
+ * Returns nulls for non-IGDB items so the client can simply hide the section.
+ */
+async function itemScores(id: string, env: Env): Promise<Response> {
+  const row = await env.DB.prepare("SELECT * FROM items WHERE id = ?1").bind(id).first<Item>();
+  if (!row) return err(404, "item not found");
+
+  const empty = { players: null, playersCount: null, critics: null, criticsCount: null };
+  if (row.external_src !== "igdb" || !row.external_id || !env.IGDB_CLIENT_ID) {
+    return json({ scores: empty });
+  }
+  const token = await igdbToken(env);
+  if (!token) return json({ scores: empty });
+
+  const body =
+    `fields rating,rating_count,aggregated_rating,aggregated_rating_count;` +
+    ` where id = ${Number(row.external_id) || 0};`;
+  const r = await fetch("https://api.igdb.com/v4/games", {
+    method: "POST",
+    headers: {
+      "Client-ID": env.IGDB_CLIENT_ID,
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "text/plain",
+    },
+    body,
+  });
+  if (r.status === 401) igdbTokenCache = null;
+  if (!r.ok) return json({ scores: empty });
+  const list = (await r.json()) as any[];
+  const g = list[0];
+  if (!g) return json({ scores: empty });
+
+  const round = (n: any) => (typeof n === "number" ? Math.round(n) : null);
+  return json({
+    scores: {
+      players: round(g.rating),
+      playersCount: typeof g.rating_count === "number" ? g.rating_count : null,
+      critics: round(g.aggregated_rating),
+      criticsCount: typeof g.aggregated_rating_count === "number" ? g.aggregated_rating_count : null,
+    },
+  });
 }
 
 async function igdbCovers(item: Item, env: Env): Promise<CoverOption[]> {

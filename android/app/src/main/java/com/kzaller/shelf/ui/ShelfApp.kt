@@ -31,8 +31,8 @@ object Routes {
     const val HOME = "home"
     const val SHELF = "shelf/{kind}"
     fun shelf(k: MediaKind) = "shelf/${k.wire}"
-    const val ADD = "add/{kind}"
-    fun add(k: MediaKind) = "add/${k.wire}"
+    const val ADD = "add/{kind}?start={start}"
+    fun add(k: MediaKind, start: String = "choose") = "add/${k.wire}?start=$start"
     const val DETAIL = "item/{kind}/{id}"
     fun detail(k: MediaKind, id: String) = "item/${k.wire}/$id"
     const val SEARCH_ALL = "search"
@@ -90,7 +90,7 @@ fun ShelfApp() {
                     kind = kind,
                     vm = vm,
                     onBack = { nav.popBackStack() },
-                    onAdd = { nav.navigateIfResumed(entry, Routes.add(kind)) },
+                    onAdd = { start -> nav.navigateIfResumed(entry, Routes.add(kind, start)) },
                     onItem = { nav.navigateIfResumed(entry, Routes.detail(kind, it)) },
                     onSwitchShelf = { target ->
                         // Swap shelves without stacking: pop back to home, then open the target.
@@ -103,13 +103,18 @@ fun ShelfApp() {
             }
             composable(
                 route = Routes.ADD,
-                arguments = listOf(navArgument("kind") { type = NavType.StringType }),
+                arguments = listOf(
+                    navArgument("kind") { type = NavType.StringType },
+                    navArgument("start") { type = NavType.StringType; defaultValue = "choose" },
+                ),
             ) { entry ->
                 val kind = MediaKind.fromWire(entry.arguments?.getString("kind")!!)
+                val start = entry.arguments?.getString("start") ?: "choose"
                 val vm: AddItemViewModel = viewModel(factory = AddItemViewModel.factory(repo, kind))
                 AddItemScreen(
                     kind = kind,
                     vm = vm,
+                    startMode = start,
                     onClose = { nav.popBackStack() },
                     onAdded = { nav.popBackStack() },
                 )

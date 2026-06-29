@@ -143,4 +143,8 @@ class ShelfRepository(context: Context) {
     suspend fun listCovers(id: String): Result<List<CoverOption>> = runCatching {
         api.covers(id).covers
     }
+
+    suspend fun loadScores(id: String): Result<com.kzaller.shelf.data.models.Scores> = runCatching {
+        api.scores(id).scores
+    }
 }
