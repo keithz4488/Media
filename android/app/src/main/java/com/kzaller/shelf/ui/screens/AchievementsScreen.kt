@@ -1,6 +1,7 @@
 package com.kzaller.shelf.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,6 +39,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.kzaller.shelf.ui.components.rarityColor
+import com.kzaller.shelf.ui.components.rarityLabel
 import com.kzaller.shelf.ui.theme.MediaShelfTheme
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -100,62 +103,94 @@ fun AchievementsScreen(
 @Composable
 private fun AchievementRow(row: AchievementUi) {
     val a = row.achievement
+    val color = rarityColor(a.rarity)
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = if (row.unlocked) MaterialTheme.colorScheme.surface
-            else MaterialTheme.colorScheme.surface.copy(alpha = 0.4f),
-        ),
-        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (row.unlocked) Modifier.border(1.2.dp, color.copy(alpha = 0.75f), RoundedCornerShape(14.dp))
+                else Modifier,
+            ),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        shape = RoundedCornerShape(14.dp),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(
+                    if (row.unlocked)
+                        Brush.horizontalGradient(
+                            0f to Color(0xFF17141F),
+                            1f to color.copy(alpha = 0.16f),
+                        )
+                    else Brush.horizontalGradient(
+                        0f to Color.White.copy(alpha = 0.04f),
+                        1f to Color.White.copy(alpha = 0.04f),
+                    ),
+                )
+                .padding(14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
                 modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(
-                        if (row.unlocked) Color(0xFFE5C07B).copy(alpha = 0.25f)
-                        else Color.White.copy(alpha = 0.06f),
-                    ),
+                    .size(46.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (row.unlocked) color.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.05f))
+                    .then(if (row.unlocked) Modifier.border(1.dp, color, RoundedCornerShape(12.dp)) else Modifier),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = a.emoji,
                     style = MaterialTheme.typography.titleLarge,
-                    color = if (row.unlocked) Color.White else Color.White.copy(alpha = 0.35f),
+                    color = if (row.unlocked) Color.White else Color.White.copy(alpha = 0.30f),
                 )
             }
             Spacer(Modifier.size(14.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = a.title,
-                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                    color = if (row.unlocked) MaterialTheme.colorScheme.onSurface
-                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = a.title,
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = if (row.unlocked) Color.White else Color.White.copy(alpha = 0.55f),
+                    )
+                    Spacer(Modifier.size(8.dp))
+                    // rarity chip
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(color.copy(alpha = if (row.unlocked) 0.28f else 0.12f))
+                            .padding(horizontal = 7.dp, vertical = 1.dp),
+                    ) {
+                        Text(
+                            text = rarityLabel(a.rarity),
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = if (row.unlocked) color else color.copy(alpha = 0.7f),
+                        )
+                    }
+                }
                 Text(
                     text = a.description,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    color = Color.White.copy(alpha = 0.6f),
                 )
                 if (!row.unlocked && a.target > 1) {
                     Spacer(Modifier.height(6.dp))
                     LinearProgressIndicator(
                         progress = { row.current.toFloat() / a.target.toFloat() },
+                        color = color,
+                        trackColor = Color.White.copy(alpha = 0.10f),
                         modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(3.dp)),
                     )
                     Text(
                         text = "${row.current} / ${a.target}",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        color = Color.White.copy(alpha = 0.5f),
                     )
                 }
             }
             if (row.unlocked) {
-                Text("✓", style = MaterialTheme.typography.titleMedium, color = Color(0xFF6FCF7F))
+                Text("✓", style = MaterialTheme.typography.titleMedium, color = color)
             }
         }
     }

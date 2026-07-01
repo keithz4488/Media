@@ -526,7 +526,7 @@ async function identifyImage(req: Request, env: Env): Promise<Response> {
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      model: "claude-haiku-4-5-20251001",
+      model: "claude-sonnet-5",
       max_tokens: 200,
       messages: [
         {

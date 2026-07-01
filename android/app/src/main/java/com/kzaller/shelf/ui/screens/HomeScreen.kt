@@ -23,8 +23,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -47,6 +45,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.ShelfRepository
 import com.kzaller.shelf.data.preferences.AppPreferences
+import com.kzaller.shelf.ui.components.AchievementUnlockBanner
 import com.kzaller.shelf.ui.theme.MediaShelfTheme
 import com.kzaller.shelf.ui.theme.flavorFor
 
@@ -65,22 +64,18 @@ fun HomeScreen(
         viewModel(factory = AchievementsViewModel.factory(repo, prefs))
     val counts by vm.counts.collectAsState()
     val unlockQueue by achievementsVm.queue.collectAsState()
-    val snackbar = remember { SnackbarHostState() }
+    val currentUnlock = unlockQueue.firstOrNull()
 
-    // Pop a toast for each newly-unlocked achievement, one at a time.
-    LaunchedEffect(unlockQueue) {
-        val next = unlockQueue.firstOrNull()
-        if (next != null) {
-            snackbar.showSnackbar("${next.emoji}  ${next.title} unlocked!")
+    // Show each newly-unlocked achievement banner for a few seconds, one at a time.
+    LaunchedEffect(currentUnlock) {
+        if (currentUnlock != null) {
+            kotlinx.coroutines.delay(3600)
             achievementsVm.consume()
         }
     }
 
     MediaShelfTheme(dark = true) {
-        Scaffold(
-            containerColor = Color.Transparent,
-            snackbarHost = { SnackbarHost(snackbar) },
-        ) { padding ->
+        Scaffold(containerColor = Color.Transparent) { padding ->
             Box(
                 modifier = Modifier
                     .padding(padding)
@@ -141,6 +136,11 @@ fun HomeScreen(
                             .padding(bottom = 24.dp),
                     )
                 }
+                // Flashy unlock banner overlays the top of the home screen.
+                AchievementUnlockBanner(
+                    achievement = currentUnlock,
+                    modifier = Modifier.align(Alignment.TopCenter),
+                )
             }
         }
     }
