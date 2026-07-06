@@ -48,6 +48,7 @@ interface Item {
   notes?: string | null;
   user_platform?: string | null; // CSV: any of 'pc','xbox','playstation','nintendo','mobile' (games)
   consoles?: string | null;      // CSV of console codes within the active platforms (games)
+  format?: string | null;        // CSV: any of 'physical','digital'
   completed_at?: number | null;  // epoch ms when the user marked the item as finished
   added_at?: number;
   updated_at?: number;
@@ -172,6 +173,7 @@ async function createItem(req: Request, env: Env): Promise<Response> {
     notes: body.notes ?? null,
     user_platform: body.user_platform ?? null,
     consoles: body.consoles ?? null,
+    format: body.format ?? null,
     completed_at: body.completed_at ?? null,
     added_at: body.added_at ?? now,
     updated_at: now,
@@ -186,9 +188,9 @@ async function createItem(req: Request, env: Env): Promise<Response> {
   await env.DB.prepare(
     `INSERT INTO items
       (id, kind, title, subtitle, year, cover_url, external_id, external_src,
-       description, rating, status, notes, user_platform, consoles, completed_at, added_at, updated_at)
+       description, rating, status, notes, user_platform, consoles, format, completed_at, added_at, updated_at)
      VALUES
-      (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)
+      (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)
      ON CONFLICT(kind, external_src, external_id) DO UPDATE SET
        updated_at = excluded.updated_at,
        status     = excluded.status`,
@@ -208,6 +210,7 @@ async function createItem(req: Request, env: Env): Promise<Response> {
       item.notes,
       item.user_platform,
       item.consoles,
+      item.format,
       item.completed_at,
       item.added_at,
       item.updated_at,
@@ -232,7 +235,7 @@ async function updateItem(id: string, req: Request, env: Env): Promise<Response>
   const fields: string[] = [];
   const values: unknown[] = [];
   let i = 1;
-  for (const k of ["title", "subtitle", "year", "cover_url", "description", "rating", "status", "notes", "user_platform", "consoles", "completed_at"] as const) {
+  for (const k of ["title", "subtitle", "year", "cover_url", "description", "rating", "status", "notes", "user_platform", "consoles", "format", "completed_at"] as const) {
     if (k in body) {
       fields.push(`${k} = ?${i++}`);
       values.push(body[k] ?? null);

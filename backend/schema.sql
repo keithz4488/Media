@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS items (
   notes         TEXT,
   user_platform TEXT,                            -- CSV: any of 'pc','xbox','playstation','nintendo','mobile' (games only)
   consoles      TEXT,                            -- CSV of console codes within the selected platforms (games only)
+  format        TEXT,                            -- CSV: any of 'physical','digital'
   completed_at  INTEGER,                         -- epoch ms when the user marked the item as finished/read/watched/played
   added_at      INTEGER NOT NULL,
   updated_at    INTEGER NOT NULL,

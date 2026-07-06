@@ -44,7 +44,12 @@ class ShelfRepository(context: Context) {
         db.items().upsertAll(resp.items.map(ItemEntity::fromDto))
     }
 
-    suspend fun add(kind: MediaKind, hit: SearchHit, status: String = "owned"): Result<ItemDto> = runCatching {
+    suspend fun add(
+        kind: MediaKind,
+        hit: SearchHit,
+        status: String = "owned",
+        format: String? = null,
+    ): Result<ItemDto> = runCatching {
         val resp = api.create(
             CreateItemRequest(
                 kind = kind,
@@ -56,6 +61,7 @@ class ShelfRepository(context: Context) {
                 externalSrc = hit.externalSrc,
                 description = hit.description,
                 status = status,
+                format = format,
             ),
         )
         db.items().upsert(ItemEntity.fromDto(resp.item))
@@ -69,6 +75,7 @@ class ShelfRepository(context: Context) {
         year: Int?,
         coverUrl: String?,
         status: String = "owned",
+        format: String? = null,
     ): Result<ItemDto> = runCatching {
         val resp = api.create(
             CreateItemRequest(
@@ -79,6 +86,7 @@ class ShelfRepository(context: Context) {
                 coverUrl = coverUrl,
                 externalSrc = "manual",
                 status = status,
+                format = format,
             ),
         )
         db.items().upsert(ItemEntity.fromDto(resp.item))

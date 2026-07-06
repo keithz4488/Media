@@ -84,6 +84,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kzaller.shelf.data.Console
+import com.kzaller.shelf.data.Format
 import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.Platform
 import com.kzaller.shelf.data.ShelfRepository
@@ -255,6 +256,28 @@ private fun DetailPage(
                                 label = {
                                     Text(
                                         text = Status.label(s, current.kind),
+                                        color = if (on) flavor.accent else MaterialTheme.colorScheme.onBackground,
+                                    )
+                                },
+                                colors = AssistChipDefaults.assistChipColors(
+                                    containerColor = if (on) flavor.accent.copy(alpha = 0.22f) else Color.Transparent,
+                                ),
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+                    Text("Format", style = MaterialTheme.typography.titleSmall)
+                    Spacer(Modifier.height(6.dp))
+                    val selectedFormats = Format.parse(current.format)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Format.ALL.forEach { f ->
+                            val on = f in selectedFormats
+                            AssistChip(
+                                onClick = { vm.setFormat(Format.toggle(current.format, f)) },
+                                label = {
+                                    Text(
+                                        text = Format.label(f),
                                         color = if (on) flavor.accent else MaterialTheme.colorScheme.onBackground,
                                     )
                                 },

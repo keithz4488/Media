@@ -203,9 +203,11 @@ class AddItemViewModel(
     }
 
     fun add(hit: SearchHit, status: String, after: () -> Unit) {
+        // Anything added off a camera scan is a physical copy the user is holding.
+        val format = if (_fromCamera.value) com.kzaller.shelf.data.Format.PHYSICAL else null
         viewModelScope.launch {
             _searching.value = true
-            repo.add(kind, hit, status)
+            repo.add(kind, hit, status, format)
                 .onSuccess { dto ->
                     if (_bulkMode.value) {
                         _statusMsg.value = "Added \"${dto.title}\""

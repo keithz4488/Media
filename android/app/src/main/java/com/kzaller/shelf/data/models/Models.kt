@@ -20,6 +20,7 @@ data class ItemDto(
     val notes: String? = null,
     @SerialName("user_platform") val userPlatform: String? = null,
     val consoles: String? = null,
+    val format: String? = null,
     @SerialName("completed_at") val completedAt: Long? = null,
     @SerialName("added_at")   val addedAt: Long? = null,
     @SerialName("updated_at") val updatedAt: Long? = null,
@@ -56,6 +57,7 @@ data class CreateItemRequest(
     @SerialName("external_src") val externalSrc: String? = null,
     val description: String? = null,
     val status: String? = "owned",
+    val format: String? = null,
 )
 
 @Serializable
@@ -70,6 +72,7 @@ data class UpdateItemRequest(
     val notes: String? = null,
     @SerialName("user_platform") val userPlatform: String? = null,
     val consoles: String? = null,
+    val format: String? = null,
     @SerialName("completed_at") val completedAt: Long? = null,
 )
 
