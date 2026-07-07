@@ -1,6 +1,11 @@
 package com.kzaller.shelf.ui.screens
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -77,9 +82,9 @@ fun HomeScreen(
             Box(
                 modifier = Modifier
                     .padding(padding)
-                    .fillMaxSize()
-                    .background(wallBrush()),
+                    .fillMaxSize(),
             ) {
+                AnimatedWall(modifier = Modifier.matchParentSize())
                 Column(modifier = Modifier.fillMaxSize().padding(horizontal = 18.dp)) {
                     Spacer(Modifier.height(24.dp))
                     Row(verticalAlignment = Alignment.Top) {
@@ -148,6 +153,61 @@ fun HomeScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+// ---------------------------------------------------------------- animated backdrop
+
+/**
+ * A slow, synthwave-style perspective grid that rolls toward the viewer — but in the app's warm
+ * amber/wood palette so it fits the shelf theme. Warm gradient sky, a glowing horizon, converging
+ * verticals, and horizontal lines that scroll forward and wrap at the horizon (where they fade in,
+ * hiding the loop).
+ */
+@Composable
+private fun AnimatedWall(modifier: Modifier = Modifier) {
+    val transition = rememberInfiniteTransition(label = "wall")
+    val phase by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(11000, easing = LinearEasing)),
+        label = "phase",
+    )
+    val line = Color(0xFFE0A86A)
+    val accent = Color(0xFFE5C07B)
+
+    Canvas(modifier = modifier) {
+        drawRect(brush = wallBrush())
+        val horizon = size.height * 0.42f
+
+        // Soft glow pooled at the horizon.
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(accent.copy(alpha = 0.28f), Color.Transparent),
+                center = Offset(size.width / 2f, horizon),
+                radius = size.width * 0.75f,
+            ),
+            radius = size.width * 0.75f,
+            center = Offset(size.width / 2f, horizon),
+        )
+        drawLine(accent.copy(alpha = 0.55f), Offset(0f, horizon), Offset(size.width, horizon), strokeWidth = 2f)
+
+        // Converging vertical rails toward the vanishing point.
+        val cx = size.width / 2f
+        val rails = 12
+        for (i in -rails..rails) {
+            val bottomX = cx + (i.toFloat() / rails) * size.width * 1.6f
+            drawLine(line.copy(alpha = 0.20f), Offset(cx, horizon), Offset(bottomX, size.height), strokeWidth = 1.5f)
+        }
+
+        // Horizontal lines rolling forward with a perspective curve.
+        val rows = 18
+        for (i in 0 until rows) {
+            val t = ((i + phase) % rows) / rows           // 0 at horizon -> 1 at viewer
+            val y = horizon + (size.height - horizon) * (t * t)
+            val alpha = (t * 0.4f).coerceIn(0f, 0.4f)
+            drawLine(line.copy(alpha = alpha), Offset(0f, y), Offset(size.width, y), strokeWidth = 1.5f)
         }
     }
 }
