@@ -109,10 +109,10 @@ class ShelfViewModel(
 
     init { refresh() }
 
-    fun refresh() {
+    fun refresh(force: Boolean = false) {
         viewModelScope.launch {
             _refreshing.value = true
-            repo.refresh(kind).onFailure { _error.value = it.message }
+            repo.refresh(kind, force).onFailure { _error.value = it.message }
             _refreshing.value = false
         }
     }

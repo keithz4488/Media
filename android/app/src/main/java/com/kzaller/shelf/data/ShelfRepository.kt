@@ -34,14 +34,22 @@ class ShelfRepository(context: Context) {
     fun observeAll(): Flow<List<ItemDto>> =
         db.items().observeAll().map { rows -> rows.map(ItemEntity::toDto) }
 
-    suspend fun refreshAll(): Result<Unit> = runCatching {
-        MediaKind.values().forEach { refresh(it).getOrThrow() }
+    suspend fun refreshAll(force: Boolean = false): Result<Unit> = runCatching {
+        MediaKind.values().forEach { refresh(it, force).getOrThrow() }
     }
 
-    suspend fun refresh(kind: MediaKind): Result<Unit> = runCatching {
+    /**
+     * Pull a shelf from the server into the local cache. Since this device is the only writer,
+     * the cache is authoritative right after edits, so we skip a server round-trip when we just
+     * refreshed (many screens refresh on open). Pull-to-refresh and post-import pass force=true.
+     */
+    suspend fun refresh(kind: MediaKind, force: Boolean = false): Result<Unit> = runCatching {
+        val now = System.currentTimeMillis()
+        if (!force && now - (lastRefresh[kind.wire] ?: 0L) < REFRESH_INTERVAL_MS) return@runCatching
         val resp = api.list(kind = kind.wire)
         db.items().clearKind(kind.wire)
         db.items().upsertAll(resp.items.map(ItemEntity::fromDto))
+        lastRefresh[kind.wire] = System.currentTimeMillis()
     }
 
     suspend fun add(
@@ -172,5 +180,12 @@ class ShelfRepository(context: Context) {
 
     suspend fun loadScores(id: String): Result<com.kzaller.shelf.data.models.Scores> = runCatching {
         api.scores(id).scores
+    }
+
+    companion object {
+        // Shared across repository instances (Room is a singleton): the last time each shelf
+        // was pulled from the server, so back-to-back screen opens don't all re-fetch.
+        private val lastRefresh = java.util.concurrent.ConcurrentHashMap<String, Long>()
+        private const val REFRESH_INTERVAL_MS = 30_000L
     }
 }

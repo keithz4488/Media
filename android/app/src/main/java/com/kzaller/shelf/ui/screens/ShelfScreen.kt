@@ -283,7 +283,7 @@ fun ShelfScreen(
                     // works whether or not items are present.
                     PullToRefreshBox(
                         isRefreshing = refreshing,
-                        onRefresh = { vm.refresh() },
+                        onRefresh = { vm.refresh(force = true) },
                         modifier = Modifier.fillMaxSize(),
                     ) {
                         if (items.isEmpty()) {

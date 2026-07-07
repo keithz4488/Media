@@ -146,8 +146,8 @@ class ImportViewModel(
         val inserted = repo.bulkImport(requests).getOrElse {
             _state.value = ImportState.Error(it.message ?: "Import failed"); return
         }
-        // Pull fresh data so the new items show on the shelves.
-        MediaKind.values().forEach { repo.refresh(it) }
+        // Pull fresh data so the new items show on the shelves (bypass the refresh throttle).
+        repo.refreshAll(force = true)
         _state.value = ImportState.Done(inserted, skippedCount)
     }
 
