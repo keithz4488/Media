@@ -16,6 +16,7 @@ object Status {
     const val PLAYED   = "played"
     const val COMPLETE = "complete"
     const val SEEN     = "seen" // legacy: older items may have this; still display it
+    const val SHOW_TO  = "show_to" // movies/TV you've seen and want to show someone else
 
     /**
      * Pseudo status-filter (not a real status you can set on an item): a quick "backlog"
@@ -25,13 +26,13 @@ object Status {
     const val NOT_WATCHED = "not_watched"
 
     private val CANONICAL_ORDER = listOf(
-        OWNED, READING, READ, WATCHING, WATCHED, PLAYING, PLAYED, COMPLETE, SEEN, WISHLIST,
+        OWNED, READING, READ, WATCHING, WATCHED, SHOW_TO, PLAYING, PLAYED, COMPLETE, SEEN, WISHLIST,
     )
 
     fun optionsFor(kind: MediaKind): List<String> = when (kind) {
         MediaKind.BOOK  -> listOf(OWNED, READING, READ, WISHLIST)
-        MediaKind.MOVIE -> listOf(OWNED, WATCHED, WISHLIST)
-        MediaKind.TV    -> listOf(OWNED, WATCHING, WATCHED, WISHLIST)
+        MediaKind.MOVIE -> listOf(OWNED, WATCHED, SHOW_TO, WISHLIST)
+        MediaKind.TV    -> listOf(OWNED, WATCHING, WATCHED, SHOW_TO, WISHLIST)
         MediaKind.GAME  -> listOf(OWNED, PLAYING, PLAYED, COMPLETE, WISHLIST)
     }
 
@@ -58,6 +59,7 @@ object Status {
             PLAYED   -> "Played"
             COMPLETE -> "100%"
             SEEN     -> "Seen"
+            SHOW_TO  -> "Show To"
             NOT_WATCHED -> "Not Watched"
             else     -> code.replaceFirstChar { it.uppercase() }
         }

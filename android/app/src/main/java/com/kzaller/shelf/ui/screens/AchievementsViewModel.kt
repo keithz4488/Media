@@ -46,22 +46,40 @@ class AchievementsViewModel(
             // install (which is exactly when the DataStore "seeded" flag is missing).
             repo.refreshAll()
 
+            val catalog = Achievements.ALL.map { it.id }.toSet()
             // Seeding is silent, so a reinstall quietly banks everything already earned and
             // only achievements crossed AFTER this point ever toast.
             var seeded = prefs.observeAchievementsSeeded().first()
+            var known = prefs.observeKnownAchievements().first()
+            // Back-compat: an install seeded before this feature has no known set; treat the
+            // whole current catalog as already-known so adding achievements doesn't storm.
+            var knownReady = known.isNotEmpty()
+
             repo.observeAll().collect { items ->
                 val computed = Achievements.unlockedIds(AchievementStats.from(items))
                 if (!seeded) {
                     prefs.setUnlockedAchievements(computed)
                     prefs.setAchievementsSeeded()
-                    seeded = true
+                    prefs.setKnownAchievements(catalog)
+                    seeded = true; known = catalog; knownReady = true
                     return@collect
                 }
                 val stored = prefs.observeUnlockedAchievements().first()
-                val fresh = computed - stored
+                // Achievements newly ADDED to the app since last run: silently bank any the
+                // user already qualifies for, so catalog growth never fires a banner.
+                val brandNew = if (knownReady) catalog - known else catalog
+                val silentBank = computed intersect brandNew
+                val effectiveStored = stored + silentBank
+                val fresh = computed - effectiveStored
+                if (silentBank.isNotEmpty() || fresh.isNotEmpty()) {
+                    prefs.setUnlockedAchievements(effectiveStored + computed)
+                }
                 if (fresh.isNotEmpty()) {
-                    prefs.setUnlockedAchievements(stored + computed)
                     _queue.value = _queue.value + Achievements.ALL.filter { it.id in fresh }
+                }
+                if (!knownReady || known != catalog) {
+                    prefs.setKnownAchievements(catalog)
+                    known = catalog; knownReady = true
                 }
             }
         }

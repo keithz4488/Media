@@ -65,6 +65,18 @@ class AppPreferences(private val context: Context) {
         context.dataStore.edit { it[seededKey] = true }
     }
 
+    private val knownAchKey = stringPreferencesKey("achievements_known")
+
+    /** IDs of achievements the app knew about last run, so newly-added ones don't toast-storm. */
+    fun observeKnownAchievements(): Flow<Set<String>> =
+        context.dataStore.data.map { prefs ->
+            prefs[knownAchKey]?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet().orEmpty()
+        }
+
+    suspend fun setKnownAchievements(ids: Set<String>) {
+        context.dataStore.edit { it[knownAchKey] = ids.joinToString(",") }
+    }
+
     fun observeViewMode(kind: MediaKind): Flow<ViewMode> =
         context.dataStore.data.map { prefs ->
             val raw = prefs[viewKey(kind)] ?: return@map ViewMode.GRID

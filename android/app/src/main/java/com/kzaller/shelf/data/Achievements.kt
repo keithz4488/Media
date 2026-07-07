@@ -38,6 +38,11 @@ data class AchievementStats(
     val physical: Int,
     val digital: Int,
     val bothFormats: Int,        // items flagged physical AND digital
+    val watched: Int,            // movies + TV marked watched
+    val read: Int,               // books marked read
+    val played: Int,             // games marked played
+    val wishlist: Int,           // anything on a wishlist
+    val showTo: Int,             // movies/TV flagged to show someone
 ) {
     companion object {
         fun from(items: List<ItemDto>): AchievementStats {
@@ -74,6 +79,17 @@ data class AchievementStats(
                     val f = Format.parse(it.format)
                     f.contains(Format.PHYSICAL) && f.contains(Format.DIGITAL)
                 },
+                watched = items.count {
+                    (it.kind == MediaKind.MOVIE || it.kind == MediaKind.TV) &&
+                        Status.parse(it.status).contains(Status.WATCHED)
+                },
+                read = items.count { it.kind == MediaKind.BOOK && Status.parse(it.status).contains(Status.READ) },
+                played = items.count { it.kind == MediaKind.GAME && Status.parse(it.status).contains(Status.PLAYED) },
+                wishlist = items.count { Status.parse(it.status).contains(Status.WISHLIST) },
+                showTo = items.count {
+                    (it.kind == MediaKind.MOVIE || it.kind == MediaKind.TV) &&
+                        Status.parse(it.status).contains(Status.SHOW_TO)
+                },
             )
         }
     }
@@ -83,7 +99,8 @@ object Achievements {
 
     private val ROMAN = listOf(
         "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X",
-        "XI", "XII", "XIII", "XIV", "XV", "XVI",
+        "XI", "XII", "XIII", "XIV", "XV", "XVI", "XVII", "XVIII", "XIX", "XX",
+        "XXI", "XXII", "XXIII", "XXIV",
     )
 
     private fun rarityForTier(index: Int, count: Int): Rarity {
@@ -118,48 +135,65 @@ object Achievements {
 
     val ALL: List<Achievement> = buildList {
         addAll(tiers("total", "Collector", "📚",
-            listOf(1, 5, 10, 25, 50, 75, 100, 150, 200, 300, 400, 500, 750, 1000, 1500, 2000),
+            listOf(1, 5, 10, 25, 50, 75, 100, 150, 200, 300, 400, 500, 750, 1000, 1500, 2000, 3000, 5000),
             { "Own $it items" }) { it.total })
         addAll(tiers("book", "Bookworm", "📖",
-            listOf(1, 5, 10, 25, 50, 100, 200), { "Shelve $it books" }) { it.byKind[MediaKind.BOOK] ?: 0 })
+            listOf(1, 5, 10, 25, 50, 100, 200, 350, 500), { "Shelve $it books" }) { it.byKind[MediaKind.BOOK] ?: 0 })
         addAll(tiers("movie", "Cinephile", "🎬",
-            listOf(1, 5, 10, 25, 50, 100, 200), { "Shelve $it movies" }) { it.byKind[MediaKind.MOVIE] ?: 0 })
+            listOf(1, 5, 10, 25, 50, 100, 200, 350, 500, 750, 1000), { "Shelve $it movies" }) { it.byKind[MediaKind.MOVIE] ?: 0 })
         addAll(tiers("tv", "Binger", "📺",
-            listOf(1, 5, 10, 25, 50, 100), { "Shelve $it TV shows" }) { it.byKind[MediaKind.TV] ?: 0 })
+            listOf(1, 5, 10, 25, 50, 100, 200, 350, 500), { "Shelve $it TV shows" }) { it.byKind[MediaKind.TV] ?: 0 })
         addAll(tiers("game", "Gamer", "🎮",
-            listOf(1, 5, 10, 25, 50, 100, 200), { "Shelve $it games" }) { it.byKind[MediaKind.GAME] ?: 0 })
+            listOf(1, 5, 10, 25, 50, 100, 200, 350, 500), { "Shelve $it games" }) { it.byKind[MediaKind.GAME] ?: 0 })
         addAll(tiers("done", "Finisher", "✅",
-            listOf(1, 5, 10, 25, 50, 100, 150, 250, 500), { "Finish $it items" }) { it.completed })
+            listOf(1, 5, 10, 25, 50, 100, 150, 250, 500, 750, 1000), { "Finish $it items" }) { it.completed })
         addAll(tiers("rated", "Critic", "⭐",
-            listOf(1, 10, 25, 50, 100, 200, 500), { "Rate $it items" }) { it.rated })
+            listOf(1, 10, 25, 50, 100, 200, 500, 1000), { "Rate $it items" }) { it.rated })
         addAll(tiers("five", "Superfan", "🌟",
-            listOf(1, 5, 10, 25, 50, 100), { "Give $it five-star ratings" }) { it.fiveStars })
+            listOf(1, 5, 10, 25, 50, 100, 200), { "Give $it five-star ratings" }) { it.fiveStars })
         addAll(tiers("notes", "Annotator", "📝",
-            listOf(1, 5, 15, 30, 60), { "Add notes to $it items" }) { it.withNotes })
+            listOf(1, 5, 15, 30, 60, 120), { "Add notes to $it items" }) { it.withNotes })
         addAll(tiers("years", "Time Traveler", "🕰️",
-            listOf(3, 5, 10, 20, 30, 50), { "Own items from $it different years" }) { it.distinctYears })
+            listOf(3, 5, 10, 20, 30, 50, 75), { "Own items from $it different years" }) { it.distinctYears })
         addAll(tiers("plat", "Platform Hopper", "🕹️",
             listOf(2, 3, 4, 5), { "Own games on $it platforms" }) { it.gamePlatforms })
         addAll(tiers("cons", "Console Collector", "🎛️",
             listOf(2, 4, 6, 8, 12), { "Own games across $it consoles" }) { it.consoles })
         addAll(tiers("hundo", "Perfectionist", "💯",
-            listOf(1, 3, 5, 10, 25, 50), { "100% $it games" }) { it.gamesComplete100 })
+            listOf(1, 3, 5, 10, 25, 50, 100), { "100% $it games" }) { it.gamesComplete100 })
         addAll(tiers("phys", "Purist", "📀",
-            listOf(1, 10, 25, 50, 100, 250), { "Own $it physical items" }) { it.physical })
+            listOf(1, 10, 25, 50, 100, 250, 500), { "Own $it physical items" }) { it.physical })
         addAll(tiers("digi", "Cloud Native", "☁️",
-            listOf(1, 10, 25, 50, 100, 250), { "Own $it digital items" }) { it.digital })
+            listOf(1, 10, 25, 50, 100, 250, 500, 1000), { "Own $it digital items" }) { it.digital })
 
-        // --- unique specials (9) ---
+        // --- activity families (what you've actually watched/read/played) ---
+        addAll(tiers("watched", "Screening Room", "🍿",
+            listOf(1, 10, 25, 50, 100, 250, 500, 1000), { "Watch $it movies or shows" }) { it.watched })
+        addAll(tiers("readfam", "Well Read", "📕",
+            listOf(1, 5, 10, 25, 50, 100, 200), { "Read $it books" }) { it.read })
+        addAll(tiers("playfam", "Player One", "🎯",
+            listOf(1, 5, 10, 25, 50, 100, 200), { "Play $it games" }) { it.played })
+        addAll(tiers("wish", "Wishful Thinking", "🌠",
+            listOf(1, 5, 10, 25, 50, 100, 200), { "Add $it items to a wishlist" }) { it.wishlist })
+        addAll(tiers("showto", "Evangelist", "📣",
+            listOf(1, 3, 5, 10, 25, 50), { "Flag $it movies or shows to share with someone" }) { it.showTo })
+
+        // --- unique specials ---
         add(Achievement("well_rounded", "Well Rounded", "Have something on all 4 shelves", "🧭", 4, Rarity.RARE) { it.kindsWithItems })
         add(Achievement("full_house", "Full House", "10+ on every shelf", "🏠", 10, Rarity.EPIC) { it.balancedMin })
         add(Achievement("renaissance", "Renaissance", "25+ on every shelf", "⚖️", 25, Rarity.EPIC) { it.balancedMin })
         add(Achievement("grandmaster", "Grandmaster", "50+ on every shelf", "👑", 50, Rarity.LEGENDARY) { it.balancedMin })
         add(Achievement("hall_of_fame", "Hall of Fame", "100+ on every shelf", "🏆", 100, Rarity.LEGENDARY) { it.balancedMin })
+        add(Achievement("archivist", "Archivist", "250+ on every shelf", "🗄️", 250, Rarity.LEGENDARY) { it.balancedMin })
         add(Achievement("retro", "Retro Hunter", "Own something from before 1990", "📼", 1, Rarity.RARE) { if ((it.oldest ?: 9999) < 1990) 1 else 0 })
         add(Achievement("vintage", "Vintage Vault", "Own something from before 1980", "💿", 1, Rarity.EPIC) { if ((it.oldest ?: 9999) < 1980) 1 else 0 })
         add(Achievement("antiquarian", "Antiquarian", "Own something from before 1970", "📜", 1, Rarity.LEGENDARY) { if ((it.oldest ?: 9999) < 1970) 1 else 0 })
+        add(Achievement("silent_era", "Silent Era", "Own something from before 1950", "🎞️", 1, Rarity.LEGENDARY) { if ((it.oldest ?: 9999) < 1950) 1 else 0 })
         add(Achievement("day_one", "Day One", "Own something from 2024 or later", "🚀", 1, Rarity.RARE) { if ((it.newest ?: 0) >= 2024) 1 else 0 })
         add(Achievement("double_dip", "Double Dipper", "Own 10 items both physically and digitally", "🔁", 10, Rarity.EPIC) { it.bothFormats })
+        add(Achievement("double_dip_pro", "Twin Keeper", "Own 50 items both physically and digitally", "♊", 50, Rarity.LEGENDARY) { it.bothFormats })
+        add(Achievement("curator", "Curator", "Rate 500 items", "🎓", 500, Rarity.LEGENDARY) { it.rated })
+        add(Achievement("librarian", "Head Librarian", "Own 5,000 items", "🏛️", 5000, Rarity.LEGENDARY) { it.total })
     }
 
     fun unlockedIds(stats: AchievementStats): Set<String> =
