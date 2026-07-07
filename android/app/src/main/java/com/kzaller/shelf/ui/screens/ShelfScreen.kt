@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items as listItems
 import androidx.compose.material.icons.Icons
@@ -24,8 +25,12 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sort
+import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.ViewList
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
@@ -37,6 +42,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -106,6 +112,7 @@ fun ShelfScreen(
         val sheetState = rememberModalBottomSheetState()
         var searchOpen by remember { mutableStateOf(false) }
         var sortMenuOpen by remember { mutableStateOf(false) }
+        var grouped by remember { mutableStateOf(false) }
         var bulkStatusMenuOpen by remember { mutableStateOf(false) }
 
         Scaffold(
@@ -199,14 +206,26 @@ fun ShelfScreen(
                                         DropdownMenuItem(
                                             text = { Text(mode.label) },
                                             trailingIcon = {
-                                                if (mode == sort) Icon(Icons.Default.Check, contentDescription = null)
+                                                if (mode == sort && !grouped) Icon(Icons.Default.Check, contentDescription = null)
                                             },
                                             onClick = {
                                                 vm.setSort(mode)
+                                                grouped = false
                                                 sortMenuOpen = false
                                             },
                                         )
                                     }
+                                    HorizontalDivider()
+                                    DropdownMenuItem(
+                                        text = { Text("Group by series") },
+                                        trailingIcon = {
+                                            if (grouped) Icon(Icons.Default.Check, contentDescription = null)
+                                        },
+                                        onClick = {
+                                            grouped = !grouped
+                                            sortMenuOpen = false
+                                        },
+                                    )
                                 }
                             }
                             IconButton(onClick = { sheetOpen = true }) {
@@ -269,8 +288,17 @@ fun ShelfScreen(
                     ) {
                         if (items.isEmpty()) {
                             EmptyState(
+                                kind = kind,
                                 filtered = anyFilterActive,
                                 searching = query.isNotBlank(),
+                            )
+                        } else if (grouped) {
+                            GroupedList(
+                                items = items,
+                                selection = selection,
+                                inSelectionMode = inSelectionMode,
+                                onItem = onItem,
+                                onToggle = vm::toggleSelection,
                             )
                         } else if (viewMode == ViewMode.GRID) {
                             // Cibby-style: standing covers resting on wooden planks.
@@ -388,16 +416,71 @@ private fun ActiveFilterBar(
     }
 }
 
+/**
+ * "Group by series" layout: a flat list broken into sections, one per detected series/franchise,
+ * with a leftover "Standalone" section. Uses list rows (not the plank grid) so section headers
+ * read cleanly.
+ */
 @Composable
-private fun EmptyState(filtered: Boolean, searching: Boolean) {
+private fun GroupedList(
+    items: List<com.kzaller.shelf.data.models.ItemDto>,
+    selection: Set<String>,
+    inSelectionMode: Boolean,
+    onItem: (String) -> Unit,
+    onToggle: (String) -> Unit,
+) {
+    val groups = remember(items) { com.kzaller.shelf.data.Series.group(items) }
+    LazyColumn(
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        groups.forEach { g ->
+            item(key = "hdr:${g.name ?: "standalone"}") {
+                Text(
+                    text = g.name ?: "Standalone",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 2.dp),
+                )
+            }
+            listItems(g.items, key = { "${it.kind.wire}:${it.id}" }) { item ->
+                ItemListRow(
+                    item = item,
+                    selected = item.id in selection,
+                    onClick = { clicked ->
+                        if (inSelectionMode) onToggle(clicked.id) else onItem(clicked.id)
+                    },
+                    onLongClick = { clicked -> onToggle(clicked.id) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyState(kind: MediaKind, filtered: Boolean, searching: Boolean) {
     val (title, sub) = when {
         searching && filtered -> "No matches" to "Try a different filter or search"
         searching             -> "No matches" to "Try a different search term"
         filtered              -> "Nothing matches this filter" to "Try a different combination"
         else                  -> "Nothing here yet" to "Tap + to scan or search"
     }
+    val art = when (kind) {
+        MediaKind.BOOK  -> Icons.Default.MenuBook
+        MediaKind.MOVIE -> Icons.Default.Movie
+        MediaKind.TV    -> Icons.Default.Tv
+        MediaKind.GAME  -> Icons.Default.SportsEsports
+    }
     Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                imageVector = art,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.16f),
+                modifier = Modifier.size(120.dp),
+            )
+            Spacer(Modifier.height(12.dp))
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,

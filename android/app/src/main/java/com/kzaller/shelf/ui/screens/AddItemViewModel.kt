@@ -9,8 +9,11 @@ import com.kzaller.shelf.data.models.SearchHit
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class AddItemViewModel(
@@ -51,6 +54,27 @@ class AddItemViewModel(
     private val _fromCamera = MutableStateFlow(false)
 
     private var searchJob: Job? = null
+
+    /**
+     * Keys of items already on this shelf, so search results can flag duplicates. We index both
+     * the external id (exact) and a normalized title+year (catches the same title added manually
+     * or from a different source).
+     */
+    val onShelfKeys: StateFlow<Set<String>> =
+        repo.observeShelf(kind)
+            .map { list ->
+                buildSet {
+                    list.forEach { i ->
+                        i.externalId?.let { add("id:${i.externalSrc}:$it") }
+                        add("tt:${i.title.trim().lowercase()}:${i.year ?: 0}")
+                    }
+                }
+            }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
+
+    /** Build the same key pair for a search hit; used by the UI to show an "On shelf" flag. */
+    fun duplicateKeys(hit: SearchHit): Pair<String, String> =
+        "id:${hit.externalSrc}:${hit.externalId}" to "tt:${hit.title.trim().lowercase()}:${hit.year ?: 0}"
 
     fun goTo(mode: Mode) {
         if (mode != Mode.SEARCH && mode != Mode.MANUAL) _fromCamera.value = false

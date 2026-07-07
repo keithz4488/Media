@@ -1,5 +1,9 @@
 package com.kzaller.shelf.ui.screens
 
+import android.content.Context
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,8 +21,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -30,16 +37,25 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.kzaller.shelf.data.Export
 import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.models.ItemDto
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import com.kzaller.shelf.ui.theme.MediaShelfTheme
 import com.kzaller.shelf.ui.theme.flavorFor
 
@@ -51,6 +67,19 @@ fun StatsScreen(
     onShelfTap: (MediaKind) -> Unit,
 ) {
     val snap by vm.snapshot.collectAsState()
+    val allItems by vm.allItems.collectAsState()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    // The document the user picks is written on the IO dispatcher with whatever content we
+    // staged when they chose the format.
+    var pendingContent by remember { mutableStateOf("") }
+    val jsonLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri -> uri?.let { writeTextToUri(context, it, pendingContent, scope) } }
+    val csvLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/csv"),
+    ) { uri -> uri?.let { writeTextToUri(context, it, pendingContent, scope) } }
 
     MediaShelfTheme(dark = true) {
         Scaffold(
@@ -63,9 +92,34 @@ fun StatsScreen(
                             Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                         }
                     },
+                    actions = {
+                        var menuOpen by remember { mutableStateOf(false) }
+                        IconButton(onClick = { menuOpen = true }, enabled = allItems.isNotEmpty()) {
+                            Icon(Icons.Default.FileDownload, contentDescription = "Export")
+                        }
+                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Export as JSON") },
+                                onClick = {
+                                    menuOpen = false
+                                    pendingContent = Export.toJson(allItems)
+                                    jsonLauncher.launch("media-shelf-backup.json")
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Export as CSV") },
+                                onClick = {
+                                    menuOpen = false
+                                    pendingContent = Export.toCsv(allItems)
+                                    csvLauncher.launch("media-shelf-backup.csv")
+                                },
+                            )
+                        }
+                    },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = Color.Transparent,
                         navigationIconContentColor = MaterialTheme.colorScheme.onBackground,
+                        actionIconContentColor = MaterialTheme.colorScheme.onBackground,
                     ),
                 )
             },
@@ -112,6 +166,15 @@ fun StatsScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+/** Writes exported text to the user-picked document off the main thread. */
+private fun writeTextToUri(context: Context, uri: Uri, text: String, scope: CoroutineScope) {
+    scope.launch(Dispatchers.IO) {
+        runCatching {
+            context.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray()) }
         }
     }
 }

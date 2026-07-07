@@ -30,6 +30,10 @@ class StatsViewModel(private val repo: ShelfRepository) : ViewModel() {
         .map(::aggregate)
         .stateIn(viewModelScope, SharingStarted.Eagerly, empty())
 
+    /** Full library for export/backup. */
+    val allItems: StateFlow<List<ItemDto>> =
+        repo.observeAll().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
     init {
         // Fresh data before rendering stats off stale cache.
         viewModelScope.launch { repo.refreshAll() }

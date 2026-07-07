@@ -97,6 +97,7 @@ fun AddItemScreen(
         val statusMsg by vm.statusMsg.collectAsState()
         val bulkMode by vm.bulkMode.collectAsState()
         val pendingHits by vm.pendingHits.collectAsState()
+        val onShelfKeys by vm.onShelfKeys.collectAsState()
         val snackbar = remember { SnackbarHostState() }
 
         LaunchedEffect(error) { error?.let { snackbar.showSnackbar(it); vm.clearError() } }
@@ -147,6 +148,7 @@ fun AddItemScreen(
                         selectedKeys = remember(pendingHits) {
                             pendingHits.mapTo(HashSet()) { "${it.externalSrc}:${it.externalId}" }
                         },
+                        onShelfKeys = onShelfKeys,
                         onQuery = vm::setQuery,
                         onSubmit = { vm.searchNow() },
                         onPick = { vm.onSearchPick(it, after = onAdded) },
@@ -228,6 +230,7 @@ private fun SearchSection(
     bulkMode: Boolean,
     pendingCount: Int,
     selectedKeys: Set<String>,
+    onShelfKeys: Set<String>,
     onQuery: (String) -> Unit,
     onSubmit: () -> Unit,
     onPick: (SearchHit) -> Unit,
@@ -270,9 +273,12 @@ private fun SearchSection(
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxSize()) {
             items(hits, key = { "${it.externalSrc}:${it.externalId}" }) { hit ->
                 val key = "${hit.externalSrc}:${hit.externalId}"
+                val duplicate = "id:${hit.externalSrc}:${hit.externalId}" in onShelfKeys ||
+                    "tt:${hit.title.trim().lowercase()}:${hit.year ?: 0}" in onShelfKeys
                 HitRow(
                     hit = hit,
                     selected = key in selectedKeys,
+                    duplicate = duplicate,
                     onPick = { onPick(hit) },
                 )
             }
@@ -284,6 +290,7 @@ private fun SearchSection(
 private fun HitRow(
     hit: SearchHit,
     selected: Boolean = false,
+    duplicate: Boolean = false,
     onPick: () -> Unit,
 ) {
     // Selected state needs to read clearly *after* the touch ripple fades, so it's a strong
@@ -341,6 +348,14 @@ private fun HitRow(
                 val secondary = listOfNotNull(hit.subtitle, hit.year?.toString()).joinToString(" · ")
                 if (secondary.isNotBlank()) {
                     Text(secondary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f), maxLines = 1)
+                }
+                if (duplicate) {
+                    Spacer(Modifier.size(4.dp))
+                    Text(
+                        text = "Already on your shelf",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.tertiary,
+                    )
                 }
             }
             if (selected) {
