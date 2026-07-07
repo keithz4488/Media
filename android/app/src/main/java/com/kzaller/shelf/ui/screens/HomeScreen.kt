@@ -30,7 +30,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -52,8 +51,6 @@ import coil.compose.AsyncImage
 import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.ShelfRepository
 import com.kzaller.shelf.data.models.ItemDto
-import com.kzaller.shelf.data.preferences.AppPreferences
-import com.kzaller.shelf.ui.components.AchievementUnlockBanner
 import com.kzaller.shelf.ui.theme.MediaShelfTheme
 import com.kzaller.shelf.ui.theme.flavorFor
 
@@ -68,22 +65,9 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
     val repo = remember { ShelfRepository(context) }
-    val prefs = remember { AppPreferences(context) }
     val vm: HomeViewModel = viewModel(factory = HomeViewModel.factory(repo))
-    val achievementsVm: AchievementsViewModel =
-        viewModel(factory = AchievementsViewModel.factory(repo, prefs))
     val counts by vm.counts.collectAsState()
-    val recent by vm.recentlyAdded.collectAsState()
-    val unlockQueue by achievementsVm.queue.collectAsState()
-    val currentUnlock = unlockQueue.firstOrNull()
-
-    // Show each newly-unlocked achievement banner for a few seconds, one at a time.
-    LaunchedEffect(currentUnlock) {
-        if (currentUnlock != null) {
-            kotlinx.coroutines.delay(3600)
-            achievementsVm.consume()
-        }
-    }
+    val inProgress by vm.inProgress.collectAsState()
 
     MediaShelfTheme(dark = true) {
         Scaffold(containerColor = Color.Transparent) { padding ->
@@ -153,35 +137,30 @@ fun HomeScreen(
                             .fillMaxWidth()
                             .padding(bottom = 16.dp),
                     )
-                    if (recent.isNotEmpty()) {
-                        RecentlyAddedRow(
-                            entries = recent,
+                    if (inProgress.isNotEmpty()) {
+                        JumpBackInRow(
+                            entries = inProgress,
                             onOpenItem = onOpenItem,
                             modifier = Modifier.padding(bottom = 20.dp),
                         )
                     }
                 }
-                // Flashy unlock banner overlays the top of the home screen.
-                AchievementUnlockBanner(
-                    achievement = currentUnlock,
-                    modifier = Modifier.align(Alignment.TopCenter),
-                )
             }
         }
     }
 }
 
-// ---------------------------------------------------------------- recently added
+// ---------------------------------------------------------------- jump back in (in-progress)
 
 @Composable
-private fun RecentlyAddedRow(
+private fun JumpBackInRow(
     entries: List<ItemDto>,
     onOpenItem: (MediaKind, String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
         Text(
-            text = "Recently added",
+            text = "Jump back in",
             style = MaterialTheme.typography.titleSmall.copy(
                 color = Color(0xFFE8E8EA),
                 fontWeight = FontWeight.SemiBold,

@@ -1,7 +1,14 @@
 package com.kzaller.shelf.ui
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -15,6 +22,7 @@ import androidx.navigation.navArgument
 import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.ShelfRepository
 import com.kzaller.shelf.data.preferences.AppPreferences
+import com.kzaller.shelf.ui.components.AchievementUnlockBanner
 import com.kzaller.shelf.ui.screens.AchievementsScreen
 import com.kzaller.shelf.ui.screens.AchievementsViewModel
 import com.kzaller.shelf.ui.screens.AddItemScreen
@@ -61,7 +69,20 @@ fun ShelfApp() {
     val prefs = remember { AppPreferences(context) }
     val nav = rememberNavController()
 
+    // One app-wide achievements watcher so unlock banners can appear on ANY screen, not just home.
+    val achievementsVm: AchievementsViewModel =
+        viewModel(factory = AchievementsViewModel.factory(repo, prefs))
+    val unlockQueue by achievementsVm.queue.collectAsState()
+    val currentUnlock = unlockQueue.firstOrNull()
+    LaunchedEffect(currentUnlock) {
+        if (currentUnlock != null) {
+            kotlinx.coroutines.delay(3600)
+            achievementsVm.consume()
+        }
+    }
+
     MediaShelfTheme {
+        Box(modifier = Modifier.fillMaxSize()) {
         NavHost(navController = nav, startDestination = Routes.HOME) {
             composable(Routes.HOME) { entry ->
                 HomeScreen(
@@ -157,6 +178,12 @@ fun ShelfApp() {
                     onBack = { nav.popBackStack() },
                 )
             }
+        }
+        // Global unlock banner overlays every screen.
+        AchievementUnlockBanner(
+            achievement = currentUnlock,
+            modifier = Modifier.align(Alignment.TopCenter),
+        )
         }
     }
 }

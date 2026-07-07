@@ -34,6 +34,8 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
@@ -359,57 +361,96 @@ private fun DetailPage(
                     }
 
                     if (current.kind == MediaKind.GAME) {
-                        Spacer(Modifier.height(16.dp))
-                        Text("Platform", style = MaterialTheme.typography.titleSmall)
-                        Spacer(Modifier.height(6.dp))
                         val selectedPlatforms = Platform.parse(current.userPlatform)
                         val selectedConsoles = Console.parse(current.consoles)
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        // Collapse the (tall) platform+console editor by default once something is
+                        // set, showing just a one-line summary; expand to edit. Keeps games tidy.
+                        var platformExpanded by remember(current.id) {
+                            mutableStateOf(selectedPlatforms.isEmpty())
+                        }
+                        val summary = when {
+                            selectedConsoles.isNotEmpty() -> selectedConsoles.joinToString(", ") { Console.label(it) }
+                            selectedPlatforms.isNotEmpty() -> selectedPlatforms.joinToString(", ") { Platform.label(it) }
+                            else -> "Not set"
+                        }
+
+                        Spacer(Modifier.height(16.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { platformExpanded = !platformExpanded },
                         ) {
+                            Text("Platform", style = MaterialTheme.typography.titleSmall)
+                            Spacer(Modifier.size(8.dp))
+                            if (!platformExpanded) {
+                                Text(
+                                    text = summary,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = flavor.accent,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f),
+                                )
+                            } else {
+                                Spacer(Modifier.weight(1f))
+                            }
+                            Icon(
+                                imageVector = if (platformExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                contentDescription = if (platformExpanded) "Collapse" else "Edit platform",
+                                tint = flavor.accent,
+                            )
+                        }
+
+                        if (platformExpanded) {
+                            Spacer(Modifier.height(6.dp))
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Platform.ALL.forEach { p ->
+                                    val on = p in selectedPlatforms
+                                    AssistChip(
+                                        onClick = {
+                                            val newPlatforms = Platform.toggle(current.userPlatform, p)
+                                            // If a platform got removed, strip its consoles too.
+                                            val newPlatformSet = Platform.parse(newPlatforms)
+                                            val newConsoles = Console.pruneToPlatforms(current.consoles, newPlatformSet)
+                                            if (newConsoles == (current.consoles ?: "")) {
+                                                vm.setPlatform(newPlatforms)
+                                            } else {
+                                                vm.setPlatformAndConsoles(newPlatforms, newConsoles)
+                                            }
+                                        },
+                                        label = {
+                                            Text(
+                                                text = Platform.label(p),
+                                                color = if (on) flavor.accent else MaterialTheme.colorScheme.onBackground,
+                                            )
+                                        },
+                                        colors = AssistChipDefaults.assistChipColors(
+                                            containerColor = if (on) flavor.accent.copy(alpha = 0.22f) else Color.Transparent,
+                                        ),
+                                    )
+                                }
+                            }
+                            // Console sub-sections: only for selected platforms that have any
+                            // sub-consoles. PC and Mobile stay flat (no dropdown).
                             Platform.ALL.forEach { p ->
-                                val on = p in selectedPlatforms
-                                AssistChip(
-                                    onClick = {
-                                        val newPlatforms = Platform.toggle(current.userPlatform, p)
-                                        // If a platform got removed, strip its consoles too.
-                                        val newPlatformSet = Platform.parse(newPlatforms)
-                                        val newConsoles = Console.pruneToPlatforms(current.consoles, newPlatformSet)
-                                        if (newConsoles == (current.consoles ?: "")) {
-                                            vm.setPlatform(newPlatforms)
-                                        } else {
-                                            vm.setPlatformAndConsoles(newPlatforms, newConsoles)
-                                        }
+                                if (p !in selectedPlatforms) return@forEach
+                                val consoles = Console.forPlatform(p)
+                                if (consoles.isEmpty()) return@forEach
+                                Spacer(Modifier.height(10.dp))
+                                ConsoleDropdown(
+                                    platform = p,
+                                    consoles = consoles,
+                                    selected = selectedConsoles,
+                                    accent = flavor.accent,
+                                    onToggle = { code ->
+                                        vm.setConsoles(Console.toggle(current.consoles, code))
                                     },
-                                    label = {
-                                        Text(
-                                            text = Platform.label(p),
-                                            color = if (on) flavor.accent else MaterialTheme.colorScheme.onBackground,
-                                        )
-                                    },
-                                    colors = AssistChipDefaults.assistChipColors(
-                                        containerColor = if (on) flavor.accent.copy(alpha = 0.22f) else Color.Transparent,
-                                    ),
                                 )
                             }
-                        }
-                        // Console sub-sections: only for selected platforms that have any
-                        // sub-consoles. PC and Mobile stay flat (no dropdown).
-                        Platform.ALL.forEach { p ->
-                            if (p !in selectedPlatforms) return@forEach
-                            val consoles = Console.forPlatform(p)
-                            if (consoles.isEmpty()) return@forEach
-                            Spacer(Modifier.height(10.dp))
-                            ConsoleDropdown(
-                                platform = p,
-                                consoles = consoles,
-                                selected = selectedConsoles,
-                                accent = flavor.accent,
-                                onToggle = { code ->
-                                    vm.setConsoles(Console.toggle(current.consoles, code))
-                                },
-                            )
                         }
                     }
 

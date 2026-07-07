@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.ShelfRepository
+import com.kzaller.shelf.data.Status
 import com.kzaller.shelf.data.models.ItemDto
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -16,10 +17,16 @@ class HomeViewModel(private val repo: ShelfRepository) : ViewModel() {
     val counts: StateFlow<Map<MediaKind, Int>> =
         repo.observeCounts().stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
-    /** The most recently added items across all shelves, for the "Recently added" home row. */
-    val recentlyAdded: StateFlow<List<ItemDto>> =
+    /** In-progress items (watching / playing / reading) for the "Jump back in" home row,
+     *  most-recently-touched first. */
+    val inProgress: StateFlow<List<ItemDto>> =
         repo.observeAll()
-            .map { all -> all.sortedByDescending { it.addedAt ?: 0L }.take(15) }
+            .map { all ->
+                all.filter { item ->
+                    val s = Status.parse(item.status)
+                    Status.WATCHING in s || Status.PLAYING in s || Status.READING in s
+                }.sortedByDescending { it.updatedAt ?: it.addedAt ?: 0L }.take(15)
+            }
             .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     init {
