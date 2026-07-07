@@ -61,12 +61,13 @@ class ShelfViewModel(
             val statusFiltered = if (filters.isEmpty()) ofKind
                 else ofKind.filter { item ->
                     val s = Status.parse(item.status)
-                    // Real statuses match by intersection; the "Not Watched" pseudo-filter
-                    // matches anything lacking `watched`. They combine as OR, like the rest.
-                    val regular = filters - Status.NOT_WATCHED
+                    // Real statuses match by intersection; the pseudo-filters ("Not Watched",
+                    // "Show To") match on other fields. Everything combines as OR, like the rest.
+                    val regular = filters - Status.NOT_WATCHED - Status.HAS_SHOW_TO
                     val matchesRegular = regular.any { it in s }
                     val matchesNotWatched = Status.NOT_WATCHED in filters && Status.WATCHED !in s
-                    matchesRegular || matchesNotWatched
+                    val matchesShowTo = Status.HAS_SHOW_TO in filters && !item.showTo.isNullOrBlank()
+                    matchesRegular || matchesNotWatched || matchesShowTo
                 }
 
             val formatFiltered = if (formatFilters.isEmpty()) statusFiltered

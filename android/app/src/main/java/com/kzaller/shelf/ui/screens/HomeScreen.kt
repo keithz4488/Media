@@ -6,7 +6,10 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.MarqueeSpacing
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -17,7 +20,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -34,9 +36,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -47,14 +47,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlin.math.roundToInt
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.ShelfRepository
@@ -235,28 +231,10 @@ private fun AnimatedWall(modifier: Modifier = Modifier) {
 
 // ---------------------------------------------------------------- collection at a glance
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CollectionGlance(stats: List<GlanceStat>, modifier: Modifier = Modifier) {
     if (stats.isEmpty()) return
-
-    // A continuous news-ticker crawl: two identical copies of the stat run scroll left at a
-    // constant speed; when the first fully exits, the second is exactly in its place, so the
-    // loop is seamless and never pauses.
-    var contentWidth by remember { mutableStateOf(0) }
-    val density = LocalDensity.current
-    val speedPxPerSec = with(density) { 26.dp.toPx() }
-    val durationMs = if (contentWidth > 0) {
-        (contentWidth / speedPxPerSec * 1000f).toInt().coerceAtLeast(1)
-    } else {
-        1
-    }
-    val transition = rememberInfiniteTransition(label = "ticker")
-    val offset by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = -contentWidth.toFloat(),
-        animationSpec = infiniteRepeatable(tween(durationMs, easing = LinearEasing)),
-        label = "ticker-offset",
-    )
 
     Box(
         modifier = modifier
@@ -266,22 +244,23 @@ private fun CollectionGlance(stats: List<GlanceStat>, modifier: Modifier = Modif
             .background(Color.Black.copy(alpha = 0.22f)),
         contentAlignment = Alignment.CenterStart,
     ) {
-        Row(modifier = Modifier.offset { IntOffset(offset.roundToInt(), 0) }) {
-            TickerRun(stats, Modifier.onGloballyPositioned { contentWidth = it.size.width })
-            TickerRun(stats)
-        }
-    }
-}
-
-/** One run of every stat, each wrapped in gaps and trailed by a divider so copies chain cleanly. */
-@Composable
-private fun TickerRun(stats: List<GlanceStat>, modifier: Modifier = Modifier) {
-    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
-        stats.forEach { stat ->
-            Spacer(Modifier.width(26.dp))
-            GlanceCell(stat.value, stat.label)
-            Spacer(Modifier.width(26.dp))
-            GlanceDivider()
+        // basicMarquee measures the row at its full (unbounded) width and scrolls it continuously
+        // within the box, wrapping with a small gap — a true news-crawl over ALL the stats.
+        Row(
+            modifier = Modifier.basicMarquee(
+                iterations = Int.MAX_VALUE,
+                repeatDelayMillis = 0,
+                spacing = MarqueeSpacing(0.dp),
+                velocity = 34.dp,
+            ),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            stats.forEach { stat ->
+                Spacer(Modifier.width(26.dp))
+                GlanceCell(stat.value, stat.label)
+                Spacer(Modifier.width(26.dp))
+                GlanceDivider()
+            }
         }
     }
 }

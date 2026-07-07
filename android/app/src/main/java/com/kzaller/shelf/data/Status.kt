@@ -24,6 +24,9 @@ object Status {
      */
     const val NOT_WATCHED = "not_watched"
 
+    /** Pseudo-filter matching movies/TV that have at least one "Show to" name set. */
+    const val HAS_SHOW_TO = "has_show_to"
+
     private val CANONICAL_ORDER = listOf(
         OWNED, READING, READ, WATCHING, WATCHED, PLAYING, PLAYED, COMPLETE, SEEN, WISHLIST,
     )
@@ -37,7 +40,7 @@ object Status {
 
     /** Extra pseudo-filters (backlog views) offered on a shelf, beyond real statuses. */
     fun extraFilters(kind: MediaKind): List<String> = when (kind) {
-        MediaKind.MOVIE, MediaKind.TV -> listOf(NOT_WATCHED)
+        MediaKind.MOVIE, MediaKind.TV -> listOf(NOT_WATCHED, HAS_SHOW_TO)
         else -> emptyList()
     }
 
@@ -59,6 +62,7 @@ object Status {
             COMPLETE -> "100%"
             SEEN     -> "Seen"
             NOT_WATCHED -> "Not Watched"
+            HAS_SHOW_TO -> "Show To"
             else     -> code.replaceFirstChar { it.uppercase() }
         }
     }
