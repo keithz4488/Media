@@ -1,5 +1,11 @@
 package com.kzaller.shelf.ui.screens
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -27,9 +33,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -61,7 +70,7 @@ fun HomeScreen(
     val repo = remember { ShelfRepository(context) }
     val vm: HomeViewModel = viewModel(factory = HomeViewModel.factory(repo))
     val counts by vm.counts.collectAsState()
-    val glance by vm.glance.collectAsState()
+    val glanceStats by vm.glanceStats.collectAsState()
 
     MediaShelfTheme(dark = true) {
         Scaffold(containerColor = Color.Transparent) { padding ->
@@ -131,9 +140,9 @@ fun HomeScreen(
                             .fillMaxWidth()
                             .padding(bottom = 16.dp),
                     )
-                    if (glance.total > 0) {
+                    if (glanceStats.isNotEmpty()) {
                         CollectionGlance(
-                            stats = glance,
+                            stats = glanceStats,
                             modifier = Modifier.padding(bottom = 20.dp),
                         )
                     }
@@ -146,22 +155,46 @@ fun HomeScreen(
 // ---------------------------------------------------------------- collection at a glance
 
 @Composable
-private fun CollectionGlance(stats: GlanceStats, modifier: Modifier = Modifier) {
-    Row(
+private fun CollectionGlance(stats: List<GlanceStat>, modifier: Modifier = Modifier) {
+    if (stats.isEmpty()) return
+    val pages = remember(stats) { stats.chunked(3) }
+    var page by remember(pages.size) { mutableStateOf(0) }
+
+    // Auto-advance through the pages like a news ticker.
+    LaunchedEffect(pages.size) {
+        if (pages.size <= 1) return@LaunchedEffect
+        while (true) {
+            kotlinx.coroutines.delay(3500)
+            page = (page + 1) % pages.size
+        }
+    }
+
+    Box(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
             .background(Color.Black.copy(alpha = 0.22f))
             .padding(vertical = 16.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        GlanceCell(stats.total.toString(), "in library")
-        GlanceDivider()
-        GlanceCell(stats.completedThisYear.toString(), "done in ${stats.year}")
-        GlanceDivider()
-        val pct = if (stats.gamesTotal > 0) stats.gamesComplete * 100 / stats.gamesTotal else 0
-        GlanceCell("$pct%", "games 100%")
+        AnimatedContent(
+            targetState = page.coerceIn(0, pages.lastIndex),
+            transitionSpec = {
+                (slideInHorizontally { it } + fadeIn()) togetherWith
+                    (slideOutHorizontally { -it } + fadeOut())
+            },
+            label = "glance-ticker",
+        ) { p ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                pages[p].forEachIndexed { i, stat ->
+                    if (i > 0) GlanceDivider()
+                    GlanceCell(stat.value, stat.label)
+                }
+            }
+        }
     }
 }
 
