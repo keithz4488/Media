@@ -40,10 +40,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
@@ -51,6 +53,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.PI
+import kotlin.math.sin
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.ShelfRepository
@@ -303,60 +307,59 @@ private fun CubbyUnit(
     val frameW = 14.dp        // outer/inner uprights and top plank
     val dividerH = 16.dp      // horizontal divider between rows
     val bottomEdgeH = 8.dp    // a small "front face" strip below the bottom plank
-    val wood = woodBrush()
     val woodEdge = woodEdgeBrush()
 
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(6.dp))
-            .background(wood),
+            .drawBehind { drawWalnut() },
     ) {
         // Top plank
-        Spacer(Modifier.fillMaxWidth().height(frameW).background(wood))
+        Spacer(Modifier.fillMaxWidth().height(frameW))
 
         // Top row: Books | divider | Movies
         Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
-            Spacer(Modifier.width(frameW).fillMaxHeight().background(wood))
+            Spacer(Modifier.width(frameW).fillMaxHeight())
             CubbyCell(
                 kind = MediaKind.BOOK,
                 count = counts[MediaKind.BOOK] ?: 0,
                 onClick = { onShelfTap(MediaKind.BOOK) },
                 modifier = Modifier.weight(1f).fillMaxHeight(),
             )
-            Spacer(Modifier.width(frameW).fillMaxHeight().background(wood))
+            Spacer(Modifier.width(frameW).fillMaxHeight())
             CubbyCell(
                 kind = MediaKind.MOVIE,
                 count = counts[MediaKind.MOVIE] ?: 0,
                 onClick = { onShelfTap(MediaKind.MOVIE) },
                 modifier = Modifier.weight(1f).fillMaxHeight(),
             )
-            Spacer(Modifier.width(frameW).fillMaxHeight().background(wood))
+            Spacer(Modifier.width(frameW).fillMaxHeight())
         }
 
         // Horizontal divider
-        Spacer(Modifier.fillMaxWidth().height(dividerH).background(wood))
+        Spacer(Modifier.fillMaxWidth().height(dividerH))
 
         // Bottom row: TV | divider | Games
         Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
-            Spacer(Modifier.width(frameW).fillMaxHeight().background(wood))
+            Spacer(Modifier.width(frameW).fillMaxHeight())
             CubbyCell(
                 kind = MediaKind.TV,
                 count = counts[MediaKind.TV] ?: 0,
                 onClick = { onShelfTap(MediaKind.TV) },
                 modifier = Modifier.weight(1f).fillMaxHeight(),
             )
-            Spacer(Modifier.width(frameW).fillMaxHeight().background(wood))
+            Spacer(Modifier.width(frameW).fillMaxHeight())
             CubbyCell(
                 kind = MediaKind.GAME,
                 count = counts[MediaKind.GAME] ?: 0,
                 onClick = { onShelfTap(MediaKind.GAME) },
                 modifier = Modifier.weight(1f).fillMaxHeight(),
             )
-            Spacer(Modifier.width(frameW).fillMaxHeight().background(wood))
+            Spacer(Modifier.width(frameW).fillMaxHeight())
         }
 
         // Bottom plank + front face (gives the unit a tiny 3D depth)
-        Spacer(Modifier.fillMaxWidth().height(frameW).background(wood))
+        Spacer(Modifier.fillMaxWidth().height(frameW))
         Spacer(Modifier.fillMaxWidth().height(bottomEdgeH).background(woodEdge))
     }
 }
@@ -431,13 +434,70 @@ private fun wallBrush() = Brush.verticalGradient(
     colors = listOf(Color(0xFF07031A), Color(0xFF140A38), Color(0xFF2A0F52)),
 )
 
-private fun woodBrush() = Brush.verticalGradient(
-    colors = listOf(Color(0xFFC79762), Color(0xFF8A5A30)),
+// Darker walnut front-face strip under the bottom plank, for a little depth.
+private fun woodEdgeBrush() = Brush.verticalGradient(
+    colors = listOf(Color(0xFF3E2415), Color(0xFF20120A)),
 )
 
-private fun woodEdgeBrush() = Brush.verticalGradient(
-    colors = listOf(Color(0xFF8A5A30), Color(0xFF4F311A)),
-)
+/**
+ * Walnut wood texture for the shelf frame: a deep base gradient, wavy grain streaks, a couple
+ * of knots, and a soft diagonal sheen. Drawn behind the cubby so it shows through the frame and
+ * dividers (the cells paint over it). Deterministic seed so the grain doesn't shimmer on redraw.
+ */
+private fun DrawScope.drawWalnut() {
+    val w = size.width
+    val h = size.height
+    val rnd = kotlin.random.Random(4242)
+
+    drawRect(Brush.verticalGradient(listOf(Color(0xFF7A4A28), Color(0xFF3E2415))))
+
+    val lines = (w * 0.28f).toInt().coerceAtLeast(1)
+    repeat(lines) {
+        val x = rnd.nextFloat() * w
+        val dark = rnd.nextBoolean()
+        val color = if (dark) {
+            Color(0xFF281608).copy(alpha = 0.05f + rnd.nextFloat() * 0.12f)
+        } else {
+            Color(0xFFFFE1B4).copy(alpha = 0.03f + rnd.nextFloat() * 0.06f)
+        }
+        val amp = 10f * (0.4f + rnd.nextFloat())
+        val phase = rnd.nextFloat() * (2f * PI.toFloat())
+        val strokeW = 0.6f + rnd.nextFloat() * 1.2f
+        val path = Path().apply {
+            moveTo(x, 0f)
+            var y = 0f
+            while (y <= h) {
+                lineTo(x + sin((y / h) * 2f * PI.toFloat() + phase) * amp, y)
+                y += 4f
+            }
+        }
+        drawPath(path, color, style = Stroke(width = strokeW))
+    }
+
+    repeat(3) {
+        if (rnd.nextFloat() > 0.4f) {
+            val kx = 0.15f * w + rnd.nextFloat() * 0.7f * w
+            val ky = 0.2f * h + rnd.nextFloat() * 0.6f * h
+            for (i in 0 until 5) {
+                val rr = 2f + i * 1.7f
+                drawOval(
+                    color = Color(0xFF2D190C).copy(alpha = (0.30f - rr * 0.02f).coerceAtLeast(0.05f)),
+                    topLeft = Offset(kx - rr * 1.5f, ky - rr),
+                    size = Size(rr * 3f, rr * 2f),
+                    style = Stroke(width = 1.1f),
+                )
+            }
+        }
+    }
+
+    drawRect(
+        Brush.linearGradient(
+            colors = listOf(Color(0xFFFFEBC8).copy(alpha = 0.12f), Color.Transparent),
+            start = Offset(0f, 0f),
+            end = Offset(w * 0.7f, h),
+        ),
+    )
+}
 
 private fun cubbyBackBrush(kind: MediaKind): Brush = when (kind) {
     MediaKind.BOOK -> Brush.verticalGradient(
