@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.kzaller.shelf.ui.components.SynthwaveBackground
 import com.kzaller.shelf.ui.components.rarityColor
 import com.kzaller.shelf.ui.components.rarityLabel
 import com.kzaller.shelf.ui.theme.MediaShelfTheme
@@ -71,13 +72,9 @@ fun AchievementsScreen(
             Box(
                 modifier = Modifier
                     .padding(padding)
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(Color(0xFF0A0A0F), Color(0xFF13131C), Color(0xFF1A1424)),
-                        ),
-                    ),
+                    .fillMaxSize(),
             ) {
+                SynthwaveBackground(modifier = Modifier.matchParentSize())
                 LazyColumn(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),

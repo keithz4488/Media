@@ -47,7 +47,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -56,6 +55,7 @@ import androidx.compose.ui.unit.sp
 import com.kzaller.shelf.data.Export
 import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.models.ItemDto
+import com.kzaller.shelf.ui.components.SynthwaveBackground
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -158,13 +158,9 @@ fun StatsScreen(
             Box(
                 modifier = Modifier
                     .padding(padding)
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(Color(0xFF0A0A0F), Color(0xFF13131C), Color(0xFF1A1424)),
-                        ),
-                    ),
+                    .fillMaxSize(),
             ) {
+                SynthwaveBackground(modifier = Modifier.matchParentSize())
                 LazyColumn(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
