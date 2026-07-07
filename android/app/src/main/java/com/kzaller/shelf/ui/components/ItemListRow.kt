@@ -112,7 +112,7 @@ fun ItemListRow(
                 }
             }
             Spacer(Modifier.size(12.dp))
-            Column(modifier = Modifier.padding(end = 4.dp)) {
+            Column(modifier = Modifier.weight(1f).padding(end = 4.dp)) {
                 Text(
                     text = item.title,
                     style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
@@ -130,6 +130,7 @@ fun ItemListRow(
                     )
                 }
             }
+            FormatBadge(formatCsv = item.format)
         }
     }
 }

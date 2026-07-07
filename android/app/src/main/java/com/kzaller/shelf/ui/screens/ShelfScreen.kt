@@ -59,6 +59,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.kzaller.shelf.data.Format
 import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.Status
 import com.kzaller.shelf.ui.components.ExpandingAddFab
@@ -88,6 +89,9 @@ fun ShelfScreen(
         val items by vm.items.collectAsState()
         val total by vm.totalCount.collectAsState()
         val activeFilters by vm.filters.collectAsState()
+        val activeFormatFilters by vm.formatFilters.collectAsState()
+        val totalActiveFilters = activeFilters.size + activeFormatFilters.size
+        val anyFilterActive = totalActiveFilters > 0
         val query by vm.query.collectAsState()
         val sort by vm.sort.collectAsState()
         val viewMode by vm.viewMode.collectAsState()
@@ -207,8 +211,8 @@ fun ShelfScreen(
                             }
                             IconButton(onClick = { sheetOpen = true }) {
                                 BadgedBox(badge = {
-                                    if (activeFilters.isNotEmpty()) {
-                                        Badge { Text(activeFilters.size.toString()) }
+                                    if (anyFilterActive) {
+                                        Badge { Text(totalActiveFilters.toString()) }
                                     }
                                 }) {
                                     Icon(Icons.Default.FilterList, contentDescription = "Filter")
@@ -246,10 +250,11 @@ fun ShelfScreen(
                                 .padding(horizontal = 16.dp, vertical = 8.dp),
                         )
                     }
-                    if (activeFilters.isNotEmpty()) {
+                    if (anyFilterActive) {
                         ActiveFilterBar(
                             kind = kind,
                             active = activeFilters,
+                            activeFormats = activeFormatFilters,
                             shownCount = items.size,
                             totalCount = total,
                             onClear = vm::clearFilters,
@@ -264,7 +269,7 @@ fun ShelfScreen(
                     ) {
                         if (items.isEmpty()) {
                             EmptyState(
-                                filtered = activeFilters.isNotEmpty(),
+                                filtered = anyFilterActive,
                                 searching = query.isNotBlank(),
                             )
                         } else if (viewMode == ViewMode.GRID) {
@@ -325,7 +330,9 @@ fun ShelfScreen(
                 FilterSheet(
                     kind = kind,
                     selected = activeFilters,
+                    selectedFormats = activeFormatFilters,
                     onToggle = vm::toggleFilter,
+                    onToggleFormat = vm::toggleFormatFilter,
                     onClear = vm::clearFilters,
                     onClose = { sheetOpen = false },
                 )
@@ -339,6 +346,7 @@ fun ShelfScreen(
 private fun ActiveFilterBar(
     kind: MediaKind,
     active: Set<String>,
+    activeFormats: Set<String>,
     shownCount: Int,
     totalCount: Int,
     onClear: () -> Unit,
@@ -359,6 +367,16 @@ private fun ActiveFilterBar(
                 AssistChip(
                     onClick = onClear, // tapping any active chip clears all -- simple
                     label = { Text(Status.label(code, kind)) },
+                    colors = AssistChipDefaults.assistChipColors(
+                        containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
+                        labelColor = MaterialTheme.colorScheme.primary,
+                    ),
+                )
+            }
+            Format.ALL.filter { it in activeFormats }.forEach { code ->
+                AssistChip(
+                    onClick = onClear,
+                    label = { Text(Format.label(code)) },
                     colors = AssistChipDefaults.assistChipColors(
                         containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
                         labelColor = MaterialTheme.colorScheme.primary,
@@ -399,17 +417,21 @@ private fun EmptyState(filtered: Boolean, searching: Boolean) {
 private fun FilterSheet(
     kind: MediaKind,
     selected: Set<String>,
+    selectedFormats: Set<String>,
     onToggle: (String) -> Unit,
+    onToggleFormat: (String) -> Unit,
     onClear: () -> Unit,
     onClose: () -> Unit,
 ) {
     Column(modifier = Modifier.padding(20.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Filter by status", style = MaterialTheme.typography.titleMedium)
+            Text("Filter", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.weight(1f))
             TextButton(onClick = { onClear() }) { Text("Reset") }
         }
         Spacer(Modifier.height(12.dp))
+        Text("Status", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+        Spacer(Modifier.height(6.dp))
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -421,6 +443,27 @@ private fun FilterSheet(
                     selected = on,
                     onClick = { onToggle(code) },
                     label = { Text(Status.label(code, kind)) },
+                    leadingIcon = if (on) {
+                        { Icon(Icons.Default.Check, contentDescription = null) }
+                    } else null,
+                    colors = FilterChipDefaults.filterChipColors(),
+                )
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+        Text("Format", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+        Spacer(Modifier.height(6.dp))
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Format.ALL.forEach { code ->
+                val on = code in selectedFormats
+                FilterChip(
+                    selected = on,
+                    onClick = { onToggleFormat(code) },
+                    label = { Text(Format.label(code)) },
                     leadingIcon = if (on) {
                         { Icon(Icons.Default.Check, contentDescription = null) }
                     } else null,

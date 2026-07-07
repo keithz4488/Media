@@ -35,6 +35,9 @@ data class AchievementStats(
     val oldest: Int?,
     val newest: Int?,
     val distinctYears: Int,
+    val physical: Int,
+    val digital: Int,
+    val bothFormats: Int,        // items flagged physical AND digital
 ) {
     companion object {
         fun from(items: List<ItemDto>): AchievementStats {
@@ -65,6 +68,12 @@ data class AchievementStats(
                 oldest = years.minOrNull(),
                 newest = years.maxOrNull(),
                 distinctYears = years.toSet().size,
+                physical = items.count { Format.parse(it.format).contains(Format.PHYSICAL) },
+                digital = items.count { Format.parse(it.format).contains(Format.DIGITAL) },
+                bothFormats = items.count {
+                    val f = Format.parse(it.format)
+                    f.contains(Format.PHYSICAL) && f.contains(Format.DIGITAL)
+                },
             )
         }
     }
@@ -135,6 +144,10 @@ object Achievements {
             listOf(2, 4, 6, 8, 12), { "Own games across $it consoles" }) { it.consoles })
         addAll(tiers("hundo", "Perfectionist", "💯",
             listOf(1, 3, 5, 10, 25, 50), { "100% $it games" }) { it.gamesComplete100 })
+        addAll(tiers("phys", "Purist", "📀",
+            listOf(1, 10, 25, 50, 100, 250), { "Own $it physical items" }) { it.physical })
+        addAll(tiers("digi", "Cloud Native", "☁️",
+            listOf(1, 10, 25, 50, 100, 250), { "Own $it digital items" }) { it.digital })
 
         // --- unique specials (9) ---
         add(Achievement("well_rounded", "Well Rounded", "Have something on all 4 shelves", "🧭", 4, Rarity.RARE) { it.kindsWithItems })
@@ -146,6 +159,7 @@ object Achievements {
         add(Achievement("vintage", "Vintage Vault", "Own something from before 1980", "💿", 1, Rarity.EPIC) { if ((it.oldest ?: 9999) < 1980) 1 else 0 })
         add(Achievement("antiquarian", "Antiquarian", "Own something from before 1970", "📜", 1, Rarity.LEGENDARY) { if ((it.oldest ?: 9999) < 1970) 1 else 0 })
         add(Achievement("day_one", "Day One", "Own something from 2024 or later", "🚀", 1, Rarity.RARE) { if ((it.newest ?: 0) >= 2024) 1 else 0 })
+        add(Achievement("double_dip", "Double Dipper", "Own 10 items both physically and digitally", "🔁", 10, Rarity.EPIC) { it.bothFormats })
     }
 
     fun unlockedIds(stats: AchievementStats): Set<String> =

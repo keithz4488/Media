@@ -204,6 +204,10 @@ private fun StandingCover(
                 style = flavor.titleStyle.copy(color = flavor.accent),
             )
         }
+        FormatBadge(
+            formatCsv = item.format,
+            modifier = Modifier.align(Alignment.TopEnd).padding(4.dp),
+        )
         if (selected) {
             Box(
                 modifier = Modifier

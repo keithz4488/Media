@@ -3,6 +3,7 @@ package com.kzaller.shelf.ui.screens
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.kzaller.shelf.data.Format
 import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.ShelfRepository
 import com.kzaller.shelf.data.Status
@@ -36,6 +37,9 @@ class ShelfViewModel(
     private val _filters = MutableStateFlow<Set<String>>(emptySet())
     val filters: StateFlow<Set<String>> = _filters.asStateFlow()
 
+    private val _formatFilters = MutableStateFlow<Set<String>>(emptySet())
+    val formatFilters: StateFlow<Set<String>> = _formatFilters.asStateFlow()
+
     private val _query = MutableStateFlow("")
     val query: StateFlow<String> = _query.asStateFlow()
 
@@ -47,9 +51,9 @@ class ShelfViewModel(
     val viewMode: StateFlow<ViewMode> =
         prefs.observeViewMode(kind).stateIn(viewModelScope, SharingStarted.Eagerly, ViewMode.GRID)
 
-    /** Items visible on the shelf: kind -> status filter -> text search -> sort. */
+    /** Items visible on the shelf: kind -> status + format filter -> text search -> sort. */
     val items: StateFlow<List<ItemDto>> =
-        combine(repo.observeShelf(kind), _filters, _query, sort) { all, filters, query, sort ->
+        combine(repo.observeShelf(kind), _filters, _formatFilters, _query, sort) { all, filters, formatFilters, query, sort ->
             // Defensive: the DAO already filters by kind in SQL, but enforce here too
             // so a stale emission can't slip a different-kind item into the grid.
             val ofKind = all.filter { it.kind == kind }
@@ -60,8 +64,14 @@ class ShelfViewModel(
                     s.any { it in filters }
                 }
 
-            val searched = if (query.isBlank()) statusFiltered
+            val formatFiltered = if (formatFilters.isEmpty()) statusFiltered
                 else statusFiltered.filter { item ->
+                    val f = Format.parse(item.format)
+                    f.any { it in formatFilters }
+                }
+
+            val searched = if (query.isBlank()) formatFiltered
+                else formatFiltered.filter { item ->
                     item.title.contains(query, ignoreCase = true) ||
                         (item.subtitle?.contains(query, ignoreCase = true) == true)
                 }
@@ -107,7 +117,16 @@ class ShelfViewModel(
         }
     }
 
-    fun clearFilters() { _filters.value = emptySet() }
+    fun toggleFormatFilter(code: String) {
+        _formatFilters.value = _formatFilters.value.toMutableSet().apply {
+            if (!add(code)) remove(code)
+        }
+    }
+
+    fun clearFilters() {
+        _filters.value = emptySet()
+        _formatFilters.value = emptySet()
+    }
 
     fun setSearch(q: String) { _query.value = q }
     fun clearSearch() { _query.value = "" }
