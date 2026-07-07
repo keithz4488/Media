@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -51,6 +52,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -286,6 +288,18 @@ private fun DetailPage(
                                 ),
                             )
                         }
+                    }
+
+                    if (current.kind == MediaKind.TV) {
+                        Spacer(Modifier.height(16.dp))
+                        TvProgressSection(
+                            seasons = current.seasons,
+                            episodes = current.episodes,
+                            curSeason = current.curSeason,
+                            curEpisode = current.curEpisode,
+                            accent = flavor.accent,
+                            onSet = { s, e -> vm.setProgress(s, e) },
+                        )
                     }
 
                     if (current.kind == MediaKind.GAME) {
@@ -551,6 +565,101 @@ private fun ConsoleDropdown(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * TV season/episode tracker. Shows total "N seasons · M episodes" (auto from TMDB) and a
+ * "Watching S_ E_" stepper the user sets, plus a rough progress bar based on season fraction.
+ */
+@Composable
+private fun TvProgressSection(
+    seasons: Int?,
+    episodes: Int?,
+    curSeason: Int?,
+    curEpisode: Int?,
+    accent: Color,
+    onSet: (Int?, Int?) -> Unit,
+) {
+    Text("Progress", style = MaterialTheme.typography.titleSmall)
+    Spacer(Modifier.height(6.dp))
+
+    val totalLine = buildList {
+        if (seasons != null) add("$seasons season${if (seasons == 1) "" else "s"}")
+        if (episodes != null) add("$episodes episodes")
+    }.joinToString(" · ")
+    if (totalLine.isNotBlank()) {
+        Text(
+            text = totalLine,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
+        )
+        Spacer(Modifier.height(8.dp))
+    }
+
+    val s = curSeason ?: 0
+    val e = curEpisode ?: 0
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        Stepper(
+            label = "Season",
+            value = s,
+            min = 0,
+            max = seasons ?: 99,
+            accent = accent,
+            onChange = { onSet(it.takeIf { v -> v > 0 }, curEpisode) },
+        )
+        Stepper(
+            label = "Episode",
+            value = e,
+            min = 0,
+            max = 999,
+            accent = accent,
+            onChange = { onSet(curSeason ?: (if (it > 0) 1 else null), it.takeIf { v -> v > 0 }) },
+        )
+    }
+    // Rough season-based progress bar (episode-per-season data isn't available from TMDB here).
+    if (seasons != null && seasons > 0 && s > 0) {
+        Spacer(Modifier.height(8.dp))
+        LinearProgressIndicator(
+            progress = { (s.toFloat() / seasons.toFloat()).coerceIn(0f, 1f) },
+            color = accent,
+            trackColor = Color.White.copy(alpha = 0.12f),
+            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+        )
+        Text(
+            text = if (s >= seasons) "Caught up" else "On season $s of $seasons",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+        )
+    }
+}
+
+@Composable
+private fun Stepper(
+    label: String,
+    value: Int,
+    min: Int,
+    max: Int,
+    accent: Color,
+    onChange: (Int) -> Unit,
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = { if (value > min) onChange(value - 1) }, enabled = value > min) {
+                Text("−", style = MaterialTheme.typography.titleLarge, color = accent)
+            }
+            Text(
+                text = value.toString(),
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.widthIn(min = 24.dp),
+                textAlign = TextAlign.Center,
+            )
+            IconButton(onClick = { if (value < max) onChange(value + 1) }, enabled = value < max) {
+                Text("+", style = MaterialTheme.typography.titleLarge, color = accent)
             }
         }
     }

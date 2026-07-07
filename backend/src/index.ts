@@ -49,6 +49,10 @@ interface Item {
   user_platform?: string | null; // CSV: any of 'pc','xbox','playstation','nintendo','mobile' (games)
   consoles?: string | null;      // CSV of console codes within the active platforms (games)
   format?: string | null;        // CSV: any of 'physical','digital'
+  seasons?: number | null;       // TV: total seasons
+  episodes?: number | null;      // TV: total episodes
+  cur_season?: number | null;    // TV: user's current season
+  cur_episode?: number | null;   // TV: user's current episode
   completed_at?: number | null;  // epoch ms when the user marked the item as finished
   added_at?: number;
   updated_at?: number;
@@ -174,6 +178,10 @@ async function createItem(req: Request, env: Env): Promise<Response> {
     user_platform: body.user_platform ?? null,
     consoles: body.consoles ?? null,
     format: body.format ?? null,
+    seasons: body.seasons ?? null,
+    episodes: body.episodes ?? null,
+    cur_season: body.cur_season ?? null,
+    cur_episode: body.cur_episode ?? null,
     completed_at: body.completed_at ?? null,
     added_at: body.added_at ?? now,
     updated_at: now,
@@ -188,9 +196,10 @@ async function createItem(req: Request, env: Env): Promise<Response> {
   await env.DB.prepare(
     `INSERT INTO items
       (id, kind, title, subtitle, year, cover_url, external_id, external_src,
-       description, rating, status, notes, user_platform, consoles, format, completed_at, added_at, updated_at)
+       description, rating, status, notes, user_platform, consoles, format,
+       seasons, episodes, cur_season, cur_episode, completed_at, added_at, updated_at)
      VALUES
-      (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)
+      (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22)
      ON CONFLICT(kind, external_src, external_id) DO UPDATE SET
        updated_at = excluded.updated_at,
        status     = excluded.status`,
@@ -211,6 +220,10 @@ async function createItem(req: Request, env: Env): Promise<Response> {
       item.user_platform,
       item.consoles,
       item.format,
+      item.seasons,
+      item.episodes,
+      item.cur_season,
+      item.cur_episode,
       item.completed_at,
       item.added_at,
       item.updated_at,
@@ -235,7 +248,7 @@ async function updateItem(id: string, req: Request, env: Env): Promise<Response>
   const fields: string[] = [];
   const values: unknown[] = [];
   let i = 1;
-  for (const k of ["title", "subtitle", "year", "cover_url", "description", "rating", "status", "notes", "user_platform", "consoles", "format", "completed_at"] as const) {
+  for (const k of ["title", "subtitle", "year", "cover_url", "description", "rating", "status", "notes", "user_platform", "consoles", "format", "seasons", "episodes", "cur_season", "cur_episode", "completed_at"] as const) {
     if (k in body) {
       fields.push(`${k} = ?${i++}`);
       values.push(body[k] ?? null);
@@ -595,10 +608,11 @@ function trimDescription(s: string | null | undefined): string | null {
 }
 
 async function enrichForCreate(item: Item, env: Env, force = false): Promise<Item> {
-  // Skip enrichment if the caller already supplied a description (unless we're
-  // explicitly forcing a refresh) or if there's no external reference to look up.
-  if (!force && item.description && item.description.trim().length > 0) return item;
   if (!item.external_src || !item.external_id) return item;
+  // TV items always fetch (to get season/episode counts even when a description exists);
+  // otherwise skip when we already have a description and aren't forcing a refresh.
+  const isTv = item.external_src === "tmdb" && item.kind === "tv";
+  if (!force && !isTv && item.description && item.description.trim().length > 0) return item;
 
   try {
     switch (item.external_src) {
@@ -626,10 +640,19 @@ async function refreshItem(id: string, env: Env): Promise<Response> {
     `UPDATE items
        SET description = ?1,
            cover_url   = COALESCE(?2, cover_url),
-           updated_at  = ?3
-     WHERE id = ?4`,
+           seasons     = COALESCE(?3, seasons),
+           episodes    = COALESCE(?4, episodes),
+           updated_at  = ?5
+     WHERE id = ?6`,
   )
-    .bind(refreshed.description ?? null, refreshed.cover_url ?? null, Date.now(), id)
+    .bind(
+      refreshed.description ?? null,
+      refreshed.cover_url ?? null,
+      refreshed.seasons ?? null,
+      refreshed.episodes ?? null,
+      Date.now(),
+      id,
+    )
     .run();
 
   const updated = await env.DB.prepare("SELECT * FROM items WHERE id = ?1").bind(id).first<Item>();
@@ -963,7 +986,12 @@ async function enrichTmdb(item: Item, env: Env): Promise<Item> {
   const r = await fetch(url);
   if (!r.ok) return item;
   const d = (await r.json()) as any;
-  return { ...item, description: trimDescription(d.overview) ?? item.description };
+  const enriched: Item = { ...item, description: trimDescription(d.overview) ?? item.description };
+  if (kindPath === "tv") {
+    enriched.seasons = typeof d.number_of_seasons === "number" ? d.number_of_seasons : item.seasons ?? null;
+    enriched.episodes = typeof d.number_of_episodes === "number" ? d.number_of_episodes : item.episodes ?? null;
+  }
+  return enriched;
 }
 
 // ---------- public read-only HTML view at /k ----------

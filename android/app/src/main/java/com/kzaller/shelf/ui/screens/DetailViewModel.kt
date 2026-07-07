@@ -54,6 +54,8 @@ class DetailViewModel(
         launchUpdate(UpdateItemRequest(userPlatform = platformsCsv, consoles = consolesCsv))
     fun setConsoles(csv: String) = launchUpdate(UpdateItemRequest(consoles = csv))
     fun setFormat(csv: String) = launchUpdate(UpdateItemRequest(format = csv))
+    fun setProgress(season: Int?, episode: Int?) =
+        launchUpdate(UpdateItemRequest(curSeason = season, curEpisode = episode))
     fun setCompletedAt(millis: Long?) =
         launchUpdate(UpdateItemRequest(completedAt = millis), toast = if (millis == null) "Cleared completion" else "Marked complete")
 

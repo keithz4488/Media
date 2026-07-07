@@ -21,6 +21,10 @@ data class ItemDto(
     @SerialName("user_platform") val userPlatform: String? = null,
     val consoles: String? = null,
     val format: String? = null,
+    val seasons: Int? = null,
+    val episodes: Int? = null,
+    @SerialName("cur_season") val curSeason: Int? = null,
+    @SerialName("cur_episode") val curEpisode: Int? = null,
     @SerialName("completed_at") val completedAt: Long? = null,
     @SerialName("added_at")   val addedAt: Long? = null,
     @SerialName("updated_at") val updatedAt: Long? = null,
@@ -73,6 +77,8 @@ data class UpdateItemRequest(
     @SerialName("user_platform") val userPlatform: String? = null,
     val consoles: String? = null,
     val format: String? = null,
+    @SerialName("cur_season") val curSeason: Int? = null,
+    @SerialName("cur_episode") val curEpisode: Int? = null,
     @SerialName("completed_at") val completedAt: Long? = null,
 )
 
