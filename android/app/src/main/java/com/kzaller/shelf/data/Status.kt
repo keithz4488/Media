@@ -17,6 +17,13 @@ object Status {
     const val COMPLETE = "complete"
     const val SEEN     = "seen" // legacy: older items may have this; still display it
 
+    /**
+     * Pseudo status-filter (not a real status you can set on an item): a quick "backlog"
+     * view matching anything that doesn't have `watched` checked. Only offered on shelves
+     * where "Watched" is a status (movies + TV).
+     */
+    const val NOT_WATCHED = "not_watched"
+
     private val CANONICAL_ORDER = listOf(
         OWNED, READING, READ, WATCHING, WATCHED, PLAYING, PLAYED, COMPLETE, SEEN, WISHLIST,
     )
@@ -27,6 +34,15 @@ object Status {
         MediaKind.TV    -> listOf(OWNED, WATCHING, WATCHED, WISHLIST)
         MediaKind.GAME  -> listOf(OWNED, PLAYING, PLAYED, COMPLETE, WISHLIST)
     }
+
+    /** Extra pseudo-filters (backlog views) offered on a shelf, beyond real statuses. */
+    fun extraFilters(kind: MediaKind): List<String> = when (kind) {
+        MediaKind.MOVIE, MediaKind.TV -> listOf(NOT_WATCHED)
+        else -> emptyList()
+    }
+
+    /** All selectable filter chips for a shelf: real statuses plus any pseudo-filters. */
+    fun filterOptionsFor(kind: MediaKind): List<String> = optionsFor(kind) + extraFilters(kind)
 
     fun label(code: String, kind: MediaKind? = null): String {
         // Kind-specific overrides come first.
@@ -42,6 +58,7 @@ object Status {
             PLAYED   -> "Played"
             COMPLETE -> "100%"
             SEEN     -> "Seen"
+            NOT_WATCHED -> "Not Watched"
             else     -> code.replaceFirstChar { it.uppercase() }
         }
     }

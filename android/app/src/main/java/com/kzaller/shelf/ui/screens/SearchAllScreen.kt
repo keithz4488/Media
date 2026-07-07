@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,8 +17,10 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -55,6 +59,7 @@ fun SearchAllScreen(
     MediaShelfTheme(dark = true) {
         val query by vm.query.collectAsState()
         val results by vm.results.collectAsState()
+        val kindFilter by vm.kindFilter.collectAsState()
 
         Scaffold(
             containerColor = Color.Transparent,
@@ -97,6 +102,7 @@ fun SearchAllScreen(
                             .fillMaxWidth()
                             .padding(16.dp),
                     )
+                    KindFilterRow(selected = kindFilter, onSelect = vm::setKindFilter)
                     when {
                         query.isBlank() -> CenteredText("Type to search every shelf")
                         results.isEmpty() -> CenteredText("No matches")
@@ -104,6 +110,32 @@ fun SearchAllScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun KindFilterRow(
+    selected: MediaKind?,
+    onSelect: (MediaKind?) -> Unit,
+) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+    ) {
+        MediaKind.values().forEach { kind ->
+            val on = selected == kind
+            FilterChip(
+                selected = on,
+                onClick = { onSelect(kind) },
+                label = { Text(kind.label) },
+                leadingIcon = if (on) {
+                    { Icon(Icons.Default.Check, contentDescription = null) }
+                } else null,
+            )
         }
     }
 }

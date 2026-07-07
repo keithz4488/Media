@@ -363,7 +363,7 @@ private fun ActiveFilterBar(
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             // Maintain the per-kind option order for predictable layout.
-            Status.optionsFor(kind).filter { it in active }.forEach { code ->
+            Status.filterOptionsFor(kind).filter { it in active }.forEach { code ->
                 AssistChip(
                     onClick = onClear, // tapping any active chip clears all -- simple
                     label = { Text(Status.label(code, kind)) },
@@ -437,7 +437,7 @@ private fun FilterSheet(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Status.optionsFor(kind).forEach { code ->
+            Status.filterOptionsFor(kind).forEach { code ->
                 val on = code in selected
                 FilterChip(
                     selected = on,
