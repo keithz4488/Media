@@ -9,15 +9,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
@@ -41,16 +38,13 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil.compose.AsyncImage
 import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.ShelfRepository
-import com.kzaller.shelf.data.models.ItemDto
 import com.kzaller.shelf.ui.theme.MediaShelfTheme
 import com.kzaller.shelf.ui.theme.flavorFor
 
@@ -67,7 +61,7 @@ fun HomeScreen(
     val repo = remember { ShelfRepository(context) }
     val vm: HomeViewModel = viewModel(factory = HomeViewModel.factory(repo))
     val counts by vm.counts.collectAsState()
-    val inProgress by vm.inProgress.collectAsState()
+    val glance by vm.glance.collectAsState()
 
     MediaShelfTheme(dark = true) {
         Scaffold(containerColor = Color.Transparent) { padding ->
@@ -137,10 +131,9 @@ fun HomeScreen(
                             .fillMaxWidth()
                             .padding(bottom = 16.dp),
                     )
-                    if (inProgress.isNotEmpty()) {
-                        JumpBackInRow(
-                            entries = inProgress,
-                            onOpenItem = onOpenItem,
+                    if (glance.total > 0) {
+                        CollectionGlance(
+                            stats = glance,
                             modifier = Modifier.padding(bottom = 20.dp),
                         )
                     }
@@ -150,52 +143,53 @@ fun HomeScreen(
     }
 }
 
-// ---------------------------------------------------------------- jump back in (in-progress)
+// ---------------------------------------------------------------- collection at a glance
 
 @Composable
-private fun JumpBackInRow(
-    entries: List<ItemDto>,
-    onOpenItem: (MediaKind, String) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(modifier = modifier.fillMaxWidth()) {
-        Text(
-            text = "Jump back in",
-            style = MaterialTheme.typography.titleSmall.copy(
-                color = Color(0xFFE8E8EA),
-                fontWeight = FontWeight.SemiBold,
-            ),
-            modifier = Modifier.padding(bottom = 8.dp),
-        )
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            items(entries, key = { "${it.kind.wire}:${it.id}" }) { item ->
-                val aspect = if (item.kind == MediaKind.GAME) 3f / 4f else 2f / 3f
-                Box(
-                    modifier = Modifier
-                        .width(64.dp)
-                        .aspectRatio(aspect)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(Color.Black.copy(alpha = 0.3f))
-                        .clickable { onOpenItem(item.kind, item.id) },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (item.coverUrl != null) {
-                        AsyncImage(
-                            model = item.coverUrl,
-                            contentDescription = item.title,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    } else {
-                        Text(
-                            text = item.title.take(2).uppercase(),
-                            style = MaterialTheme.typography.labelMedium.copy(color = Color(0xFFE5C07B)),
-                        )
-                    }
-                }
-            }
-        }
+private fun CollectionGlance(stats: GlanceStats, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color.Black.copy(alpha = 0.22f))
+            .padding(vertical = 16.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        GlanceCell(stats.total.toString(), "in library")
+        GlanceDivider()
+        GlanceCell(stats.completedThisYear.toString(), "done in ${stats.year}")
+        GlanceDivider()
+        val pct = if (stats.gamesTotal > 0) stats.gamesComplete * 100 / stats.gamesTotal else 0
+        GlanceCell("$pct%", "games 100%")
     }
+}
+
+@Composable
+private fun GlanceCell(value: String, label: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = value,
+            style = MaterialTheme.typography.headlineSmall.copy(
+                color = Color(0xFFE5C07B),
+                fontWeight = FontWeight.Black,
+            ),
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium.copy(color = Color(0xFFE8E8EA).copy(alpha = 0.75f)),
+        )
+    }
+}
+
+@Composable
+private fun GlanceDivider() {
+    Box(
+        modifier = Modifier
+            .width(1.dp)
+            .height(34.dp)
+            .background(Color.White.copy(alpha = 0.12f)),
+    )
 }
 
 // ---------------------------------------------------------------- the IKEA Kallax-style 2x2 cubby
