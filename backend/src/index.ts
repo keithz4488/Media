@@ -116,6 +116,8 @@ export default {
         if (req.method === "POST") return createItem(req, env);
       }
 
+      if (url.pathname === "/items/bulk" && req.method === "POST") return bulkCreate(req, env);
+
       const idMatch = url.pathname.match(/^\/items\/([^/]+)$/);
       if (idMatch) {
         const id = idMatch[1];
@@ -155,6 +157,63 @@ async function listItems(url: URL, env: Env): Promise<Response> {
     : env.DB.prepare("SELECT * FROM items ORDER BY added_at DESC");
   const { results } = await stmt.all<Item>();
   return json({ items: results || [] });
+}
+
+/**
+ * Bulk insert for imports (e.g. Plex). Caller supplies fully-formed items (cover, description
+ * etc. already resolved client-side) so we skip per-item enrichment and just batch-write.
+ * Uses ON CONFLICT to no-op duplicates the user already owns.
+ */
+async function bulkCreate(req: Request, env: Env): Promise<Response> {
+  const body = (await req.json().catch(() => null)) as { items?: Partial<Item>[] } | null;
+  const list = body?.items;
+  if (!Array.isArray(list) || list.length === 0) return err(400, "items array required");
+  if (list.length > 200) return err(400, "max 200 items per request");
+
+  const now = Date.now();
+  const stmt = env.DB.prepare(
+    `INSERT INTO items
+      (id, kind, title, subtitle, year, cover_url, external_id, external_src,
+       description, rating, status, notes, user_platform, consoles, format,
+       seasons, episodes, cur_season, cur_episode, completed_at, added_at, updated_at)
+     VALUES
+      (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22)
+     ON CONFLICT(kind, external_src, external_id) DO NOTHING`,
+  );
+
+  const batch = list
+    .filter((b) => b.kind && b.title)
+    .map((b) =>
+      stmt.bind(
+        b.id || uuid(),
+        b.kind,
+        b.title,
+        b.subtitle ?? null,
+        b.year ?? null,
+        b.cover_url ?? null,
+        b.external_id ?? null,
+        b.external_src ?? "manual",
+        b.description ?? null,
+        b.rating ?? null,
+        b.status ?? "owned",
+        b.notes ?? null,
+        b.user_platform ?? null,
+        b.consoles ?? null,
+        b.format ?? null,
+        b.seasons ?? null,
+        b.episodes ?? null,
+        b.cur_season ?? null,
+        b.cur_episode ?? null,
+        b.completed_at ?? null,
+        b.added_at ?? now,
+        now,
+      ),
+    );
+
+  if (batch.length === 0) return json({ inserted: 0 });
+  const results = await env.DB.batch(batch);
+  const inserted = results.reduce((n, r) => n + (r.meta?.changes ?? 0), 0);
+  return json({ inserted, received: list.length });
 }
 
 async function createItem(req: Request, env: Env): Promise<Response> {

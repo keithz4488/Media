@@ -133,6 +133,24 @@ class ShelfRepository(context: Context) {
         }
     }
 
+    /** Resolve a TMDB id directly to a hit (used by the Plex import to skip fuzzy matching). */
+    suspend fun searchTmdbById(kind: MediaKind, tmdbId: String): Result<SearchHit?> = runCatching {
+        when (kind) {
+            MediaKind.MOVIE -> api.searchMovies(tmdbId = tmdbId).hits.firstOrNull()
+            MediaKind.TV    -> api.searchTv(tmdbId = tmdbId).hits.firstOrNull()
+            else -> null
+        }
+    }
+
+    /** Fast bulk insert for imports; items are pre-resolved (cover/desc already filled). */
+    suspend fun bulkImport(requests: List<com.kzaller.shelf.data.models.CreateItemRequest>): Result<Int> = runCatching {
+        var total = 0
+        requests.chunked(100).forEach { chunk ->
+            total += api.bulkCreate(com.kzaller.shelf.data.models.BulkCreateRequest(chunk)).inserted
+        }
+        total
+    }
+
     suspend fun lookupBookByIsbn(isbn: String): Result<List<SearchHit>> = runCatching {
         api.searchBooks(isbn = isbn).hits
     }

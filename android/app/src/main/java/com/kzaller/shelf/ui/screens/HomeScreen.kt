@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
@@ -55,6 +56,7 @@ fun HomeScreen(
     onSearchAll: () -> Unit,
     onStats: () -> Unit,
     onAchievements: () -> Unit,
+    onImport: () -> Unit,
 ) {
     val context = LocalContext.current
     val repo = remember { ShelfRepository(context) }
@@ -108,6 +110,13 @@ fun HomeScreen(
                             Icon(
                                 imageVector = Icons.Default.EmojiEvents,
                                 contentDescription = "Achievements",
+                                tint = Color(0xFFE5C07B),
+                            )
+                        }
+                        IconButton(onClick = onImport) {
+                            Icon(
+                                imageVector = Icons.Default.CloudDownload,
+                                contentDescription = "Import from Plex",
                                 tint = Color(0xFFE5C07B),
                             )
                         }

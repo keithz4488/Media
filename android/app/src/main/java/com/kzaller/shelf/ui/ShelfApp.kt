@@ -21,6 +21,8 @@ import com.kzaller.shelf.ui.screens.AddItemScreen
 import com.kzaller.shelf.ui.screens.AddItemViewModel
 import com.kzaller.shelf.ui.screens.DetailScreen
 import com.kzaller.shelf.ui.screens.HomeScreen
+import com.kzaller.shelf.ui.screens.ImportScreen
+import com.kzaller.shelf.ui.screens.ImportViewModel
 import com.kzaller.shelf.ui.screens.SearchAllScreen
 import com.kzaller.shelf.ui.screens.SearchAllViewModel
 import com.kzaller.shelf.ui.screens.ShelfScreen
@@ -40,6 +42,7 @@ object Routes {
     const val SEARCH_ALL = "search"
     const val STATS = "stats"
     const val ACHIEVEMENTS = "achievements"
+    const val IMPORT = "import"
 }
 
 /** Guard against navigations issued during a back-transition: when the user has just
@@ -66,6 +69,15 @@ fun ShelfApp() {
                     onSearchAll = { nav.navigateIfResumed(entry, Routes.SEARCH_ALL) },
                     onStats = { nav.navigateIfResumed(entry, Routes.STATS) },
                     onAchievements = { nav.navigateIfResumed(entry, Routes.ACHIEVEMENTS) },
+                    onImport = { nav.navigateIfResumed(entry, Routes.IMPORT) },
+                )
+            }
+            composable(Routes.IMPORT) {
+                val vm: ImportViewModel = viewModel(factory = ImportViewModel.factory(repo, prefs))
+                ImportScreen(
+                    vm = vm,
+                    onBack = { nav.popBackStack() },
+                    onDone = { nav.popBackStack() },
                 )
             }
             composable(Routes.ACHIEVEMENTS) {

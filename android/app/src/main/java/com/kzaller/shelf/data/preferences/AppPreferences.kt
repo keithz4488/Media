@@ -31,6 +31,19 @@ class AppPreferences(private val context: Context) {
         context.dataStore.edit { it[sortKey(kind)] = mode.name }
     }
 
+    private val plexUrlKey = stringPreferencesKey("plex_url")
+    private val plexTokenKey = stringPreferencesKey("plex_token")
+
+    fun observePlexUrl(): Flow<String> = context.dataStore.data.map { it[plexUrlKey] ?: "" }
+    fun observePlexToken(): Flow<String> = context.dataStore.data.map { it[plexTokenKey] ?: "" }
+
+    suspend fun setPlex(url: String, token: String) {
+        context.dataStore.edit {
+            it[plexUrlKey] = url.trim().trimEnd('/')
+            it[plexTokenKey] = token.trim()
+        }
+    }
+
     private val unlockedKey = stringPreferencesKey("achievements_unlocked")
 
     /** Set of achievement ids already unlocked (so we only toast newly-earned ones). */

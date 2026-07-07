@@ -1,5 +1,7 @@
 package com.kzaller.shelf.data.api
 
+import com.kzaller.shelf.data.models.BulkCreateRequest
+import com.kzaller.shelf.data.models.BulkCreateResponse
 import com.kzaller.shelf.data.models.CoversResponse
 import com.kzaller.shelf.data.models.CreateItemRequest
 import com.kzaller.shelf.data.models.IdentifyRequest
@@ -22,6 +24,9 @@ interface ShelfApi {
 
     @POST("items")
     suspend fun create(@Body body: CreateItemRequest): ItemResponse
+
+    @POST("items/bulk")
+    suspend fun bulkCreate(@Body body: BulkCreateRequest): BulkCreateResponse
 
     @PATCH("items/{id}")
     suspend fun update(@Path("id") id: String, @Body body: UpdateItemRequest): ItemResponse
