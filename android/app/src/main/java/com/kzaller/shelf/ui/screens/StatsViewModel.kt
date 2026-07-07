@@ -6,8 +6,11 @@ import androidx.lifecycle.viewModelScope
 import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.ShelfRepository
 import com.kzaller.shelf.data.models.ItemDto
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -26,9 +29,27 @@ data class StatsSnapshot(
 }
 
 class StatsViewModel(private val repo: ShelfRepository) : ViewModel() {
-    val snapshot: StateFlow<StatsSnapshot> = repo.observeAll()
-        .map(::aggregate)
-        .stateIn(viewModelScope, SharingStarted.Eagerly, empty())
+    /** The year the review is showing; defaults to the current year, user-selectable. */
+    private val _year = MutableStateFlow(LocalDate.now().year)
+    val year: StateFlow<Int> = _year.asStateFlow()
+
+    fun setYear(y: Int) { _year.value = y }
+
+    val snapshot: StateFlow<StatsSnapshot> =
+        combine(repo.observeAll(), _year) { items, year -> aggregate(items, year) }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, empty())
+
+    /** Years that have any completed items, newest first, always including the current year. */
+    val availableYears: StateFlow<List<Int>> = repo.observeAll()
+        .map { items ->
+            val zone = ZoneId.systemDefault()
+            val years = items.mapNotNull { it.completedAt }
+                .map { java.time.Instant.ofEpochMilli(it).atZone(zone).year }
+                .toMutableSet()
+            years.add(LocalDate.now().year)
+            years.sortedDescending()
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, listOf(LocalDate.now().year))
 
     /** Full library for export/backup. */
     val allItems: StateFlow<List<ItemDto>> =
@@ -47,8 +68,7 @@ class StatsViewModel(private val repo: ShelfRepository) : ViewModel() {
         currentYear = LocalDate.now().year,
     )
 
-    private fun aggregate(items: List<ItemDto>): StatsSnapshot {
-        val year = LocalDate.now().year
+    private fun aggregate(items: List<ItemDto>, year: Int): StatsSnapshot {
         val zone = ZoneId.systemDefault()
         val startOfYear = LocalDate.of(year, 1, 1).atStartOfDay(zone).toInstant().toEpochMilli()
         val startOfNextYear = LocalDate.of(year + 1, 1, 1).atStartOfDay(zone).toInstant().toEpochMilli()
@@ -68,8 +88,9 @@ class StatsViewModel(private val repo: ShelfRepository) : ViewModel() {
                 if (ratings.isEmpty()) null else ratings.average()
             }
 
+        // Recently completed within the selected year (newest first).
         val recent = items
-            .filter { it.completedAt != null }
+            .filter { it.completedAt != null && it.completedAt in startOfYear until startOfNextYear }
             .sortedByDescending { it.completedAt }
             .take(6)
 

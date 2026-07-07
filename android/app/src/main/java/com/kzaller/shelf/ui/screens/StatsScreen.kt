@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +22,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -68,6 +71,7 @@ fun StatsScreen(
 ) {
     val snap by vm.snapshot.collectAsState()
     val allItems by vm.allItems.collectAsState()
+    val years by vm.availableYears.collectAsState()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -86,7 +90,34 @@ fun StatsScreen(
             containerColor = Color.Transparent,
             topBar = {
                 TopAppBar(
-                    title = { Text("${snap.currentYear} in review") },
+                    title = {
+                        var yearMenuOpen by remember { mutableStateOf(false) }
+                        Box {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.clickable(enabled = years.size > 1) { yearMenuOpen = true },
+                            ) {
+                                Text("${snap.currentYear} in review")
+                                if (years.size > 1) {
+                                    Icon(Icons.Default.ArrowDropDown, contentDescription = "Choose year")
+                                }
+                            }
+                            DropdownMenu(expanded = yearMenuOpen, onDismissRequest = { yearMenuOpen = false }) {
+                                years.forEach { y ->
+                                    DropdownMenuItem(
+                                        text = { Text(y.toString()) },
+                                        trailingIcon = {
+                                            if (y == snap.currentYear) Icon(Icons.Default.Check, contentDescription = null)
+                                        },
+                                        onClick = {
+                                            vm.setYear(y)
+                                            yearMenuOpen = false
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    },
                     navigationIcon = {
                         IconButton(onClick = onBack) {
                             Icon(Icons.Default.ArrowBack, contentDescription = "Back")
