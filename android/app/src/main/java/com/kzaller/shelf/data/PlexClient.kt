@@ -65,7 +65,8 @@ class PlexClient {
                 ?: continue
             for (j in 0 until items.length()) {
                 val m = items.getJSONObject(j)
-                val title = m.optString("title").ifBlank { continue }
+                val title = m.optString("title")
+                if (title.isBlank()) continue
                 val year = m.optInt("year", 0).takeIf { it > 0 }
                 out.add(PlexItem(kind, title, year, extractTmdbId(m)))
             }

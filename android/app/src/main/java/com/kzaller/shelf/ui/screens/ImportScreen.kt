@@ -61,6 +61,7 @@ private fun wall() = Brush.verticalGradient(
     colors = listOf(Color(0xFF6E4E2E), Color(0xFF4A331C), Color(0xFF2E1F11)),
 )
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun ImportScreen(vm: ImportViewModel, onBack: () -> Unit, onDone: () -> Unit) {
     val state by vm.state.collectAsState()
