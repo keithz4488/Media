@@ -9,9 +9,13 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import com.kzaller.shelf.ui.theme.LocalShelfFlavor
 import com.kzaller.shelf.ui.theme.ShelfFlavor
+import kotlin.math.PI
+import kotlin.math.sin
 
 /**
  * Cibby-style warm wood backdrop, tinted per shelf flavor. Procedural (no image asset):
@@ -50,24 +54,46 @@ private fun DrawScope.drawWoodRoom(flavor: ShelfFlavor) {
         size = size,
     )
 
-    // faint horizontal grain streaks
-    val streakColor = Color.Black.copy(alpha = 0.05f)
-    val streakHi = Color.White.copy(alpha = 0.04f)
-    val grainLines = 26
-    val step = size.height / grainLines
-    var i = 0
-    var y = step * 0.5f
-    while (y < size.height) {
-        // slight vertical wobble per line so they aren't ruler-straight
-        val wobble = ((i % 3) - 1) * 4f
-        drawLine(
-            color = if (i % 2 == 0) streakColor else streakHi,
-            start = Offset(0f, y + wobble),
-            end = Offset(size.width, y - wobble),
-            strokeWidth = if (i % 5 == 0) 2.2f else 1.2f,
-        )
-        y += step
-        i++
+    // Wavy vertical wood grain + a few knots — same texture as the home shelf, but drawn in
+    // neutral black/white (luminance only) so each shelf's tint is unchanged. Fixed seed so the
+    // grain is stable and doesn't shimmer on redraw.
+    val rnd = kotlin.random.Random(4242)
+    val lines = (size.width * 0.22f).toInt().coerceAtLeast(1)
+    repeat(lines) {
+        val x = rnd.nextFloat() * size.width
+        val dark = rnd.nextBoolean()
+        val color = if (dark) {
+            Color.Black.copy(alpha = 0.05f + rnd.nextFloat() * 0.09f)
+        } else {
+            Color.White.copy(alpha = 0.03f + rnd.nextFloat() * 0.05f)
+        }
+        val amp = 12f * (0.4f + rnd.nextFloat())
+        val phase = rnd.nextFloat() * (2f * PI.toFloat())
+        val strokeW = 0.6f + rnd.nextFloat() * 1.3f
+        val path = Path().apply {
+            moveTo(x, 0f)
+            var gy = 0f
+            while (gy <= size.height) {
+                lineTo(x + sin((gy / size.height) * 4f * PI.toFloat() + phase) * amp, gy)
+                gy += 5f
+            }
+        }
+        drawPath(path, color, style = Stroke(width = strokeW))
+    }
+    repeat(4) {
+        if (rnd.nextFloat() > 0.5f) {
+            val kx = 0.1f * size.width + rnd.nextFloat() * 0.8f * size.width
+            val ky = 0.1f * size.height + rnd.nextFloat() * 0.8f * size.height
+            for (ring in 0 until 5) {
+                val rr = 2.5f + ring * 2f
+                drawOval(
+                    color = Color.Black.copy(alpha = (0.14f - rr * 0.012f).coerceAtLeast(0.03f)),
+                    topLeft = Offset(kx - rr * 1.5f, ky - rr),
+                    size = Size(rr * 3f, rr * 2f),
+                    style = Stroke(width = 1.1f),
+                )
+            }
+        }
     }
 
     // bottom vignette to ground the scene
