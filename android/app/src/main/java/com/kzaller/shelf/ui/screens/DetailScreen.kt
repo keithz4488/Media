@@ -407,6 +407,7 @@ private fun DetailPage(
 
                     Spacer(Modifier.height(16.dp))
                     CompletedSection(
+                        kind = current.kind,
                         completedAt = current.completedAt,
                         onSet = { vm.setCompletedAt(it) },
                     )
@@ -776,18 +777,23 @@ private fun AboutText(text: String) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CompletedSection(
+    kind: MediaKind,
     completedAt: Long?,
     onSet: (Long?) -> Unit,
 ) {
     var pickerOpen by remember { mutableStateOf(false) }
+    // Movies and shows get "Watched"; books and games keep "Completed".
+    val watchKind = kind == MediaKind.MOVIE || kind == MediaKind.TV
+    val sectionLabel = if (watchKind) "Watched" else "Completed"
+    val markLabel = if (watchKind) "Mark watched" else "Mark complete"
 
-    Text("Completed", style = MaterialTheme.typography.titleSmall)
+    Text(sectionLabel, style = MaterialTheme.typography.titleSmall)
     Spacer(Modifier.height(4.dp))
     Row(verticalAlignment = Alignment.CenterVertically) {
         if (completedAt == null) {
             AssistChip(
                 onClick = { onSet(System.currentTimeMillis()) },
-                label = { Text("Mark complete") },
+                label = { Text(markLabel) },
                 leadingIcon = { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) },
             )
             Spacer(Modifier.size(8.dp))

@@ -13,6 +13,7 @@ data class PlexItem(
     val title: String,
     val year: Int?,
     val tmdbId: String?,       // extracted from Plex Guid array when present
+    val watchedStatus: String? = null, // "watched", "watching", or null, from Plex play state
 )
 
 /**
@@ -68,10 +69,28 @@ class PlexClient {
                 val title = m.optString("title")
                 if (title.isBlank()) continue
                 val year = m.optInt("year", 0).takeIf { it > 0 }
-                out.add(PlexItem(kind, title, year, extractTmdbId(m)))
+                out.add(PlexItem(kind, title, year, extractTmdbId(m), watchedStatus(kind, m)))
             }
         }
         out
+    }
+
+    /**
+     * Map Plex play state to one of our statuses. Movies are "watched" once viewCount > 0.
+     * Shows use episode counts: fully watched (all leaves seen) -> "watched", partly -> "watching".
+     */
+    private fun watchedStatus(kind: MediaKind, m: JSONObject): String? = when (kind) {
+        MediaKind.MOVIE -> if (m.optInt("viewCount", 0) > 0) "watched" else null
+        MediaKind.TV -> {
+            val leaf = m.optInt("leafCount", 0)
+            val viewed = m.optInt("viewedLeafCount", 0)
+            when {
+                leaf > 0 && viewed >= leaf -> "watched"
+                viewed > 0 -> "watching"
+                else -> null
+            }
+        }
+        else -> null
     }
 
     /** Pull a tmdb:// id out of the Plex Guid array, if present. */

@@ -130,7 +130,7 @@ fun ItemListRow(
                     )
                 }
             }
-            FormatBadge(formatCsv = item.format)
+            FormatBadge(formatCsv = item.format, kind = item.kind)
         }
     }
 }

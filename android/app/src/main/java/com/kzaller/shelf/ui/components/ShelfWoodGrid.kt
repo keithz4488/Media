@@ -206,6 +206,7 @@ private fun StandingCover(
         }
         FormatBadge(
             formatCsv = item.format,
+            kind = item.kind,
             modifier = Modifier.align(Alignment.TopEnd).padding(4.dp),
         )
         if (selected) {

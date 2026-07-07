@@ -116,7 +116,7 @@ class ImportViewModel(
     }
 
     private fun addConfirmed(item: PlexItem, hit: SearchHit) {
-        synchronized(this@ImportViewModel) { confirmed.add(hit.toRequest(item.kind)) }
+        synchronized(this@ImportViewModel) { confirmed.add(hit.toRequest(item)) }
     }
 
     fun chooseCandidate(index: Int, hit: SearchHit) {
@@ -132,7 +132,7 @@ class ImportViewModel(
     fun finishReviewAndImport() {
         ambiguous.forEach { a ->
             when {
-                a.chosen != null -> confirmed.add(a.chosen.toRequest(a.plex.kind))
+                a.chosen != null -> confirmed.add(a.chosen.toRequest(a.plex))
                 else -> skippedCount++
             }
         }
@@ -151,18 +151,22 @@ class ImportViewModel(
         _state.value = ImportState.Done(inserted, skippedCount)
     }
 
-    private fun SearchHit.toRequest(kind: MediaKind) = CreateItemRequest(
-        kind = kind,
-        title = title,
-        subtitle = subtitle,
-        year = year,
-        coverUrl = coverUrl,
-        externalId = externalId,
-        externalSrc = externalSrc,
-        description = description,
-        status = "owned",
-        format = Format.DIGITAL,
-    )
+    private fun SearchHit.toRequest(plex: PlexItem): CreateItemRequest {
+        // Everything imported is digitally owned; also carry over Plex's watched/watching state.
+        val statuses = listOfNotNull("owned", plex.watchedStatus)
+        return CreateItemRequest(
+            kind = plex.kind,
+            title = title,
+            subtitle = subtitle,
+            year = year,
+            coverUrl = coverUrl,
+            externalId = externalId,
+            externalSrc = externalSrc,
+            description = description,
+            status = statuses.joinToString(","),
+            format = Format.DIGITAL,
+        )
+    }
 
     companion object {
         fun factory(repo: ShelfRepository, prefs: AppPreferences): ViewModelProvider.Factory =

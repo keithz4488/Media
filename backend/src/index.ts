@@ -162,7 +162,12 @@ async function listItems(url: URL, env: Env): Promise<Response> {
 /**
  * Bulk insert for imports (e.g. Plex). Caller supplies fully-formed items (cover, description
  * etc. already resolved client-side) so we skip per-item enrichment and just batch-write.
- * Uses ON CONFLICT to no-op duplicates the user already owns.
+ *
+ * On conflict (item already imported) we DON'T no-op: instead we sync the play state by
+ * appending "watched"/"watching" to the existing status when the incoming item has it and
+ * the row doesn't yet. Only the status column is touched -- ratings, notes, covers, format
+ * and any other statuses the user added are all preserved. This makes a re-import double as
+ * a "pull watched state from Plex" sync for items already on the shelf.
  */
 async function bulkCreate(req: Request, env: Env): Promise<Response> {
   const body = (await req.json().catch(() => null)) as { items?: Partial<Item>[] } | null;
@@ -178,7 +183,16 @@ async function bulkCreate(req: Request, env: Env): Promise<Response> {
        seasons, episodes, cur_season, cur_episode, completed_at, added_at, updated_at)
      VALUES
       (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22)
-     ON CONFLICT(kind, external_src, external_id) DO NOTHING`,
+     ON CONFLICT(kind, external_src, external_id) DO UPDATE SET
+       status = CASE
+         WHEN excluded.status LIKE '%watched%' AND COALESCE(items.status,'') NOT LIKE '%watched%'
+           THEN TRIM(COALESCE(items.status,'') || ',watched', ',')
+         WHEN excluded.status LIKE '%watching%'
+              AND COALESCE(items.status,'') NOT LIKE '%watching%'
+              AND COALESCE(items.status,'') NOT LIKE '%watched%'
+           THEN TRIM(COALESCE(items.status,'') || ',watching', ',')
+         ELSE items.status
+       END`,
   );
 
   const batch = list

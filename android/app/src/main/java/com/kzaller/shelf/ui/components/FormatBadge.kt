@@ -8,19 +8,22 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.kzaller.shelf.data.Format
+import com.kzaller.shelf.data.MediaKind
 
 /**
- * Small corner badge showing whether an item is physical (disc) and/or digital (cloud).
+ * Small corner badge showing whether an item is physical and/or digital (cloud).
+ * The physical icon is an open book for books, and a disc for everything else.
  * Renders nothing when the item has no format set.
  */
 @Composable
-fun FormatBadge(formatCsv: String?, modifier: Modifier = Modifier) {
+fun FormatBadge(formatCsv: String?, kind: MediaKind, modifier: Modifier = Modifier) {
     val formats = Format.parse(formatCsv)
     if (formats.isEmpty()) return
     Row(
@@ -31,7 +34,7 @@ fun FormatBadge(formatCsv: String?, modifier: Modifier = Modifier) {
     ) {
         if (Format.PHYSICAL in formats) {
             Icon(
-                imageVector = Icons.Default.Album,
+                imageVector = if (kind == MediaKind.BOOK) Icons.Default.MenuBook else Icons.Default.Album,
                 contentDescription = "Physical",
                 tint = Color.White,
                 modifier = Modifier.size(13.dp),
