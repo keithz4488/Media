@@ -151,6 +151,8 @@ private fun DetailPage(
     LaunchedEffect(current?.id, current?.kind) {
         if (current?.kind == MediaKind.GAME) vm.loadScores()
     }
+    // Bulk-imported shows arrive without season counts; fill them in on first open.
+    LaunchedEffect(current?.id) { vm.ensureEnriched() }
 
     // Force the dark (light-text) scheme so text stays readable on the wood backdrop.
     val dark = true
@@ -262,7 +264,13 @@ private fun DetailPage(
                                 text = current.title,
                                 style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
                             )
-                            val secondary = listOfNotNull(current.subtitle, current.year?.toString()).joinToString(" · ")
+                            val secondary = buildList {
+                                current.subtitle?.let { add(it) }
+                                current.year?.let { add(it.toString()) }
+                                if (current.kind == MediaKind.TV && (current.seasons ?: 0) > 0) {
+                                    add("${current.seasons} season${if (current.seasons == 1) "" else "s"}")
+                                }
+                            }.joinToString(" · ")
                             if (secondary.isNotBlank()) {
                                 Spacer(Modifier.height(4.dp))
                                 Text(
@@ -406,11 +414,22 @@ private fun DetailPage(
                     }
 
                     Spacer(Modifier.height(16.dp))
-                    CompletedSection(
-                        kind = current.kind,
-                        completedAt = current.completedAt,
-                        onSet = { vm.setCompletedAt(it) },
-                    )
+                    if (current.kind == MediaKind.MOVIE || current.kind == MediaKind.TV) {
+                        // Watched state is the status; the section just mirrors it (and holds an
+                        // optional "when"), so it stays in sync with the Status chip and Plex sync.
+                        WatchedSection(
+                            watched = Status.parse(current.status).contains(Status.WATCHED),
+                            completedAt = current.completedAt,
+                            onToggle = { vm.setWatched(it) },
+                            onPickDate = { vm.setWatched(true, at = it) },
+                        )
+                    } else {
+                        CompletedSection(
+                            kind = current.kind,
+                            completedAt = current.completedAt,
+                            onSet = { vm.setCompletedAt(it) },
+                        )
+                    }
 
                     Spacer(Modifier.height(8.dp))
                     NotesSection(
@@ -818,6 +837,72 @@ private fun CompletedSection(
             confirmButton = {
                 TextButton(onClick = {
                     pickerState.selectedDateMillis?.let { onSet(it) }
+                    pickerOpen = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pickerOpen = false }) { Text("Cancel") }
+            },
+        ) {
+            DatePicker(state = pickerState)
+        }
+    }
+}
+
+/**
+ * Movies/TV "Watched" section. The checked state comes from the item's status (so it mirrors
+ * the Status chip and any Plex-synced watched flag); the optional date is stored in completedAt.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun WatchedSection(
+    watched: Boolean,
+    completedAt: Long?,
+    onToggle: (Boolean) -> Unit,
+    onPickDate: (Long) -> Unit,
+) {
+    var pickerOpen by remember { mutableStateOf(false) }
+
+    Text("Watched", style = MaterialTheme.typography.titleSmall)
+    Spacer(Modifier.height(4.dp))
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        AssistChip(
+            onClick = { onToggle(!watched) },
+            label = { Text(if (watched) "Watched" else "Mark watched") },
+            leadingIcon = {
+                Icon(
+                    if (watched) Icons.Default.Check else Icons.Default.Close,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                )
+            },
+            colors = AssistChipDefaults.assistChipColors(
+                containerColor = if (watched) MaterialTheme.colorScheme.primary.copy(alpha = 0.22f) else Color.Transparent,
+            ),
+        )
+        Spacer(Modifier.size(8.dp))
+        if (watched && completedAt != null) {
+            AssistChip(
+                onClick = { pickerOpen = true },
+                label = { Text(formatDate(completedAt)) },
+                leadingIcon = { Icon(Icons.Default.CalendarToday, contentDescription = null, modifier = Modifier.size(16.dp)) },
+            )
+        } else {
+            TextButton(onClick = { pickerOpen = true }) {
+                Icon(Icons.Default.CalendarToday, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.size(6.dp))
+                Text(if (watched) "Add date" else "Pick a date")
+            }
+        }
+    }
+
+    if (pickerOpen) {
+        val pickerState = rememberDatePickerState(initialSelectedDateMillis = completedAt ?: System.currentTimeMillis())
+        DatePickerDialog(
+            onDismissRequest = { pickerOpen = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    pickerState.selectedDateMillis?.let { onPickDate(it) }
                     pickerOpen = false
                 }) { Text("OK") }
             },

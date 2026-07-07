@@ -71,4 +71,16 @@ object Status {
         if (!cur.add(value)) cur.remove(value)
         return CANONICAL_ORDER.filter { it in cur }.joinToString(",")
     }
+
+    /** Add a status if missing, keeping canonical order. */
+    fun ensure(csv: String?, value: String): String {
+        val cur = parse(csv).toMutableSet().apply { add(value) }
+        return CANONICAL_ORDER.filter { it in cur }.joinToString(",")
+    }
+
+    /** Remove a status if present, keeping canonical order. */
+    fun without(csv: String?, value: String): String {
+        val cur = parse(csv).toMutableSet().apply { remove(value) }
+        return CANONICAL_ORDER.filter { it in cur }.joinToString(",")
+    }
 }

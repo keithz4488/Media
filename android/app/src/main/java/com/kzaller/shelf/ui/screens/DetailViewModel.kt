@@ -3,7 +3,9 @@ package com.kzaller.shelf.ui.screens
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.ShelfRepository
+import com.kzaller.shelf.data.Status
 import com.kzaller.shelf.data.models.CoverOption
 import com.kzaller.shelf.data.models.ItemDto
 import com.kzaller.shelf.data.models.Scores
@@ -58,6 +60,28 @@ class DetailViewModel(
         launchUpdate(UpdateItemRequest(curSeason = season, curEpisode = episode))
     fun setCompletedAt(millis: Long?) =
         launchUpdate(UpdateItemRequest(completedAt = millis), toast = if (millis == null) "Cleared completion" else "Marked complete")
+
+    /**
+     * Movies/TV: keep the "watched" status and the Watched section in lockstep. Marking watched
+     * adds the status and stamps a completion date (using the picked date if given); un-marking
+     * removes the status. Driven off the current item, so it merges cleanly with other statuses.
+     */
+    fun setWatched(watched: Boolean, at: Long? = null) {
+        val cur = item.value ?: return
+        val newStatus =
+            if (watched) Status.ensure(cur.status, Status.WATCHED)
+            else Status.without(cur.status, Status.WATCHED)
+        val date = if (watched) (at ?: cur.completedAt ?: System.currentTimeMillis()) else cur.completedAt
+        launchUpdate(UpdateItemRequest(status = newStatus, completedAt = date))
+    }
+
+    /** Lazily fill in TV season/episode counts for items that were bulk-imported without them. */
+    fun ensureEnriched() {
+        val cur = item.value ?: return
+        if (cur.kind == MediaKind.TV && cur.seasons == null) {
+            viewModelScope.launch { repo.refreshDetails(id) }
+        }
+    }
 
     private val _covers = MutableStateFlow<List<CoverOption>>(emptyList())
     val covers = _covers.asStateFlow()

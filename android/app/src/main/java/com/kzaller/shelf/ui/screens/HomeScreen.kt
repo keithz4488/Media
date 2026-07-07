@@ -8,12 +8,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
@@ -38,13 +41,16 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
 import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.ShelfRepository
+import com.kzaller.shelf.data.models.ItemDto
 import com.kzaller.shelf.data.preferences.AppPreferences
 import com.kzaller.shelf.ui.components.AchievementUnlockBanner
 import com.kzaller.shelf.ui.theme.MediaShelfTheme
@@ -57,6 +63,7 @@ fun HomeScreen(
     onStats: () -> Unit,
     onAchievements: () -> Unit,
     onImport: () -> Unit,
+    onOpenItem: (MediaKind, String) -> Unit,
 ) {
     val context = LocalContext.current
     val repo = remember { ShelfRepository(context) }
@@ -65,6 +72,7 @@ fun HomeScreen(
     val achievementsVm: AchievementsViewModel =
         viewModel(factory = AchievementsViewModel.factory(repo, prefs))
     val counts by vm.counts.collectAsState()
+    val recent by vm.recentlyAdded.collectAsState()
     val unlockQueue by achievementsVm.queue.collectAsState()
     val currentUnlock = unlockQueue.firstOrNull()
 
@@ -142,14 +150,69 @@ fun HomeScreen(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth()
-                            .padding(bottom = 24.dp),
+                            .padding(bottom = 16.dp),
                     )
+                    if (recent.isNotEmpty()) {
+                        RecentlyAddedRow(
+                            entries = recent,
+                            onOpenItem = onOpenItem,
+                            modifier = Modifier.padding(bottom = 20.dp),
+                        )
+                    }
                 }
                 // Flashy unlock banner overlays the top of the home screen.
                 AchievementUnlockBanner(
                     achievement = currentUnlock,
                     modifier = Modifier.align(Alignment.TopCenter),
                 )
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------- recently added
+
+@Composable
+private fun RecentlyAddedRow(
+    entries: List<ItemDto>,
+    onOpenItem: (MediaKind, String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        Text(
+            text = "Recently added",
+            style = MaterialTheme.typography.titleSmall.copy(
+                color = Color(0xFFE8E8EA),
+                fontWeight = FontWeight.SemiBold,
+            ),
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            items(entries, key = { "${it.kind.wire}:${it.id}" }) { item ->
+                val aspect = if (item.kind == MediaKind.GAME) 3f / 4f else 2f / 3f
+                Box(
+                    modifier = Modifier
+                        .width(64.dp)
+                        .aspectRatio(aspect)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color.Black.copy(alpha = 0.3f))
+                        .clickable { onOpenItem(item.kind, item.id) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (item.coverUrl != null) {
+                        AsyncImage(
+                            model = item.coverUrl,
+                            contentDescription = item.title,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    } else {
+                        Text(
+                            text = item.title.take(2).uppercase(),
+                            style = MaterialTheme.typography.labelMedium.copy(color = Color(0xFFE5C07B)),
+                        )
+                    }
+                }
             }
         }
     }

@@ -70,6 +70,7 @@ fun ShelfApp() {
                     onStats = { nav.navigateIfResumed(entry, Routes.STATS) },
                     onAchievements = { nav.navigateIfResumed(entry, Routes.ACHIEVEMENTS) },
                     onImport = { nav.navigateIfResumed(entry, Routes.IMPORT) },
+                    onOpenItem = { k, id -> nav.navigateIfResumed(entry, Routes.detail(k, id)) },
                 )
             }
             composable(Routes.IMPORT) {
