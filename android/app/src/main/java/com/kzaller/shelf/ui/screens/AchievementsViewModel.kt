@@ -39,19 +39,25 @@ class AchievementsViewModel(
     val queue: StateFlow<List<Achievement>> = _queue.asStateFlow()
 
     init {
-        viewModelScope.launch { repo.refreshAll() }
         viewModelScope.launch {
+            // Load the real library from the server BEFORE we seed/diff. Otherwise the first
+            // emission is the empty local cache: we'd bank an empty set, then treat the whole
+            // library as "newly unlocked" the moment it loads — a toast storm on every fresh
+            // install (which is exactly when the DataStore "seeded" flag is missing).
+            repo.refreshAll()
+
+            // Seeding is silent, so a reinstall quietly banks everything already earned and
+            // only achievements crossed AFTER this point ever toast.
+            var seeded = prefs.observeAchievementsSeeded().first()
             repo.observeAll().collect { items ->
                 val computed = Achievements.unlockedIds(AchievementStats.from(items))
-                val seeded = prefs.observeAchievementsSeeded().first()
-                val stored = prefs.observeUnlockedAchievements().first()
                 if (!seeded) {
-                    // First run after the feature shipped: silently bank whatever is already
-                    // earned so an existing library doesn't fire a toast storm.
                     prefs.setUnlockedAchievements(computed)
                     prefs.setAchievementsSeeded()
+                    seeded = true
                     return@collect
                 }
+                val stored = prefs.observeUnlockedAchievements().first()
                 val fresh = computed - stored
                 if (fresh.isNotEmpty()) {
                     prefs.setUnlockedAchievements(stored + computed)

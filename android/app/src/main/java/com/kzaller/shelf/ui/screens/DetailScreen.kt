@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -34,6 +35,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
@@ -164,11 +166,30 @@ private fun DetailPage(
                         IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back") }
                     },
                     actions = {
-                        IconButton(onClick = { vm.refresh() }) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Refresh details")
+                        var menuOpen by remember { mutableStateOf(false) }
+                        IconButton(onClick = { menuOpen = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "More")
                         }
-                        IconButton(onClick = { vm.delete(after = onBack) }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Delete")
+                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Change cover") },
+                                leadingIcon = { Icon(Icons.Default.Image, null) },
+                                onClick = {
+                                    menuOpen = false
+                                    coverSheetOpen = true
+                                    vm.loadCovers()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Refresh details") },
+                                leadingIcon = { Icon(Icons.Default.Refresh, null) },
+                                onClick = { menuOpen = false; vm.refresh() },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Delete") },
+                                leadingIcon = { Icon(Icons.Default.Delete, null) },
+                                onClick = { menuOpen = false; vm.delete(after = onBack) },
+                            )
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
@@ -188,61 +209,88 @@ private fun DetailPage(
                         .verticalScroll(rememberScrollState())
                         .padding(20.dp),
                 ) {
-                    // Hero cover, centered and standing with a soft shadow like on the shelf.
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(0.66f)
-                            .align(Alignment.CenterHorizontally)
-                            .aspectRatio(if (current.kind == MediaKind.GAME) 3f / 4f else 2f / 3f)
-                            .shadow(16.dp, RoundedCornerShape(12.dp), clip = false)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Color.Black.copy(alpha = 0.25f)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        if (current.coverUrl != null) {
-                            AsyncImage(
-                                model = current.coverUrl,
-                                contentDescription = current.title,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize(),
-                            )
-                        } else {
-                            Text(
-                                text = current.title.take(2).uppercase(),
-                                style = flavor.titleStyle.copy(color = flavor.accent),
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(6.dp))
-                    Box(modifier = Modifier.align(Alignment.CenterHorizontally)) {
-                        TextButton(onClick = {
-                            coverSheetOpen = true
-                            vm.loadCovers()
-                        }) {
-                            Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.size(6.dp))
-                            Text("Change cover")
-                        }
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = current.title,
-                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                        textAlign = TextAlign.Center,
+                    // Compact header: a standing cover beside the title, meta, and rating,
+                    // so more is visible above the fold (Cibby-style). Tap the cover to swap art.
+                    Row(
                         modifier = Modifier.fillMaxWidth(),
-                    )
-                    val secondary = listOfNotNull(current.subtitle, current.year?.toString()).joinToString(" · ")
-                    if (secondary.isNotBlank()) {
-                        Text(
-                            text = secondary,
-                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
-                            style = MaterialTheme.typography.bodyMedium,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(128.dp)
+                                .aspectRatio(if (current.kind == MediaKind.GAME) 3f / 4f else 2f / 3f)
+                                .shadow(14.dp, RoundedCornerShape(10.dp), clip = false)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color.Black.copy(alpha = 0.25f))
+                                .clickable {
+                                    coverSheetOpen = true
+                                    vm.loadCovers()
+                                },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (current.coverUrl != null) {
+                                AsyncImage(
+                                    model = current.coverUrl,
+                                    contentDescription = current.title,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            } else {
+                                Text(
+                                    text = current.title.take(2).uppercase(),
+                                    style = flavor.titleStyle.copy(color = flavor.accent),
+                                )
+                            }
+                            // Small badge hinting the cover is tappable to change art.
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .padding(6.dp)
+                                    .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(50))
+                                    .padding(5.dp),
+                            ) {
+                                Icon(
+                                    Icons.Default.Image,
+                                    contentDescription = "Change cover",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(14.dp),
+                                )
+                            }
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = current.title,
+                                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                            )
+                            val secondary = listOfNotNull(current.subtitle, current.year?.toString()).joinToString(" · ")
+                            if (secondary.isNotBlank()) {
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    text = secondary,
+                                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                            }
+                            Spacer(Modifier.height(10.dp))
+                            Row {
+                                for (i in 1..5) {
+                                    val filled = (current.rating ?: 0) >= i
+                                    Icon(
+                                        imageVector = if (filled) Icons.Default.Star else Icons.Default.StarBorder,
+                                        contentDescription = "Rate $i",
+                                        tint = flavor.accent,
+                                        modifier = Modifier
+                                            .size(30.dp)
+                                            .clip(RoundedCornerShape(50))
+                                            .clickable { vm.setRating(if (current.rating == i) null else i) }
+                                            .padding(2.dp),
+                                    )
+                                }
+                            }
+                        }
                     }
 
-                    Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(20.dp))
                     Text("Status", style = MaterialTheme.typography.titleSmall)
                     Spacer(Modifier.height(6.dp))
                     val selectedStatuses = Status.parse(current.status)
@@ -354,21 +402,6 @@ private fun DetailPage(
                                     vm.setConsoles(Console.toggle(current.consoles, code))
                                 },
                             )
-                        }
-                    }
-
-                    Spacer(Modifier.height(16.dp))
-                    Text("Rating", style = MaterialTheme.typography.titleSmall)
-                    Row {
-                        for (i in 1..5) {
-                            val filled = (current.rating ?: 0) >= i
-                            IconButton(onClick = { vm.setRating(if (current.rating == i) null else i) }) {
-                                Icon(
-                                    imageVector = if (filled) Icons.Default.Star else Icons.Default.StarBorder,
-                                    contentDescription = "Rate $i",
-                                    tint = flavor.accent,
-                                )
-                            }
                         }
                     }
 
