@@ -54,6 +54,7 @@ interface Item {
   cur_season?: number | null;    // TV: user's current season
   cur_episode?: number | null;   // TV: user's current episode
   completed_at?: number | null;  // epoch ms when the user marked the item as finished
+  show_to?: string | null;       // movies/TV: CSV of people to show it to
   added_at?: number;
   updated_at?: number;
 }
@@ -321,7 +322,7 @@ async function updateItem(id: string, req: Request, env: Env): Promise<Response>
   const fields: string[] = [];
   const values: unknown[] = [];
   let i = 1;
-  for (const k of ["title", "subtitle", "year", "cover_url", "description", "rating", "status", "notes", "user_platform", "consoles", "format", "seasons", "episodes", "cur_season", "cur_episode", "completed_at"] as const) {
+  for (const k of ["title", "subtitle", "year", "cover_url", "description", "rating", "status", "notes", "user_platform", "consoles", "format", "seasons", "episodes", "cur_season", "cur_episode", "completed_at", "show_to"] as const) {
     if (k in body) {
       fields.push(`${k} = ?${i++}`);
       values.push(body[k] ?? null);

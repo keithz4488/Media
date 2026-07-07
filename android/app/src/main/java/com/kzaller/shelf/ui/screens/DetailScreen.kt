@@ -472,6 +472,15 @@ private fun DetailPage(
                         )
                     }
 
+                    if (current.kind == MediaKind.MOVIE || current.kind == MediaKind.TV) {
+                        Spacer(Modifier.height(16.dp))
+                        ShowToSection(
+                            namesCsv = current.showTo,
+                            accent = flavor.accent,
+                            onSet = { vm.setShowTo(it) },
+                        )
+                    }
+
                     Spacer(Modifier.height(8.dp))
                     NotesSection(
                         savedNotes = current.notes,
@@ -953,6 +962,64 @@ private fun WatchedSection(
         ) {
             DatePicker(state = pickerState)
         }
+    }
+}
+
+/**
+ * Movies/TV "Show to" list: people you want to show this to. Names are stored as a CSV; each
+ * shows as a removable chip, and a text field appends a new one.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ShowToSection(
+    namesCsv: String?,
+    accent: Color,
+    onSet: (String) -> Unit,
+) {
+    val names = remember(namesCsv) {
+        namesCsv?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList()
+    }
+    var draft by remember(namesCsv) { mutableStateOf("") }
+
+    fun commit() {
+        val n = draft.trim()
+        if (n.isNotEmpty() && names.none { it.equals(n, ignoreCase = true) }) {
+            onSet((names + n).joinToString(","))
+        }
+        draft = ""
+    }
+
+    Text("Show to", style = MaterialTheme.typography.titleSmall)
+    Spacer(Modifier.height(6.dp))
+    if (names.isNotEmpty()) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            names.forEach { name ->
+                AssistChip(
+                    onClick = { onSet((names - name).joinToString(",")) },
+                    label = { Text(name, color = accent) },
+                    trailingIcon = {
+                        Icon(Icons.Default.Close, contentDescription = "Remove", modifier = Modifier.size(14.dp), tint = accent)
+                    },
+                    colors = AssistChipDefaults.assistChipColors(containerColor = accent.copy(alpha = 0.22f)),
+                )
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        OutlinedTextField(
+            value = draft,
+            onValueChange = { draft = it },
+            label = { Text("Add a name") },
+            singleLine = true,
+            modifier = Modifier.weight(1f),
+            colors = shelfTextFieldColors(),
+        )
+        Spacer(Modifier.size(8.dp))
+        Button(onClick = { commit() }, enabled = draft.isNotBlank()) { Text("Add") }
     }
 }
 

@@ -26,6 +26,7 @@ data class ItemDto(
     @SerialName("cur_season") val curSeason: Int? = null,
     @SerialName("cur_episode") val curEpisode: Int? = null,
     @SerialName("completed_at") val completedAt: Long? = null,
+    @SerialName("show_to") val showTo: String? = null,
     @SerialName("added_at")   val addedAt: Long? = null,
     @SerialName("updated_at") val updatedAt: Long? = null,
 )
@@ -80,6 +81,7 @@ data class UpdateItemRequest(
     @SerialName("cur_season") val curSeason: Int? = null,
     @SerialName("cur_episode") val curEpisode: Int? = null,
     @SerialName("completed_at") val completedAt: Long? = null,
+    @SerialName("show_to") val showTo: String? = null,
 )
 
 @Serializable

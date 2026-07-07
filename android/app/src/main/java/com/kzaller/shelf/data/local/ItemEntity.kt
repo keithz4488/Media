@@ -31,6 +31,7 @@ data class ItemEntity(
     val curSeason: Int?,
     val curEpisode: Int?,
     val completedAt: Long?,
+    val showTo: String?,
     val addedAt: Long,
     val updatedAt: Long,
 ) {
@@ -55,6 +56,7 @@ data class ItemEntity(
         curSeason = curSeason,
         curEpisode = curEpisode,
         completedAt = completedAt,
+        showTo = showTo,
         addedAt = addedAt,
         updatedAt = updatedAt,
     )
@@ -81,6 +83,7 @@ data class ItemEntity(
             curSeason = dto.curSeason,
             curEpisode = dto.curEpisode,
             completedAt = dto.completedAt,
+            showTo = dto.showTo,
             addedAt = dto.addedAt ?: System.currentTimeMillis(),
             updatedAt = dto.updatedAt ?: System.currentTimeMillis(),
         )

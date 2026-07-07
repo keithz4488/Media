@@ -87,8 +87,7 @@ data class AchievementStats(
                 played = items.count { it.kind == MediaKind.GAME && Status.parse(it.status).contains(Status.PLAYED) },
                 wishlist = items.count { Status.parse(it.status).contains(Status.WISHLIST) },
                 showTo = items.count {
-                    (it.kind == MediaKind.MOVIE || it.kind == MediaKind.TV) &&
-                        Status.parse(it.status).contains(Status.SHOW_TO)
+                    (it.kind == MediaKind.MOVIE || it.kind == MediaKind.TV) && !it.showTo.isNullOrBlank()
                 },
             )
         }

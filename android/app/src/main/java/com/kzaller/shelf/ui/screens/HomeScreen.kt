@@ -1,21 +1,14 @@
 package com.kzaller.shelf.ui.screens
 
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -24,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -38,7 +32,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -54,10 +47,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.roundToInt
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.ShelfRepository
@@ -241,17 +238,25 @@ private fun AnimatedWall(modifier: Modifier = Modifier) {
 @Composable
 private fun CollectionGlance(stats: List<GlanceStat>, modifier: Modifier = Modifier) {
     if (stats.isEmpty()) return
-    val pages = remember(stats) { stats.chunked(3) }
-    var page by remember(pages.size) { mutableStateOf(0) }
 
-    // Auto-advance through the pages like a news ticker.
-    LaunchedEffect(pages.size) {
-        if (pages.size <= 1) return@LaunchedEffect
-        while (true) {
-            kotlinx.coroutines.delay(3500)
-            page = (page + 1) % pages.size
-        }
+    // A continuous news-ticker crawl: two identical copies of the stat run scroll left at a
+    // constant speed; when the first fully exits, the second is exactly in its place, so the
+    // loop is seamless and never pauses.
+    var contentWidth by remember { mutableStateOf(0) }
+    val density = LocalDensity.current
+    val speedPxPerSec = with(density) { 26.dp.toPx() }
+    val durationMs = if (contentWidth > 0) {
+        (contentWidth / speedPxPerSec * 1000f).toInt().coerceAtLeast(1)
+    } else {
+        1
     }
+    val transition = rememberInfiniteTransition(label = "ticker")
+    val offset by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = -contentWidth.toFloat(),
+        animationSpec = infiniteRepeatable(tween(durationMs, easing = LinearEasing)),
+        label = "ticker-offset",
+    )
 
     Box(
         modifier = modifier
@@ -260,24 +265,22 @@ private fun CollectionGlance(stats: List<GlanceStat>, modifier: Modifier = Modif
             .background(Color.Black.copy(alpha = 0.22f))
             .padding(vertical = 16.dp),
     ) {
-        AnimatedContent(
-            targetState = page.coerceIn(0, pages.lastIndex),
-            transitionSpec = {
-                (slideInHorizontally { it } + fadeIn()) togetherWith
-                    (slideOutHorizontally { -it } + fadeOut())
-            },
-            label = "glance-ticker",
-        ) { p ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                pages[p].forEachIndexed { i, stat ->
-                    if (i > 0) GlanceDivider()
-                    GlanceCell(stat.value, stat.label)
-                }
-            }
+        Row(modifier = Modifier.offset { IntOffset(offset.roundToInt(), 0) }) {
+            TickerRun(stats, Modifier.onGloballyPositioned { contentWidth = it.size.width })
+            TickerRun(stats)
+        }
+    }
+}
+
+/** One run of every stat, each wrapped in gaps and trailed by a divider so copies chain cleanly. */
+@Composable
+private fun TickerRun(stats: List<GlanceStat>, modifier: Modifier = Modifier) {
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+        stats.forEach { stat ->
+            Spacer(Modifier.width(26.dp))
+            GlanceCell(stat.value, stat.label)
+            Spacer(Modifier.width(26.dp))
+            GlanceDivider()
         }
     }
 }

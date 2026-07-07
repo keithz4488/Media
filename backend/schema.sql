@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS items (
   cur_season    INTEGER,                         -- TV: user's current season
   cur_episode   INTEGER,                         -- TV: user's current episode
   completed_at  INTEGER,                         -- epoch ms when the user marked the item as finished/read/watched/played
+  show_to       TEXT,                            -- movies/TV: CSV of people to show it to
   added_at      INTEGER NOT NULL,
   updated_at    INTEGER NOT NULL,
   UNIQUE(kind, external_src, external_id)

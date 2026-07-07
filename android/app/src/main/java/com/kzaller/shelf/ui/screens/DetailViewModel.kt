@@ -56,6 +56,7 @@ class DetailViewModel(
         launchUpdate(UpdateItemRequest(userPlatform = platformsCsv, consoles = consolesCsv))
     fun setConsoles(csv: String) = launchUpdate(UpdateItemRequest(consoles = csv))
     fun setFormat(csv: String) = launchUpdate(UpdateItemRequest(format = csv))
+    fun setShowTo(csv: String) = launchUpdate(UpdateItemRequest(showTo = csv))
     fun setProgress(season: Int?, episode: Int?) =
         launchUpdate(UpdateItemRequest(curSeason = season, curEpisode = episode))
     fun setCompletedAt(millis: Long?) =
