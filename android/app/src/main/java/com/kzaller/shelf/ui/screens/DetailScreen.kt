@@ -27,6 +27,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.CalendarToday
@@ -41,6 +42,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
@@ -966,8 +968,8 @@ private fun WatchedSection(
 }
 
 /**
- * Movies/TV "Show to" list: people you want to show this to. Names are stored as a CSV; each
- * shows as a removable chip, and a text field appends a new one.
+ * Movies/TV "Show to" list: people you want to show this to. Each name is a removable chip; a
+ * trailing "+ Add" chip opens a small dialog to enter one — no always-visible text box.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -979,47 +981,61 @@ private fun ShowToSection(
     val names = remember(namesCsv) {
         namesCsv?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList()
     }
-    var draft by remember(namesCsv) { mutableStateOf("") }
-
-    fun commit() {
-        val n = draft.trim()
-        if (n.isNotEmpty() && names.none { it.equals(n, ignoreCase = true) }) {
-            onSet((names + n).joinToString(","))
-        }
-        draft = ""
-    }
+    var dialogOpen by remember { mutableStateOf(false) }
 
     Text("Show to", style = MaterialTheme.typography.titleSmall)
     Spacer(Modifier.height(6.dp))
-    if (names.isNotEmpty()) {
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            names.forEach { name ->
-                AssistChip(
-                    onClick = { onSet((names - name).joinToString(",")) },
-                    label = { Text(name, color = accent) },
-                    trailingIcon = {
-                        Icon(Icons.Default.Close, contentDescription = "Remove", modifier = Modifier.size(14.dp), tint = accent)
-                    },
-                    colors = AssistChipDefaults.assistChipColors(containerColor = accent.copy(alpha = 0.22f)),
-                )
-            }
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        names.forEach { name ->
+            AssistChip(
+                onClick = { onSet((names - name).joinToString(",")) },
+                label = { Text(name, color = accent) },
+                trailingIcon = {
+                    Icon(Icons.Default.Close, contentDescription = "Remove", modifier = Modifier.size(14.dp), tint = accent)
+                },
+                colors = AssistChipDefaults.assistChipColors(containerColor = accent.copy(alpha = 0.22f)),
+            )
         }
-        Spacer(Modifier.height(8.dp))
-    }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        OutlinedTextField(
-            value = draft,
-            onValueChange = { draft = it },
-            label = { Text("Add a name") },
-            singleLine = true,
-            modifier = Modifier.weight(1f),
-            colors = shelfTextFieldColors(),
+        AssistChip(
+            onClick = { dialogOpen = true },
+            label = { Text(if (names.isEmpty()) "Add someone" else "Add") },
+            leadingIcon = { Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp)) },
         )
-        Spacer(Modifier.size(8.dp))
-        Button(onClick = { commit() }, enabled = draft.isNotBlank()) { Text("Add") }
+    }
+
+    if (dialogOpen) {
+        var draft by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { dialogOpen = false },
+            title = { Text("Show to who?") },
+            text = {
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    label = { Text("Name") },
+                    singleLine = true,
+                    colors = shelfTextFieldColors(),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val n = draft.trim()
+                        if (n.isNotEmpty() && names.none { it.equals(n, ignoreCase = true) }) {
+                            onSet((names + n).joinToString(","))
+                        }
+                        dialogOpen = false
+                    },
+                    enabled = draft.isNotBlank(),
+                ) { Text("Add") }
+            },
+            dismissButton = {
+                TextButton(onClick = { dialogOpen = false }) { Text("Cancel") }
+            },
+        )
     }
 }
 

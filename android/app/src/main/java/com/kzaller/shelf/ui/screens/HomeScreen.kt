@@ -261,9 +261,10 @@ private fun CollectionGlance(stats: List<GlanceStat>, modifier: Modifier = Modif
     Box(
         modifier = modifier
             .fillMaxWidth()
+            .height(72.dp)
             .clip(RoundedCornerShape(14.dp))
-            .background(Color.Black.copy(alpha = 0.22f))
-            .padding(vertical = 16.dp),
+            .background(Color.Black.copy(alpha = 0.22f)),
+        contentAlignment = Alignment.CenterStart,
     ) {
         Row(modifier = Modifier.offset { IntOffset(offset.roundToInt(), 0) }) {
             TickerRun(stats, Modifier.onGloballyPositioned { contentWidth = it.size.width })
