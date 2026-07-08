@@ -1056,7 +1056,7 @@ async function enrichOpenLibrary(item: Item): Promise<Item> {
 async function enrichRawg(item: Item, env: Env): Promise<Item> {
   if (!env.RAWG_API_KEY) return item;
   const slug = encodeURIComponent(item.external_id || "");
-  const r = await fetch(`https://api.rawg.io/api/games/${slug}?key=${env.RAWG_API_KEY}`);
+  const r = await fetchWithTimeout(`https://api.rawg.io/api/games/${slug}?key=${env.RAWG_API_KEY}`, {}, 7000);
   if (!r.ok) return item;
   const g = (await r.json()) as any;
 

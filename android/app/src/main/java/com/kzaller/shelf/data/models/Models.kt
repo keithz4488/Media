@@ -63,6 +63,8 @@ data class CreateItemRequest(
     val description: String? = null,
     val status: String? = "owned",
     val format: String? = null,
+    @SerialName("user_platform") val userPlatform: String? = null,
+    val consoles: String? = null,
 )
 
 @Serializable

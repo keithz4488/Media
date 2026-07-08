@@ -58,6 +58,10 @@ class ShelfRepository(context: Context) {
         status: String = "owned",
         format: String? = null,
     ): Result<ItemDto> = runCatching {
+        // For a game that shipped on only one system, pre-fill the platform + console from the
+        // hit's platform list (its subtitle). Multi-platform games are left for the user to pick.
+        val (userPlatform, consoles) =
+            if (kind == MediaKind.GAME) Console.autoFill(hit.subtitle) else (null to null)
         val resp = api.create(
             CreateItemRequest(
                 kind = kind,
@@ -70,6 +74,8 @@ class ShelfRepository(context: Context) {
                 description = hit.description,
                 status = status,
                 format = format,
+                userPlatform = userPlatform,
+                consoles = consoles,
             ),
         )
         db.items().upsert(ItemEntity.fromDto(resp.item))

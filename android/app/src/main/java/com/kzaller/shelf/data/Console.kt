@@ -94,4 +94,70 @@ object Console {
         val allowed = activePlatforms.flatMap { forPlatform(it) }.toSet()
         return parsed.filter { it in allowed }.joinToString(",")
     }
+
+    /** The platform "company" a console code belongs to. */
+    private fun platformOf(code: String): String = when {
+        code in forPlatform(Platform.XBOX) -> Platform.XBOX
+        code in forPlatform(Platform.PLAYSTATION) -> Platform.PLAYSTATION
+        code in forPlatform(Platform.NINTENDO) -> Platform.NINTENDO
+        else -> Platform.PC
+    }
+
+    private data class Resolved(val platform: String, val console: String?)
+
+    /** Best-effort map one external store platform name (RAWG/IGDB) to a platform + console. */
+    private fun resolveOne(rawName: String): Resolved? {
+        val n = rawName.lowercase()
+        // PC / mobile have no sub-console.
+        if ("ios" in n || "iphone" in n || "ipad" in n || "android" in n || "mobile" in n) {
+            return Resolved(Platform.MOBILE, null)
+        }
+        if ("pc" in n || "windows" in n || "mac" in n || "linux" in n || "steam" in n) {
+            return Resolved(Platform.PC, null)
+        }
+        // Consoles — most specific names first so e.g. "Switch 2" isn't caught by "Switch".
+        val console = when {
+            "switch 2" in n -> SWITCH_2
+            "switch" in n -> SWITCH
+            "wii u" in n -> WIIU
+            "wii" in n -> WII
+            "gamecube" in n -> GAMECUBE
+            "nintendo 64" in n || n == "n64" -> N64
+            "super nintendo" in n || "super nes" in n || "snes" in n -> SNES
+            "game boy advance" in n -> GAMEBOY_ADVANCE
+            "game boy color" in n -> GAMEBOY_COLOR
+            "game boy" in n -> GAMEBOY
+            "3ds" in n -> THREEDS
+            "nintendo ds" in n || n == "ds" -> DS
+            "nes" in n || "nintendo entertainment" in n -> NES
+            "playstation 5" in n || "ps5" in n -> PS5
+            "playstation 4" in n || "ps4" in n -> PS4
+            "playstation 3" in n || "ps3" in n -> PS3
+            "playstation 2" in n || "ps2" in n -> PS2
+            "vita" in n -> PS_VITA
+            "psp" in n -> PSP
+            "playstation" in n || "ps1" in n -> PS1
+            "xbox" in n && "series" in n -> XBOX_SERIES
+            "xbox one" in n -> XBOX_ONE
+            "xbox 360" in n -> XBOX_360
+            "xbox" in n -> XBOX_OG
+            else -> return null
+        }
+        return Resolved(platformOf(console), console)
+    }
+
+    /**
+     * When a game released on exactly one system, resolve that system from the search hit's
+     * platform list (a comma-separated string) so it can be auto-filled on add. Returns
+     * (user_platform, consoles) CSVs, or (null, null) when the list is empty, unrecognized, or
+     * spans more than one system (ambiguous — let the user pick which copy they own).
+     */
+    fun autoFill(platformSubtitle: String?): Pair<String?, String?> {
+        val names = platformSubtitle?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }
+        if (names.isNullOrEmpty()) return null to null
+        val resolved = names.mapNotNull { resolveOne(it) }.toSet()
+        if (resolved.size != 1) return null to null
+        val only = resolved.first()
+        return only.platform to only.console
+    }
 }
