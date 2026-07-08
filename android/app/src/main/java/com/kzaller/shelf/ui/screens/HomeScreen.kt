@@ -23,6 +23,8 @@ import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -31,7 +33,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -63,6 +67,7 @@ fun HomeScreen(
     onStats: () -> Unit,
     onAchievements: () -> Unit,
     onImport: () -> Unit,
+    onImportSteam: () -> Unit,
     onOpenItem: (MediaKind, String) -> Unit,
 ) {
     val context = LocalContext.current
@@ -108,12 +113,28 @@ fun HomeScreen(
                                 tint = Color(0xFFE5C07B),
                             )
                         }
-                        IconButton(onClick = onImport) {
-                            Icon(
-                                imageVector = Icons.Default.CloudDownload,
-                                contentDescription = "Import from Plex",
-                                tint = Color(0xFFE5C07B),
-                            )
+                        Box {
+                            var importMenuOpen by remember { mutableStateOf(false) }
+                            IconButton(onClick = { importMenuOpen = true }) {
+                                Icon(
+                                    imageVector = Icons.Default.CloudDownload,
+                                    contentDescription = "Import",
+                                    tint = Color(0xFFE5C07B),
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = importMenuOpen,
+                                onDismissRequest = { importMenuOpen = false },
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("From Plex") },
+                                    onClick = { importMenuOpen = false; onImport() },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("From Steam") },
+                                    onClick = { importMenuOpen = false; onImportSteam() },
+                                )
+                            }
                         }
                         IconButton(onClick = onStats) {
                             Icon(

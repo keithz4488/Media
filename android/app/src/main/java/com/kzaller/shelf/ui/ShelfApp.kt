@@ -36,6 +36,8 @@ import com.kzaller.shelf.ui.screens.SearchAllViewModel
 import com.kzaller.shelf.ui.screens.ShelfScreen
 import com.kzaller.shelf.ui.screens.ShelfViewModel
 import com.kzaller.shelf.ui.screens.StatsScreen
+import com.kzaller.shelf.ui.screens.SteamImportScreen
+import com.kzaller.shelf.ui.screens.SteamImportViewModel
 import com.kzaller.shelf.ui.screens.StatsViewModel
 import com.kzaller.shelf.ui.theme.MediaShelfTheme
 
@@ -51,6 +53,7 @@ object Routes {
     const val STATS = "stats"
     const val ACHIEVEMENTS = "achievements"
     const val IMPORT = "import"
+    const val STEAM_IMPORT = "import/steam"
 }
 
 /** Guard against navigations issued during a back-transition: when the user has just
@@ -91,12 +94,21 @@ fun ShelfApp() {
                     onStats = { nav.navigateIfResumed(entry, Routes.STATS) },
                     onAchievements = { nav.navigateIfResumed(entry, Routes.ACHIEVEMENTS) },
                     onImport = { nav.navigateIfResumed(entry, Routes.IMPORT) },
+                    onImportSteam = { nav.navigateIfResumed(entry, Routes.STEAM_IMPORT) },
                     onOpenItem = { k, id -> nav.navigateIfResumed(entry, Routes.detail(k, id)) },
                 )
             }
             composable(Routes.IMPORT) {
                 val vm: ImportViewModel = viewModel(factory = ImportViewModel.factory(repo, prefs))
                 ImportScreen(
+                    vm = vm,
+                    onBack = { nav.popBackStack() },
+                    onDone = { nav.popBackStack() },
+                )
+            }
+            composable(Routes.STEAM_IMPORT) {
+                val vm: SteamImportViewModel = viewModel(factory = SteamImportViewModel.factory(repo, prefs))
+                SteamImportScreen(
                     vm = vm,
                     onBack = { nav.popBackStack() },
                     onDone = { nav.popBackStack() },

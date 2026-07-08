@@ -44,6 +44,19 @@ class AppPreferences(private val context: Context) {
         }
     }
 
+    private val steamKeyKey = stringPreferencesKey("steam_key")
+    private val steamIdKey = stringPreferencesKey("steam_id")
+
+    fun observeSteamKey(): Flow<String> = context.dataStore.data.map { it[steamKeyKey] ?: "" }
+    fun observeSteamId(): Flow<String> = context.dataStore.data.map { it[steamIdKey] ?: "" }
+
+    suspend fun setSteam(key: String, id: String) {
+        context.dataStore.edit {
+            it[steamKeyKey] = key.trim()
+            it[steamIdKey] = id.trim()
+        }
+    }
+
     private val unlockedKey = stringPreferencesKey("achievements_unlocked")
 
     /** Set of achievement ids already unlocked (so we only toast newly-earned ones). */
