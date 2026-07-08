@@ -607,6 +607,11 @@ function addStatusCsv(csv: string | null | undefined, value: string): string {
   return parts.join(",");
 }
 
+/** Remove a status code from a CSV. */
+function removeStatusCsv(csv: string | null | undefined, value: string): string {
+  return (csv || "").split(",").map((s) => s.trim()).filter((s) => s && s !== value).join(",");
+}
+
 /** Movie finished on Plex -> mark it Watched (adding it as owned+digital if it's not on a shelf yet). */
 async function scrobbleMovieWatched(md: any, env: Env): Promise<Response> {
   const tmdbId = extractTmdbFromMetadata(md);
@@ -692,16 +697,29 @@ async function scrobbleEpisodeProgress(md: any, env: Env): Promise<Response> {
   const newS = isNewer ? season : curS;
   const newE = isNewer ? ep : curE;
 
-  // Leave an already-Watched show alone; otherwise ensure it's marked Watching.
   const hasWatched = (row.status || "").split(",").map((s) => s.trim()).includes("watched");
-  const status = hasWatched ? (row.status || "") : addStatusCsv(row.status, "watching");
+  // "Caught up" = on/past the final season (the same definition the app displays). When progress
+  // reaches it, flip the show to Watched and drop the Watching flag.
+  const caughtUp = (row.seasons ?? 0) > 0 && (newS ?? 0) >= (row.seasons ?? 0);
+  const now = Date.now();
+
+  let status: string;
+  let completedAt = row.completed_at ?? null;
+  if (hasWatched) {
+    status = row.status || "";
+  } else if (caughtUp) {
+    status = addStatusCsv(removeStatusCsv(row.status, "watching"), "watched");
+    completedAt = completedAt ?? now;
+  } else {
+    status = addStatusCsv(row.status, "watching");
+  }
 
   await env.DB
-    .prepare("UPDATE items SET status=?1, cur_season=?2, cur_episode=?3, updated_at=?4 WHERE id=?5")
-    .bind(status, newS || null, newE || null, Date.now(), row.id)
+    .prepare("UPDATE items SET status=?1, cur_season=?2, cur_episode=?3, completed_at=?4, updated_at=?5 WHERE id=?6")
+    .bind(status, newS || null, newE || null, completedAt, now, row.id)
     .run();
 
-  return json({ ok: true, progress: `${row.title} S${newS}E${newE}` });
+  return json({ ok: true, progress: `${row.title} S${newS}E${newE}`, caughtUp });
 }
 
 async function searchGames(url: URL, env: Env): Promise<Response> {
