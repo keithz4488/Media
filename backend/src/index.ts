@@ -531,6 +531,13 @@ async function plexWebhook(req: Request, url: URL, env: Env): Promise<Response> 
   const event = payload.event;
   const md = payload.Metadata || {};
   const type = md.type;
+
+  // "Watched" sync: Plex scrobbles when playback finishes (~90%). A movie scrobble means the
+  // movie is watched; an episode scrobble advances the show's progress (a whole series can't be
+  // flipped to Watched from webhooks alone -- that needs the server's episode counts).
+  if (event === "media.scrobble" && type === "movie") return scrobbleMovieWatched(md, env);
+  if (event === "media.scrobble" && type === "episode") return scrobbleEpisodeProgress(md, env);
+
   if (event !== "library.new" || (type !== "movie" && type !== "show")) {
     return json({ ok: true, skipped: `${event}/${type}` });
   }
@@ -591,6 +598,110 @@ async function plexWebhook(req: Request, url: URL, env: Env): Promise<Response> 
     .run();
 
   return json({ ok: true, added: item.title, kind });
+}
+
+/** Add a status code to a CSV if it's not already present. */
+function addStatusCsv(csv: string | null | undefined, value: string): string {
+  const parts = (csv || "").split(",").map((s) => s.trim()).filter(Boolean);
+  if (!parts.includes(value)) parts.push(value);
+  return parts.join(",");
+}
+
+/** Movie finished on Plex -> mark it Watched (adding it as owned+digital if it's not on a shelf yet). */
+async function scrobbleMovieWatched(md: any, env: Env): Promise<Response> {
+  const tmdbId = extractTmdbFromMetadata(md);
+  const title: string | null = typeof md.title === "string" ? md.title : null;
+  let hit = tmdbId ? await tmdbLookup("movie", { id: tmdbId }, env) : null;
+  if (!hit && title) hit = await tmdbLookup("movie", { q: title }, env);
+  if (!hit) return json({ ok: true, skipped: "no tmdb match", title });
+
+  const now = Date.now();
+  let item: Item = {
+    id: uuid(),
+    kind: "movie",
+    title: hit.title,
+    subtitle: hit.subtitle ?? null,
+    year: hit.year ?? null,
+    cover_url: hit.cover_url ?? null,
+    external_id: hit.external_id,
+    external_src: "tmdb",
+    description: hit.description ?? null,
+    rating: null,
+    status: "owned,watched",
+    notes: null,
+    user_platform: null,
+    consoles: null,
+    format: "digital",
+    seasons: null,
+    episodes: null,
+    cur_season: null,
+    cur_episode: null,
+    completed_at: now,
+    show_to: null,
+    added_at: now,
+    updated_at: now,
+  };
+  item = await enrichForCreate(item, env);
+
+  // Insert if new; if it already exists, append "watched" (preserving other statuses) and stamp
+  // a completion date if it didn't have one.
+  await env.DB.prepare(
+    `INSERT INTO items
+      (id, kind, title, subtitle, year, cover_url, external_id, external_src,
+       description, rating, status, notes, user_platform, consoles, format,
+       seasons, episodes, cur_season, cur_episode, completed_at, added_at, updated_at)
+     VALUES
+      (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22)
+     ON CONFLICT(kind, external_src, external_id) DO UPDATE SET
+       status = CASE
+         WHEN COALESCE(items.status,'') LIKE '%watched%' THEN items.status
+         ELSE TRIM(COALESCE(items.status,'') || ',watched', ',')
+       END,
+       completed_at = COALESCE(items.completed_at, excluded.completed_at),
+       updated_at = excluded.updated_at`,
+  )
+    .bind(
+      item.id, item.kind, item.title, item.subtitle, item.year, item.cover_url,
+      item.external_id, item.external_src, item.description, item.rating, item.status,
+      item.notes, item.user_platform, item.consoles, item.format, item.seasons,
+      item.episodes, item.cur_season, item.cur_episode, item.completed_at,
+      item.added_at, item.updated_at,
+    )
+    .run();
+
+  return json({ ok: true, watched: item.title });
+}
+
+/** Episode finished on Plex -> mark the show Watching and advance its season/episode progress. */
+async function scrobbleEpisodeProgress(md: any, env: Env): Promise<Response> {
+  const show: string | null = typeof md.grandparentTitle === "string" ? md.grandparentTitle : null;
+  const season: number | null = typeof md.parentIndex === "number" ? md.parentIndex : null;
+  const ep: number | null = typeof md.index === "number" ? md.index : null;
+  if (!show) return json({ ok: true, skipped: "no show title" });
+
+  // Only touch shows already on the shelf; don't add a series from a single episode play.
+  const row = await env.DB
+    .prepare("SELECT * FROM items WHERE kind='tv' AND lower(title) = lower(?1) LIMIT 1")
+    .bind(show)
+    .first<Item>();
+  if (!row) return json({ ok: true, skipped: "show not on shelf", show });
+
+  const curS = row.cur_season ?? 0;
+  const curE = row.cur_episode ?? 0;
+  const isNewer = season != null && (season > curS || (season === curS && (ep ?? 0) > curE));
+  const newS = isNewer ? season : curS;
+  const newE = isNewer ? ep : curE;
+
+  // Leave an already-Watched show alone; otherwise ensure it's marked Watching.
+  const hasWatched = (row.status || "").split(",").map((s) => s.trim()).includes("watched");
+  const status = hasWatched ? (row.status || "") : addStatusCsv(row.status, "watching");
+
+  await env.DB
+    .prepare("UPDATE items SET status=?1, cur_season=?2, cur_episode=?3, updated_at=?4 WHERE id=?5")
+    .bind(status, newS || null, newE || null, Date.now(), row.id)
+    .run();
+
+  return json({ ok: true, progress: `${row.title} S${newS}E${newE}` });
 }
 
 async function searchGames(url: URL, env: Env): Promise<Response> {
