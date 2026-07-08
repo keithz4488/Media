@@ -67,7 +67,8 @@ class SteamClient {
         val out = ArrayList<SteamGame>(games.length())
         for (i in 0 until games.length()) {
             val g = games.getJSONObject(i)
-            val name = g.optString("name").ifBlank { continue }
+            val name = g.optString("name")
+            if (name.isBlank()) continue
             out.add(
                 SteamGame(
                     appId = g.optLong("appid"),
