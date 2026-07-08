@@ -29,6 +29,7 @@ export interface Env {
   STEAMGRIDDB_API_KEY?: string; // optional: when set, augments game covers with SteamGridDB box art
   IGDB_CLIENT_ID?: string;      // optional: when both set, game search augments RAWG with IGDB
   IGDB_CLIENT_SECRET?: string;
+  PLEX_WEBHOOK_SECRET?: string; // optional: dedicated secret for the Plex webhook URL (falls back to SHELF_TOKEN)
 }
 
 type Kind = "book" | "movie" | "tv" | "game";
@@ -508,7 +509,10 @@ async function tmdbLookup(kind: "movie" | "tv", opts: { id?: string; q?: string 
  */
 async function plexWebhook(req: Request, url: URL, env: Env): Promise<Response> {
   const secret = url.searchParams.get("token") || url.searchParams.get("s");
-  if (!env.SHELF_TOKEN || secret !== env.SHELF_TOKEN) return err(401, "unauthorized");
+  // Prefer a dedicated webhook secret (so the app's main token stays out of Plex config/logs),
+  // but fall back to SHELF_TOKEN if no dedicated one is set.
+  const expected = env.PLEX_WEBHOOK_SECRET || env.SHELF_TOKEN;
+  if (!expected || secret !== expected) return err(401, "unauthorized");
 
   let payloadStr: string | null = null;
   try {
