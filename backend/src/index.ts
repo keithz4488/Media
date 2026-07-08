@@ -56,6 +56,7 @@ interface Item {
   cur_episode?: number | null;   // TV: user's current episode
   completed_at?: number | null;  // epoch ms when the user marked the item as finished
   show_to?: string | null;       // movies/TV: CSV of people to show it to
+  season_episodes?: string | null; // TV: CSV of "seasonNumber:episodeCount" pairs
   added_at?: number;
   updated_at?: number;
 }
@@ -1045,14 +1046,16 @@ async function refreshItem(id: string, env: Env): Promise<Response> {
            cover_url   = COALESCE(?2, cover_url),
            seasons     = COALESCE(?3, seasons),
            episodes    = COALESCE(?4, episodes),
-           updated_at  = ?5
-     WHERE id = ?6`,
+           season_episodes = COALESCE(?5, season_episodes),
+           updated_at  = ?6
+     WHERE id = ?7`,
   )
     .bind(
       refreshed.description ?? null,
       refreshed.cover_url ?? null,
       refreshed.seasons ?? null,
       refreshed.episodes ?? null,
+      refreshed.season_episodes ?? null,
       Date.now(),
       id,
     )
@@ -1393,6 +1396,12 @@ async function enrichTmdb(item: Item, env: Env): Promise<Item> {
   if (kindPath === "tv") {
     enriched.seasons = typeof d.number_of_seasons === "number" ? d.number_of_seasons : item.seasons ?? null;
     enriched.episodes = typeof d.number_of_episodes === "number" ? d.number_of_episodes : item.episodes ?? null;
+    if (Array.isArray(d.seasons)) {
+      const pairs = d.seasons
+        .filter((s: any) => typeof s.season_number === "number" && s.season_number > 0 && typeof s.episode_count === "number")
+        .map((s: any) => `${s.season_number}:${s.episode_count}`);
+      if (pairs.length) enriched.season_episodes = pairs.join(",");
+    }
   }
   return enriched;
 }

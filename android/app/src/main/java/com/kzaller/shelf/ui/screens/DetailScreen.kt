@@ -357,6 +357,7 @@ private fun DetailPage(
                             episodes = current.episodes,
                             curSeason = current.curSeason,
                             curEpisode = current.curEpisode,
+                            seasonEpisodes = current.seasonEpisodes,
                             watched = Status.parse(current.status).contains(Status.WATCHED),
                             accent = flavor.accent,
                             onSet = { s, e -> vm.setProgress(s, e) },
@@ -686,6 +687,7 @@ private fun TvProgressSection(
     episodes: Int?,
     curSeason: Int?,
     curEpisode: Int?,
+    seasonEpisodes: String?,
     watched: Boolean,
     accent: Color,
     onSet: (Int?, Int?) -> Unit,
@@ -706,8 +708,19 @@ private fun TvProgressSection(
         Spacer(Modifier.height(8.dp))
     }
 
+    // Per-season episode counts (seasonNumber -> count), so we can show/cap the current season.
+    val perSeason = remember(seasonEpisodes) {
+        seasonEpisodes?.split(",")?.mapNotNull { pair ->
+            val p = pair.split(":")
+            val sn = p.getOrNull(0)?.trim()?.toIntOrNull()
+            val ec = p.getOrNull(1)?.trim()?.toIntOrNull()
+            if (sn != null && ec != null) sn to ec else null
+        }?.toMap().orEmpty()
+    }
+
     val s = curSeason ?: 0
     val e = curEpisode ?: 0
+    val seasonEpCount = perSeason[s]
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Stepper(
             label = "Season",
@@ -721,9 +734,17 @@ private fun TvProgressSection(
             label = "Episode",
             value = e,
             min = 0,
-            max = 999,
+            max = seasonEpCount ?: 999,
             accent = accent,
             onChange = { onSet(curSeason ?: (if (it > 0) 1 else null), it.takeIf { v -> v > 0 }) },
+        )
+    }
+    // Contextual: how many episodes the season you're on has (updates as you step through seasons).
+    if (s > 0 && seasonEpCount != null) {
+        Text(
+            text = "Season $s has $seasonEpCount episodes",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
         )
     }
     // Rough season-based progress bar. "Caught up" only shows once the show is actually marked

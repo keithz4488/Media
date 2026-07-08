@@ -78,10 +78,11 @@ class DetailViewModel(
         launchUpdate(UpdateItemRequest(status = newStatus, completedAt = date))
     }
 
-    /** Lazily fill in TV season/episode counts for items that were bulk-imported without them. */
+    /** Lazily fill in TV season/episode counts (including the per-season breakdown) for items
+     *  that were imported or added before that data existed. */
     fun ensureEnriched() {
         val cur = item.value ?: return
-        if (cur.kind == MediaKind.TV && cur.seasons == null) {
+        if (cur.kind == MediaKind.TV && (cur.seasons == null || cur.seasonEpisodes == null)) {
             viewModelScope.launch { repo.refreshDetails(id) }
         }
     }
