@@ -108,6 +108,9 @@ export default {
     if (url.pathname === "/health") return json({ ok: true });
     // Public read-only shelf view -- intentionally pre-auth.
     if (url.pathname === "/k" || url.pathname === "/k/") return publicShelves(env);
+    // Plex webhook: Plex can't send an Authorization header, so this route authenticates via a
+    // secret query param (?token=) instead of the usual Bearer check.
+    if (url.pathname === "/plex/webhook" && req.method === "POST") return plexWebhook(req, url, env);
 
     if (!authed(req, env)) return err(401, "unauthorized");
 
@@ -449,6 +452,141 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
     p,
     new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`${label} timed out`)), ms)),
   ]);
+}
+
+// ---------- Plex live sync (webhooks) ----------
+
+/** Pull a TMDB id out of a Plex webhook's Metadata (Guid array or legacy agent guid). */
+function extractTmdbFromMetadata(md: any): string | null {
+  const guids: any[] = Array.isArray(md?.Guid) ? md.Guid : [];
+  for (const g of guids) {
+    const id = typeof g?.id === "string" ? g.id : "";
+    if (id.startsWith("tmdb://")) return id.slice("tmdb://".length);
+  }
+  const guid = typeof md?.guid === "string" ? md.guid : "";
+  const m = guid.match(/themoviedb:\/\/(\d+)/) || guid.match(/tmdb:\/\/(\d+)/);
+  return m ? m[1] : null;
+}
+
+/** Resolve a movie/show to a SearchHit via TMDB, by id (exact) or a title query (fallback). */
+async function tmdbLookup(kind: "movie" | "tv", opts: { id?: string; q?: string }, env: Env): Promise<SearchHit | null> {
+  if (!env.TMDB_API_KEY) return null;
+  let api: URL;
+  if (opts.id) {
+    api = new URL(`https://api.themoviedb.org/3/${kind}/${opts.id}`);
+  } else if (opts.q) {
+    api = new URL(`https://api.themoviedb.org/3/search/${kind}`);
+    api.searchParams.set("query", opts.q);
+  } else {
+    return null;
+  }
+  api.searchParams.set("api_key", env.TMDB_API_KEY);
+  const r = await fetchWithTimeout(api.toString(), {}, 7000);
+  if (!r.ok) return null;
+  const data = (await r.json()) as any;
+  const m = opts.id ? data : (data.results && data.results[0]);
+  if (!m || !m.id) return null;
+  const title = kind === "movie" ? (m.title || m.original_title) : (m.name || m.original_name);
+  const date = kind === "movie" ? m.release_date : m.first_air_date;
+  return {
+    external_id: String(m.id),
+    external_src: "tmdb",
+    title: title || "Untitled",
+    subtitle: kind === "tv" ? "TV Series" : null,
+    year: date ? Number(date.slice(0, 4)) || null : null,
+    cover_url: m.poster_path ? `https://image.tmdb.org/t/p/w500${m.poster_path}` : null,
+    description: m.overview || null,
+  };
+}
+
+/**
+ * Plex webhook receiver. When Plex adds a new movie or show to the library it POSTs a
+ * multipart form with a JSON `payload`. On `library.new` for a movie/show we resolve it to
+ * TMDB (by guid, else by title) and add it as a digitally-owned item. Idempotent: an item that
+ * already exists is left untouched (ON CONFLICT DO NOTHING). Always returns 200 for handled or
+ * ignored events so Plex doesn't retry-storm.
+ */
+async function plexWebhook(req: Request, url: URL, env: Env): Promise<Response> {
+  const secret = url.searchParams.get("token") || url.searchParams.get("s");
+  if (!env.SHELF_TOKEN || secret !== env.SHELF_TOKEN) return err(401, "unauthorized");
+
+  let payloadStr: string | null = null;
+  try {
+    const form = await req.formData();
+    const p = form.get("payload");
+    if (typeof p === "string") payloadStr = p;
+  } catch {
+    // Some proxies deliver the JSON directly rather than as multipart.
+    try { payloadStr = await req.text(); } catch { /* ignore */ }
+  }
+  if (!payloadStr) return json({ ok: true, skipped: "no payload" });
+
+  let payload: any;
+  try { payload = JSON.parse(payloadStr); } catch { return json({ ok: true, skipped: "bad payload" }); }
+
+  const event = payload.event;
+  const md = payload.Metadata || {};
+  const type = md.type;
+  if (event !== "library.new" || (type !== "movie" && type !== "show")) {
+    return json({ ok: true, skipped: `${event}/${type}` });
+  }
+
+  const kind: "movie" | "tv" = type === "movie" ? "movie" : "tv";
+  const tmdbId = extractTmdbFromMetadata(md);
+  const title: string | null = typeof md.title === "string" ? md.title : null;
+  const year: number | null = typeof md.year === "number" ? md.year : null;
+
+  let hit = tmdbId ? await tmdbLookup(kind, { id: tmdbId }, env) : null;
+  if (!hit && title) hit = await tmdbLookup(kind, { q: title }, env);
+  if (!hit) return json({ ok: true, skipped: "no tmdb match", title });
+
+  const now = Date.now();
+  let item: Item = {
+    id: uuid(),
+    kind,
+    title: hit.title,
+    subtitle: hit.subtitle ?? null,
+    year: hit.year ?? year ?? null,
+    cover_url: hit.cover_url ?? null,
+    external_id: hit.external_id,
+    external_src: "tmdb",
+    description: hit.description ?? null,
+    rating: null,
+    status: "owned",
+    notes: null,
+    user_platform: null,
+    consoles: null,
+    format: "digital",
+    seasons: null,
+    episodes: null,
+    cur_season: null,
+    cur_episode: null,
+    completed_at: null,
+    show_to: null,
+    added_at: now,
+    updated_at: now,
+  };
+  item = await enrichForCreate(item, env);
+
+  await env.DB.prepare(
+    `INSERT INTO items
+      (id, kind, title, subtitle, year, cover_url, external_id, external_src,
+       description, rating, status, notes, user_platform, consoles, format,
+       seasons, episodes, cur_season, cur_episode, completed_at, added_at, updated_at)
+     VALUES
+      (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22)
+     ON CONFLICT(kind, external_src, external_id) DO NOTHING`,
+  )
+    .bind(
+      item.id, item.kind, item.title, item.subtitle, item.year, item.cover_url,
+      item.external_id, item.external_src, item.description, item.rating, item.status,
+      item.notes, item.user_platform, item.consoles, item.format, item.seasons,
+      item.episodes, item.cur_season, item.cur_episode, item.completed_at,
+      item.added_at, item.updated_at,
+    )
+    .run();
+
+  return json({ ok: true, added: item.title, kind });
 }
 
 async function searchGames(url: URL, env: Env): Promise<Response> {
@@ -1031,7 +1169,7 @@ async function enrichOpenLibrary(item: Item): Promise<Item> {
       if (w?.key) workId = String(w.key).replace("/works/", "");
     }
   } else {
-    workId = item.external_id;
+    workId = item.external_id ?? null;
   }
 
   if (!workId) return item;
