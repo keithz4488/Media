@@ -432,6 +432,25 @@ async function searchTmdb(url: URL, env: Env, kind: "movie" | "tv"): Promise<Res
   return json({ hits });
 }
 
+/** Abort a fetch that takes too long, so one slow upstream can't hang the whole request. */
+async function fetchWithTimeout(input: string, init: RequestInit = {}, ms = 8000): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(input, { ...init, signal: ctrl.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Reject a promise if it doesn't settle within `ms`, so a slow provider is dropped, not awaited. */
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`${label} timed out`)), ms)),
+  ]);
+}
+
 async function searchGames(url: URL, env: Env): Promise<Response> {
   const slug = url.searchParams.get("slug");
   const q = url.searchParams.get("q");
@@ -440,7 +459,7 @@ async function searchGames(url: URL, env: Env): Promise<Response> {
 
   // Direct slug lookup is always against RAWG (since the slug only identifies a RAWG game).
   if (slug) {
-    const r = await fetch(`https://api.rawg.io/api/games/${encodeURIComponent(slug)}?key=${env.RAWG_API_KEY}`);
+    const r = await fetchWithTimeout(`https://api.rawg.io/api/games/${encodeURIComponent(slug)}?key=${env.RAWG_API_KEY}`);
     if (!r.ok) {
       const body = await r.text().catch(() => "");
       return err(502, `rawg ${r.status}: ${body.slice(0, 200)}`);
@@ -449,10 +468,12 @@ async function searchGames(url: URL, env: Env): Promise<Response> {
     return json({ hits: [data].map(rawgGameToHit) });
   }
 
-  // Run RAWG and IGDB in parallel; either failing is non-fatal.
+  // Run RAWG and IGDB in parallel, each capped so a slow/hung provider is dropped rather than
+  // blocking the whole search (which used to hang until the app's socket timeout). RAWG is the
+  // primary source, so it gets the longer budget; IGDB is best-effort enrichment.
   const [rawgResult, igdbResult] = await Promise.allSettled([
-    rawgSearch(q!, env),
-    igdbSearch(q!, env),
+    withTimeout(rawgSearch(q!, env), 8000, "rawg"),
+    withTimeout(igdbSearch(q!, env), 6000, "igdb"),
   ]);
   const rawgHits = rawgResult.status === "fulfilled" ? rawgResult.value : [];
   const igdbHits = igdbResult.status === "fulfilled" ? igdbResult.value : [];
@@ -498,7 +519,7 @@ async function rawgSearch(query: string, env: Env): Promise<SearchHit[]> {
   api.searchParams.set("key", env.RAWG_API_KEY);
   api.searchParams.set("search", query);
   api.searchParams.set("page_size", "20");
-  const r = await fetch(api.toString());
+  const r = await fetchWithTimeout(api.toString(), {}, 7000);
   if (!r.ok) return [];
   const data = (await r.json()) as any;
   const list: any[] = Array.isArray(data.results) ? data.results : [];
@@ -520,7 +541,7 @@ async function igdbToken(env: Env): Promise<string | null> {
   url.searchParams.set("client_id", env.IGDB_CLIENT_ID);
   url.searchParams.set("client_secret", env.IGDB_CLIENT_SECRET);
   url.searchParams.set("grant_type", "client_credentials");
-  const r = await fetch(url.toString(), { method: "POST" });
+  const r = await fetchWithTimeout(url.toString(), { method: "POST" }, 5000);
   if (!r.ok) return null;
   const data = (await r.json()) as any;
   if (!data.access_token) return null;
@@ -541,7 +562,7 @@ async function igdbSearch(query: string, env: Env): Promise<SearchHit[]> {
     `search "${safe}";` +
     ` fields id,name,first_release_date,summary,cover.image_id,platforms.name;` +
     ` limit 25;`;
-  const r = await fetch("https://api.igdb.com/v4/games", {
+  const r = await fetchWithTimeout("https://api.igdb.com/v4/games", {
     method: "POST",
     headers: {
       "Client-ID": env.IGDB_CLIENT_ID,
@@ -549,7 +570,7 @@ async function igdbSearch(query: string, env: Env): Promise<SearchHit[]> {
       "Content-Type": "text/plain",
     },
     body,
-  });
+  }, 6000);
   if (r.status === 401) {
     igdbTokenCache = null;
     throw new Error("igdb: 401 (cached token stale, will refetch)");
@@ -844,7 +865,7 @@ async function itemScores(id: string, env: Env): Promise<Response> {
   const body =
     `fields rating,rating_count,aggregated_rating,aggregated_rating_count;` +
     ` where id = ${Number(row.external_id) || 0};`;
-  const r = await fetch("https://api.igdb.com/v4/games", {
+  const r = await fetchWithTimeout("https://api.igdb.com/v4/games", {
     method: "POST",
     headers: {
       "Client-ID": env.IGDB_CLIENT_ID,
@@ -852,7 +873,7 @@ async function itemScores(id: string, env: Env): Promise<Response> {
       "Content-Type": "text/plain",
     },
     body,
-  });
+  }, 6000);
   if (r.status === 401) igdbTokenCache = null;
   if (!r.ok) return json({ scores: empty });
   const list = (await r.json()) as any[];
@@ -883,7 +904,7 @@ async function igdbCovers(item: Item, env: Env): Promise<CoverOption[]> {
 
   // One call returns cover + every artwork + every screenshot for the game.
   const body = `fields cover.image_id,artworks.image_id,screenshots.image_id; where id = ${Number(item.external_id) || 0};`;
-  const r = await fetch("https://api.igdb.com/v4/games", {
+  const r = await fetchWithTimeout("https://api.igdb.com/v4/games", {
     method: "POST",
     headers: {
       "Client-ID": env.IGDB_CLIENT_ID,
@@ -891,7 +912,7 @@ async function igdbCovers(item: Item, env: Env): Promise<CoverOption[]> {
       "Content-Type": "text/plain",
     },
     body,
-  });
+  }, 6000);
   if (r.status === 401) igdbTokenCache = null;
   if (!r.ok) return opts;
   const list = (await r.json()) as any[];
