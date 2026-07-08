@@ -57,27 +57,10 @@ class DetailViewModel(
     fun setConsoles(csv: String) = launchUpdate(UpdateItemRequest(consoles = csv))
     fun setFormat(csv: String) = launchUpdate(UpdateItemRequest(format = csv))
     fun setShowTo(csv: String) = launchUpdate(UpdateItemRequest(showTo = csv))
-    fun setProgress(season: Int?, episode: Int?) {
-        val cur = item.value
-        val seasons = cur?.seasons ?: 0
-        val caughtUp = seasons > 0 && (season ?: 0) >= seasons
-        val alreadyWatched = Status.parse(cur?.status).contains(Status.WATCHED)
-        // Reaching the final season ("caught up") flips a show to Watched and drops Watching,
-        // matching what the Plex webhook does server-side.
-        if (cur != null && cur.kind == MediaKind.TV && caughtUp && !alreadyWatched) {
-            val newStatus = Status.ensure(Status.without(cur.status, Status.WATCHING), Status.WATCHED)
-            launchUpdate(
-                UpdateItemRequest(
-                    curSeason = season,
-                    curEpisode = episode,
-                    status = newStatus,
-                    completedAt = cur.completedAt ?: System.currentTimeMillis(),
-                ),
-            )
-        } else {
-            launchUpdate(UpdateItemRequest(curSeason = season, curEpisode = episode))
-        }
-    }
+    // The backend applies the episode-precise "caught up -> Watched" flip on any progress change
+    // (from here or the Plex webhook) and returns the updated item, so we just send the progress.
+    fun setProgress(season: Int?, episode: Int?) =
+        launchUpdate(UpdateItemRequest(curSeason = season, curEpisode = episode))
     fun setCompletedAt(millis: Long?) =
         launchUpdate(UpdateItemRequest(completedAt = millis), toast = if (millis == null) "Cleared completion" else "Marked complete")
 

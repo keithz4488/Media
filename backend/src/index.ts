@@ -342,6 +342,13 @@ async function updateItem(id: string, req: Request, env: Env): Promise<Response>
     .run();
   if (res.meta.changes === 0) return err(404, "item not found");
 
+  // If the user changed TV progress (e.g. bumped the stepper), auto-flip to Watched when that
+  // reaches the end of the series -- same episode-precise check the Plex webhook uses.
+  if ("cur_season" in body || "cur_episode" in body) {
+    const mid = await env.DB.prepare("SELECT * FROM items WHERE id = ?1").bind(id).first<Item>();
+    if (mid) await flipIfCaughtUp(mid, env);
+  }
+
   const row = await env.DB.prepare("SELECT * FROM items WHERE id = ?1").bind(id).first<Item>();
   return json({ item: row });
 }
@@ -612,6 +619,47 @@ function removeStatusCsv(csv: string | null | undefined, value: string): string 
   return (csv || "").split(",").map((s) => s.trim()).filter((s) => s && s !== value).join(",");
 }
 
+/** Number of episodes in a TMDB TV season, or null if unavailable. */
+async function tmdbSeasonEpisodeCount(tvId: string, seasonNumber: number, env: Env): Promise<number | null> {
+  if (!env.TMDB_API_KEY) return null;
+  const api = new URL(`https://api.themoviedb.org/3/tv/${tvId}/season/${seasonNumber}`);
+  api.searchParams.set("api_key", env.TMDB_API_KEY);
+  const r = await fetchWithTimeout(api.toString(), {}, 7000);
+  if (!r.ok) return null;
+  const data = (await r.json()) as any;
+  return Array.isArray(data.episodes) ? data.episodes.length : null;
+}
+
+/**
+ * If a TV item's progress reaches the end of the series, flip it to Watched (dropping Watching)
+ * and stamp a completion date. "The end" is episode-precise: on the final season we look up that
+ * season's episode count from TMDB and require the current episode to be at/past the last one. If
+ * the count can't be fetched we fall back to season-based (entering the final season). Returns
+ * true if a flip was applied.
+ */
+async function flipIfCaughtUp(row: Item, env: Env): Promise<boolean> {
+  if (row.kind !== "tv") return false;
+  const seasons = row.seasons ?? 0;
+  const curS = row.cur_season ?? 0;
+  if (seasons <= 0 || curS < seasons) return false;
+  if ((row.status || "").split(",").map((s) => s.trim()).includes("watched")) return false;
+
+  let caughtUp = true; // fallback: on the final season => caught up
+  if (row.external_src === "tmdb" && row.external_id) {
+    const count = await tmdbSeasonEpisodeCount(row.external_id, curS, env);
+    if (count != null && count > 0) caughtUp = (row.cur_episode ?? 0) >= count;
+  }
+  if (!caughtUp) return false;
+
+  const now = Date.now();
+  const status = addStatusCsv(removeStatusCsv(row.status, "watching"), "watched");
+  await env.DB
+    .prepare("UPDATE items SET status=?1, completed_at=COALESCE(completed_at, ?2), updated_at=?3 WHERE id=?4")
+    .bind(status, now, now, row.id)
+    .run();
+  return true;
+}
+
 /** Movie finished on Plex -> mark it Watched (adding it as owned+digital if it's not on a shelf yet). */
 async function scrobbleMovieWatched(md: any, env: Env): Promise<Response> {
   const tmdbId = extractTmdbFromMetadata(md);
@@ -697,29 +745,18 @@ async function scrobbleEpisodeProgress(md: any, env: Env): Promise<Response> {
   const newS = isNewer ? season : curS;
   const newE = isNewer ? ep : curE;
 
+  // Record progress and (unless already Watched) mark the show Watching.
   const hasWatched = (row.status || "").split(",").map((s) => s.trim()).includes("watched");
-  // "Caught up" = on/past the final season (the same definition the app displays). When progress
-  // reaches it, flip the show to Watched and drop the Watching flag.
-  const caughtUp = (row.seasons ?? 0) > 0 && (newS ?? 0) >= (row.seasons ?? 0);
-  const now = Date.now();
-
-  let status: string;
-  let completedAt = row.completed_at ?? null;
-  if (hasWatched) {
-    status = row.status || "";
-  } else if (caughtUp) {
-    status = addStatusCsv(removeStatusCsv(row.status, "watching"), "watched");
-    completedAt = completedAt ?? now;
-  } else {
-    status = addStatusCsv(row.status, "watching");
-  }
-
+  const status = hasWatched ? (row.status || "") : addStatusCsv(row.status, "watching");
   await env.DB
-    .prepare("UPDATE items SET status=?1, cur_season=?2, cur_episode=?3, completed_at=?4, updated_at=?5 WHERE id=?6")
-    .bind(status, newS || null, newE || null, completedAt, now, row.id)
+    .prepare("UPDATE items SET status=?1, cur_season=?2, cur_episode=?3, updated_at=?4 WHERE id=?5")
+    .bind(status, newS || null, newE || null, Date.now(), row.id)
     .run();
 
-  return json({ ok: true, progress: `${row.title} S${newS}E${newE}`, caughtUp });
+  // Then flip to Watched if that put us at the end of the final season (episode-precise).
+  const flipped = await flipIfCaughtUp({ ...row, status, cur_season: newS, cur_episode: newE }, env);
+
+  return json({ ok: true, progress: `${row.title} S${newS}E${newE}`, watched: flipped });
 }
 
 async function searchGames(url: URL, env: Env): Promise<Response> {
