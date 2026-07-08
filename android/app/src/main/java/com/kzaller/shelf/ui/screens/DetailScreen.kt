@@ -357,6 +357,7 @@ private fun DetailPage(
                             episodes = current.episodes,
                             curSeason = current.curSeason,
                             curEpisode = current.curEpisode,
+                            watched = Status.parse(current.status).contains(Status.WATCHED),
                             accent = flavor.accent,
                             onSet = { s, e -> vm.setProgress(s, e) },
                         )
@@ -685,6 +686,7 @@ private fun TvProgressSection(
     episodes: Int?,
     curSeason: Int?,
     curEpisode: Int?,
+    watched: Boolean,
     accent: Color,
     onSet: (Int?, Int?) -> Unit,
 ) {
@@ -724,17 +726,18 @@ private fun TvProgressSection(
             onChange = { onSet(curSeason ?: (if (it > 0) 1 else null), it.takeIf { v -> v > 0 }) },
         )
     }
-    // Rough season-based progress bar (episode-per-season data isn't available from TMDB here).
-    if (seasons != null && seasons > 0 && s > 0) {
+    // Rough season-based progress bar. "Caught up" only shows once the show is actually marked
+    // Watched (which now happens on the real final episode), so the label matches the status.
+    if (seasons != null && seasons > 0 && (s > 0 || watched)) {
         Spacer(Modifier.height(8.dp))
         LinearProgressIndicator(
-            progress = { (s.toFloat() / seasons.toFloat()).coerceIn(0f, 1f) },
+            progress = { if (watched) 1f else (s.toFloat() / seasons.toFloat()).coerceIn(0f, 1f) },
             color = accent,
             trackColor = Color.White.copy(alpha = 0.12f),
             modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
         )
         Text(
-            text = if (s >= seasons) "Caught up" else "On season $s of $seasons",
+            text = if (watched) "Caught up" else "On season $s of $seasons",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
         )
