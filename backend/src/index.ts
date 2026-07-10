@@ -210,6 +210,29 @@ interface SteamOwnedGame {
   playtime_forever?: number;
 }
 
+/**
+ * Resolve a Steam id input to a 64-bit SteamID. Accepts a raw 64-bit id, a vanity name, or a
+ * profile URL — GetOwnedGames only takes the numeric id, so a stored vanity ("KeithZ488") must
+ * be resolved first or the library comes back empty.
+ */
+async function steamResolveId(apiKey: string, input: string): Promise<string | null> {
+  let v = input.trim().replace(/\/+$/, "");
+  const prof = v.match(/steamcommunity\.com\/profiles\/(\d+)/);
+  if (prof) return prof[1];
+  const vanity = v.match(/steamcommunity\.com\/id\/([^/?#]+)/);
+  if (vanity) v = vanity[1];
+  if (/^\d{17}$/.test(v)) return v;
+  const r = await fetchWithTimeout(
+    "https://api.steampowered.com/ISteamUser/ResolveVanityURL/v1/" +
+      `?key=${apiKey}&vanityurl=${encodeURIComponent(v)}`,
+    {},
+    8000,
+  );
+  if (!r.ok) return null;
+  const d = (await r.json()) as any;
+  return d?.response?.success === 1 ? d.response.steamid || null : null;
+}
+
 async function steamOwnedGames(apiKey: string, steamId: string): Promise<SteamOwnedGame[]> {
   const r = await fetchWithTimeout(
     "https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/" +
@@ -230,8 +253,14 @@ async function steamOwnedGames(apiKey: string, steamId: string): Promise<SteamOw
  */
 async function syncSteamLibrary(env: Env): Promise<{ added: number }> {
   const apiKey = await settingGet(env, "steam_api_key");
-  const steamId = await settingGet(env, "steam_id");
-  if (!apiKey || !steamId) return { added: 0 };
+  const rawId = await settingGet(env, "steam_id");
+  if (!apiKey || !rawId) return { added: 0 };
+
+  // Stored id may be a vanity name / URL — GetOwnedGames needs the 64-bit id.
+  const steamId = await steamResolveId(apiKey, rawId);
+  if (!steamId) return { added: 0 };
+  // Cache the resolved id so future runs skip the vanity lookup.
+  if (steamId !== rawId) await settingSet(env, "steam_id", steamId);
 
   const owned = await steamOwnedGames(apiKey, steamId);
   if (owned.length === 0) return { added: 0 };
