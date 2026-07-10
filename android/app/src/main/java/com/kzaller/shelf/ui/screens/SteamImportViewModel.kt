@@ -58,6 +58,9 @@ class SteamImportViewModel(
             // Persist the RESOLVED 64-bit id (not the raw vanity/URL) so the achievements API,
             // which can't take a vanity name, works later without re-resolving.
             prefs.setSteam(apiKey, steamId)
+            // Register the credentials with the backend so its daily cron can auto-add new
+            // purchases. Best-effort: a failure here shouldn't block the import.
+            repo.saveSteamConfig(apiKey, steamId)
             val games = runCatching {
                 steam.fetchOwnedGames(apiKey, steamId)
             }.getOrElse {

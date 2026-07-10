@@ -2,6 +2,11 @@ name = "media-shelf"
 main = "src/index.ts"
 compatibility_date = "2025-01-15"
 
+# Daily Steam library sync: polls GetOwnedGames and auto-adds newly-purchased games.
+# Runs at 12:00 UTC once a day. Steam has no purchase webhook, so polling is the only option.
+[triggers]
+crons = ["0 12 * * *"]
+
 # Replace database_id with the value printed by `wrangler d1 create media-shelf`.
 [[d1_databases]]
 binding = "DB"

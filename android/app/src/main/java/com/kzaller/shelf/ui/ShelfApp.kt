@@ -22,6 +22,7 @@ import androidx.navigation.navArgument
 import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.ShelfRepository
 import com.kzaller.shelf.data.preferences.AppPreferences
+import kotlinx.coroutines.flow.first
 import com.kzaller.shelf.ui.components.AchievementUnlockBanner
 import com.kzaller.shelf.ui.screens.AchievementsScreen
 import com.kzaller.shelf.ui.screens.AchievementsViewModel
@@ -81,6 +82,16 @@ fun ShelfApp() {
         if (currentUnlock != null) {
             kotlinx.coroutines.delay(3600)
             achievementsVm.consume()
+        }
+    }
+
+    // If Steam is already connected, make sure the backend has the credentials so its daily
+    // auto-sync cron can add newly-purchased games (the app otherwise only sends them on connect).
+    LaunchedEffect(Unit) {
+        val key = prefs.observeSteamKey().first()
+        val id = prefs.observeSteamId().first()
+        if (key.isNotBlank() && id.isNotBlank()) {
+            repo.saveSteamConfig(key, id)
         }
     }
 

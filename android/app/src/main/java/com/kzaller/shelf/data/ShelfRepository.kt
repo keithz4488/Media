@@ -169,6 +169,11 @@ class ShelfRepository(context: Context) {
         api.searchBooks(isbn = isbn).hits
     }
 
+    /** Register the Steam credentials with the backend so its daily cron can auto-add purchases. */
+    suspend fun saveSteamConfig(apiKey: String, steamId: String): Result<Unit> = runCatching {
+        api.saveSteamConfig(com.kzaller.shelf.data.models.SteamConfigRequest(apiKey, steamId))
+    }
+
     suspend fun identify(jpegBytes: ByteArray): Result<IdentifyResult> = runCatching {
         val b64 = Base64.encodeToString(jpegBytes, Base64.NO_WRAP)
         api.identify(IdentifyRequest(image = b64)).result

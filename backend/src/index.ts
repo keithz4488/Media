@@ -146,13 +146,110 @@ export default {
       if (url.pathname === "/search/games") return searchGames(url, env);
       if (url.pathname === "/identify" && req.method === "POST") return identifyImage(req, env);
 
+      // Steam: store the API key + SteamID so the daily cron can auto-add new purchases,
+      // and expose a manual sync for testing / immediate refresh.
+      if (url.pathname === "/steam/config" && req.method === "POST") return steamConfig(req, env);
+      if (url.pathname === "/steam/sync" && req.method === "POST") return json(await syncSteamLibrary(env));
+
       return err(404, "not found");
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       return err(500, msg);
     }
   },
+
+  // Daily cron: poll Steam for newly-purchased games and add them to the shelf. No-op unless
+  // the user has connected Steam (which stores their key + id in the settings table).
+  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(syncSteamLibrary(env).catch(() => ({ added: 0 })));
+  },
 } satisfies ExportedHandler<Env>;
+
+// ---------- settings + Steam library sync ----------
+
+async function settingGet(env: Env, key: string): Promise<string | null> {
+  const row = await env.DB.prepare("SELECT value FROM settings WHERE key = ?1")
+    .bind(key)
+    .first<{ value: string }>();
+  return row?.value ?? null;
+}
+
+async function settingSet(env: Env, key: string, value: string): Promise<void> {
+  await env.DB.prepare(
+    "INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+  )
+    .bind(key, value)
+    .run();
+}
+
+/** Persist the Steam credentials the daily sync needs (sent by the app when connecting Steam). */
+async function steamConfig(req: Request, env: Env): Promise<Response> {
+  const body = (await req.json().catch(() => null)) as { apiKey?: string; steamId?: string } | null;
+  const apiKey = body?.apiKey?.trim();
+  const steamId = body?.steamId?.trim();
+  if (!apiKey || !steamId) return err(400, "apiKey and steamId required");
+  await settingSet(env, "steam_api_key", apiKey);
+  await settingSet(env, "steam_id", steamId);
+  return json({ ok: true });
+}
+
+interface SteamOwnedGame {
+  appid: number;
+  name?: string;
+  playtime_forever?: number;
+}
+
+async function steamOwnedGames(apiKey: string, steamId: string): Promise<SteamOwnedGame[]> {
+  const r = await fetchWithTimeout(
+    "https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/" +
+      `?key=${apiKey}&steamid=${steamId}&include_appinfo=1&include_played_free_games=1&format=json`,
+    {},
+    10000,
+  );
+  if (!r.ok) return [];
+  const data = (await r.json()) as any;
+  const games = data?.response?.games;
+  return Array.isArray(games) ? games : [];
+}
+
+/**
+ * Add any owned Steam games not already on the shelf. Mirrors the in-app import (no per-game
+ * enrichment here — the app backfills cover/description on first open), and bounds the work per
+ * run so a first sync of a big library can't blow past Worker subrequest limits.
+ */
+async function syncSteamLibrary(env: Env): Promise<{ added: number }> {
+  const apiKey = await settingGet(env, "steam_api_key");
+  const steamId = await settingGet(env, "steam_id");
+  if (!apiKey || !steamId) return { added: 0 };
+
+  const owned = await steamOwnedGames(apiKey, steamId);
+  if (owned.length === 0) return { added: 0 };
+
+  const existing = await env.DB.prepare(
+    "SELECT external_id FROM items WHERE kind = 'game' AND external_src = 'steam'",
+  ).all<{ external_id: string }>();
+  const have = new Set((existing.results ?? []).map((r) => String(r.external_id)));
+
+  const fresh = owned.filter((g) => g.appid && g.name && !have.has(String(g.appid))).slice(0, 60);
+  if (fresh.length === 0) return { added: 0 };
+
+  const now = Date.now();
+  const stmt = env.DB.prepare(
+    `INSERT INTO items
+      (id, kind, title, subtitle, cover_url, external_id, external_src, status, user_platform, format, added_at, updated_at)
+     VALUES
+      (?1,'game',?2,'PC',?3,?4,'steam',?5,'pc','digital',?6,?6)
+     ON CONFLICT(kind, external_src, external_id) DO NOTHING`,
+  );
+  const batch = fresh.map((g) => {
+    const status = (g.playtime_forever ?? 0) > 0 ? "owned,played" : "owned";
+    const cover = `https://cdn.cloudflare.steamstatic.com/steam/apps/${g.appid}/library_600x900.jpg`;
+    return stmt.bind(uuid(), g.name, cover, String(g.appid), status, now);
+  });
+  const results = await env.DB.batch(batch);
+  const added = results.reduce((n, r) => n + (r.meta?.changes ?? 0), 0);
+  return { added };
+}
 
 // ---------- shelf CRUD ----------
 

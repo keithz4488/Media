@@ -118,6 +118,9 @@ data class BulkCreateRequest(val items: List<CreateItemRequest>)
 data class BulkCreateResponse(val inserted: Int = 0, val received: Int = 0)
 
 @Serializable
+data class SteamConfigRequest(val apiKey: String, val steamId: String)
+
+@Serializable
 data class ScoresResponse(val scores: Scores)
 
 @Serializable
