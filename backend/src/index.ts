@@ -1088,6 +1088,9 @@ async function listCovers(id: string, env: Env): Promise<Response> {
       case "igdb":
         covers = await igdbCovers(row, env);
         break;
+      case "steam":
+        covers = await steamCovers(row, env);
+        break;
       case "open_library":
         covers = await openLibraryCovers(row);
         break;
@@ -1271,22 +1274,47 @@ async function steamStoreDetails(appId: string): Promise<any | null> {
   return entry && entry.success ? entry.data ?? null : null;
 }
 
+/** Quick liveness check for a remote asset (used to tell a working cover from a 404). */
+async function urlOk(url: string): Promise<boolean> {
+  try {
+    const r = await fetchWithTimeout(url, {}, 5000);
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
 /**
- * Steam-imported game: fill in the description from the Steam store and upgrade the cover to
- * SteamGridDB box art (matched by app id) when available.
+ * Steam-imported game: fill in the description from the Steam store. Keep the game's existing
+ * Steam portrait when it actually resolves — only reach for SteamGridDB box art (or the Steam
+ * header) when the current cover is missing/broken, so we never clobber good official art.
  */
 async function enrichSteam(item: Item, env: Env): Promise<Item> {
-  const [covers, details] = await Promise.all([
-    steamGridDbCovers(item, env),
-    item.external_id ? steamStoreDetails(item.external_id) : Promise.resolve(null),
-  ]);
-  const best = covers.find((c) => c.url)?.url;
+  const details = item.external_id ? await steamStoreDetails(item.external_id) : null;
   const desc = trimDescription(details?.short_description) ?? trimDescription(details?.about_the_game);
+
+  let cover = item.cover_url ?? null;
+  if (!cover || !(await urlOk(cover))) {
+    const covers = await steamGridDbCovers(item, env);
+    cover = covers.find((c) => c.url)?.url ?? details?.header_image ?? cover;
+  }
   return {
     ...item,
-    cover_url: best || item.cover_url || null,
+    cover_url: cover,
     description: desc ?? item.description,
   };
+}
+
+/** Cover choices for a Steam game: official Steam portrait/header + SteamGridDB box art. */
+async function steamCovers(item: Item, env: Env): Promise<CoverOption[]> {
+  const opts: CoverOption[] = [];
+  if (item.external_id) {
+    const base = `https://cdn.cloudflare.steamstatic.com/steam/apps/${item.external_id}`;
+    opts.push({ url: `${base}/library_600x900.jpg`, label: "Steam portrait" });
+    opts.push({ url: `${base}/header.jpg`, label: "Steam header" });
+  }
+  opts.push(...(await steamGridDbCovers(item, env)));
+  return opts;
 }
 
 async function steamGridDbCovers(item: Item, env: Env): Promise<CoverOption[]> {
