@@ -53,7 +53,7 @@ import com.kzaller.shelf.ui.theme.LocalShelfFlavor
 
 private const val COLUMNS = 3
 private const val FALL_MS = 950
-private const val RISE_MS = 620
+private const val RISE_MS = 1050
 
 /**
  * Cibby-style shelf: rows of standing covers resting on tinted wooden planks, with quiet
@@ -266,7 +266,7 @@ private fun StandingCover(
     LaunchedEffect(Unit) {
         if (rising) settle.animateTo(0f, tween(durationMillis = RISE_MS, easing = EaseOutBack))
     }
-    val risePx = with(density) { 64.dp.toPx() }
+    val risePx = with(density) { 96.dp.toPx() }
 
     Box(
         modifier = Modifier
