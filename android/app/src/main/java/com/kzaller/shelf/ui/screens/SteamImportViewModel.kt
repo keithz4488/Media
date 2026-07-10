@@ -48,10 +48,17 @@ class SteamImportViewModel(
 
     fun connectAndImport(apiKey: String, idOrVanity: String) {
         viewModelScope.launch {
-            prefs.setSteam(apiKey, idOrVanity)
             _state.value = SteamImportState.Scanning
+            val steamId = runCatching {
+                steam.resolveSteamId(apiKey, idOrVanity)
+            }.getOrElse {
+                _state.value = SteamImportState.Error(it.message ?: "Couldn't reach Steam")
+                return@launch
+            }
+            // Persist the RESOLVED 64-bit id (not the raw vanity/URL) so the achievements API,
+            // which can't take a vanity name, works later without re-resolving.
+            prefs.setSteam(apiKey, steamId)
             val games = runCatching {
-                val steamId = steam.resolveSteamId(apiKey, idOrVanity)
                 steam.fetchOwnedGames(apiKey, steamId)
             }.getOrElse {
                 _state.value = SteamImportState.Error(it.message ?: "Couldn't reach Steam")

@@ -8,6 +8,7 @@ import com.kzaller.shelf.data.ShelfRepository
 import com.kzaller.shelf.data.Status
 import com.kzaller.shelf.data.SteamAchievementData
 import com.kzaller.shelf.data.SteamAchievementsClient
+import com.kzaller.shelf.data.SteamClient
 import com.kzaller.shelf.data.models.CoverOption
 import com.kzaller.shelf.data.models.ItemDto
 import com.kzaller.shelf.data.models.Scores
@@ -40,6 +41,7 @@ class DetailViewModel(
     val scores = _scores.asStateFlow()
 
     private val steamAchClient = SteamAchievementsClient()
+    private val steamClient = SteamClient()
     private val _steamAch = MutableStateFlow<SteamAchievementData?>(null)
     val steamAch = _steamAch.asStateFlow()
     private val _steamAchLoading = MutableStateFlow(false)
@@ -58,7 +60,13 @@ class DetailViewModel(
         steamAchLoaded = true
         viewModelScope.launch {
             _steamAchLoading.value = true
-            val data = runCatching { steamAchClient.fetch(apiKey, steamId, appId) }.getOrNull()
+            val data = runCatching {
+                // Older imports stored the raw vanity name / profile URL instead of the 64-bit
+                // SteamID. The achievements API needs the numeric id, so resolve it here (a no-op
+                // for ids already in 64-bit form).
+                val resolved = steamClient.resolveSteamId(apiKey, steamId)
+                steamAchClient.fetch(apiKey, resolved, appId)
+            }.getOrNull()
             _steamAch.value = data
             _steamAchLoading.value = false
             if (data != null && data.total > 0 && data.unlocked == data.total &&
