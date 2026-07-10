@@ -2,7 +2,7 @@ package com.kzaller.shelf.ui.components
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.EaseIn
-import androidx.compose.animation.core.EaseOutBack
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -53,7 +53,7 @@ import com.kzaller.shelf.ui.theme.LocalShelfFlavor
 
 private const val COLUMNS = 3
 private const val FALL_MS = 950
-private const val RISE_MS = 1050
+private const val RISE_MS = 1400
 
 /**
  * Cibby-style shelf: rows of standing covers resting on tinted wooden planks, with quiet
@@ -264,9 +264,11 @@ private fun StandingCover(
     // faded, and drops into place with a small bounce. 1 = above/faded, 0 = home.
     val settle = remember { Animatable(if (rising) 1f else 0f) }
     LaunchedEffect(Unit) {
-        if (rising) settle.animateTo(0f, tween(durationMillis = RISE_MS, easing = EaseOutBack))
+        // FastOutSlowIn (not a decelerate curve): spreads the travel across the whole duration
+        // so the drop stays visibly slow instead of front-loading into a snap.
+        if (rising) settle.animateTo(0f, tween(durationMillis = RISE_MS, easing = FastOutSlowInEasing))
     }
-    val risePx = with(density) { 96.dp.toPx() }
+    val risePx = with(density) { 120.dp.toPx() }
 
     Box(
         modifier = Modifier
