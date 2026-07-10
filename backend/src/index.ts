@@ -1026,6 +1026,8 @@ async function enrichForCreate(item: Item, env: Env, force = false): Promise<Ite
         return await enrichRawg(item, env);
       case "tmdb":
         return await enrichTmdb(item, env);
+      case "steam":
+        return await enrichSteam(item, env);
       default:
         return item;
     }
@@ -1248,24 +1250,46 @@ async function igdbCovers(item: Item, env: Env): Promise<CoverOption[]> {
   return opts;
 }
 
+/** Steam-imported game: upgrade its cover to SteamGridDB box art (by app id) when available. */
+async function enrichSteam(item: Item, env: Env): Promise<Item> {
+  const covers = await steamGridDbCovers(item, env);
+  const best = covers.find((c) => c.url)?.url;
+  return best ? { ...item, cover_url: best } : item;
+}
+
 async function steamGridDbCovers(item: Item, env: Env): Promise<CoverOption[]> {
   const key = env.STEAMGRIDDB_API_KEY;
-  if (!key || !item.title) return [];
+  if (!key) return [];
 
   const auth = { authorization: `Bearer ${key}` };
 
-  // 1) Find the SteamGridDB game id by title.
-  const search = await fetch(
-    `https://www.steamgriddb.com/api/v2/search/autocomplete/${encodeURIComponent(item.title)}`,
-    { headers: auth },
-  );
-  if (!search.ok) return [];
-  const sdata = (await search.json()) as any;
-  const games: any[] = Array.isArray(sdata?.data) ? sdata.data : [];
-  if (games.length === 0) return [];
-
-  // Take the top-matched game.
-  const gameId = games[0].id;
+  // 1) Find the SteamGridDB game id. For Steam-imported games resolve it EXACTLY by app id;
+  //    otherwise fall back to a title search.
+  let gameId: number | null = null;
+  if (item.external_src === "steam" && item.external_id) {
+    const byApp = await fetchWithTimeout(
+      `https://www.steamgriddb.com/api/v2/games/steam/${item.external_id}`,
+      { headers: auth },
+      7000,
+    );
+    if (byApp.ok) {
+      const d = (await byApp.json()) as any;
+      gameId = typeof d?.data?.id === "number" ? d.data.id : null;
+    }
+  }
+  if (gameId == null) {
+    if (!item.title) return [];
+    const search = await fetchWithTimeout(
+      `https://www.steamgriddb.com/api/v2/search/autocomplete/${encodeURIComponent(item.title)}`,
+      { headers: auth },
+      7000,
+    );
+    if (!search.ok) return [];
+    const sdata = (await search.json()) as any;
+    const games: any[] = Array.isArray(sdata?.data) ? sdata.data : [];
+    if (games.length === 0) return [];
+    gameId = games[0].id;
+  }
 
   // 2) Fetch portrait box-art grids (the 600x900 family of dimensions).
   const grids = await fetch(
