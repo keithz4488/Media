@@ -30,12 +30,18 @@ export interface Env {
   IGDB_CLIENT_ID?: string;      // optional: when both set, game search augments RAWG with IGDB
   IGDB_CLIENT_SECRET?: string;
   PLEX_WEBHOOK_SECRET?: string; // optional: dedicated secret for the Plex webhook URL (falls back to SHELF_TOKEN)
+  GOOGLE_CLIENT_ID?: string;    // optional: when set, requests may authenticate with a Google ID token (aud = this)
+  OWNER_EMAIL?: string;         // optional: the Google account that claims the pre-auth '__legacy__' library
 }
+
+/** Bucket that owns all pre-multi-user rows until the owner claims them on first Google sign-in. */
+const LEGACY_USER = "__legacy__";
 
 type Kind = "book" | "movie" | "tv" | "game";
 
 interface Item {
   id: string;
+  user_id?: string | null;
   kind: Kind;
   title: string;
   subtitle?: string | null;
@@ -86,10 +92,113 @@ const err = (status: number, message: string) => json({ error: message }, { stat
 const uuid = () =>
   crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36);
 
-function authed(req: Request, env: Env): boolean {
+function bearer(req: Request): string {
   const h = req.headers.get("authorization") || "";
-  const token = h.startsWith("Bearer ") ? h.slice(7) : "";
-  return !!env.SHELF_TOKEN && token === env.SHELF_TOKEN;
+  return h.startsWith("Bearer ") ? h.slice(7) : "";
+}
+
+function b64urlToBytes(s: string): Uint8Array {
+  let t = s.replace(/-/g, "+").replace(/_/g, "/");
+  while (t.length % 4) t += "=";
+  const bin = atob(t);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+// Google's signing keys rotate; cache them for an hour so we're not fetching JWKS per request.
+let googleJwks: { keys: any[]; at: number } | null = null;
+async function getGoogleJwks(): Promise<any[]> {
+  const now = Date.now();
+  if (googleJwks && now - googleJwks.at < 60 * 60 * 1000) return googleJwks.keys;
+  const r = await fetchWithTimeout("https://www.googleapis.com/oauth2/v3/certs", {}, 5000);
+  if (!r.ok) return googleJwks?.keys ?? [];
+  const d = (await r.json()) as any;
+  googleJwks = { keys: Array.isArray(d.keys) ? d.keys : [], at: now };
+  return googleJwks.keys;
+}
+
+interface GoogleClaims {
+  sub: string;
+  email?: string;
+  email_verified?: boolean;
+  aud: string;
+  iss: string;
+  exp: number;
+}
+
+/** Verify a Google ID token (RS256 signature via JWKS + issuer/audience/expiry). Null if invalid. */
+async function verifyGoogleToken(token: string, clientId: string): Promise<GoogleClaims | null> {
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  const [h, p, s] = parts;
+  let header: any;
+  let payload: GoogleClaims;
+  try {
+    header = JSON.parse(new TextDecoder().decode(b64urlToBytes(h)));
+    payload = JSON.parse(new TextDecoder().decode(b64urlToBytes(p)));
+  } catch {
+    return null;
+  }
+  if (header.alg !== "RS256" || !header.kid) return null;
+  const jwk = (await getGoogleJwks()).find((k) => k.kid === header.kid);
+  if (!jwk) return null;
+  const key = await crypto.subtle.importKey(
+    "jwk",
+    jwk,
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["verify"],
+  );
+  const ok = await crypto.subtle.verify(
+    "RSASSA-PKCS1-v1_5",
+    key,
+    b64urlToBytes(s),
+    new TextEncoder().encode(`${h}.${p}`),
+  );
+  if (!ok) return null;
+  if (payload.iss !== "accounts.google.com" && payload.iss !== "https://accounts.google.com") return null;
+  if (payload.aud !== clientId) return null;
+  if (typeof payload.exp !== "number" || payload.exp * 1000 < Date.now()) return null;
+  return payload;
+}
+
+/** One-time: hand the pre-auth library over to the owner's real account on first sign-in. */
+async function claimLegacyData(env: Env, userId: string): Promise<void> {
+  const now = Date.now();
+  await env.DB.prepare("UPDATE items SET user_id = ?1, updated_at = ?2 WHERE user_id = ?3")
+    .bind(userId, now, LEGACY_USER)
+    .run();
+  await env.DB.prepare("UPDATE OR IGNORE user_settings SET user_id = ?1 WHERE user_id = ?2")
+    .bind(userId, LEGACY_USER)
+    .run();
+  await settingSetGlobal(env, "owner_user_id", userId);
+}
+
+/**
+ * Resolve the caller to a user id, or null if unauthorized. The legacy shared token maps to the
+ * pre-auth owner bucket so the current (pre-sign-in) app keeps working during the transition; a
+ * Google ID token maps to that Google account.
+ */
+async function resolveUser(req: Request, env: Env): Promise<string | null> {
+  const token = bearer(req);
+  if (!token) return null;
+  if (env.SHELF_TOKEN && token === env.SHELF_TOKEN) return LEGACY_USER;
+  if (env.GOOGLE_CLIENT_ID) {
+    const claims = await verifyGoogleToken(token, env.GOOGLE_CLIENT_ID);
+    if (claims?.sub) {
+      const userId = `g:${claims.sub}`;
+      if (
+        env.OWNER_EMAIL &&
+        claims.email &&
+        claims.email.toLowerCase() === env.OWNER_EMAIL.toLowerCase()
+      ) {
+        await claimLegacyData(env, userId);
+      }
+      return userId;
+    }
+  }
+  return null;
 }
 
 export default {
@@ -114,31 +223,32 @@ export default {
     // secret query param (?token=) instead of the usual Bearer check.
     if (url.pathname === "/plex/webhook" && req.method === "POST") return plexWebhook(req, url, env);
 
-    if (!authed(req, env)) return err(401, "unauthorized");
+    const userId = await resolveUser(req, env);
+    if (!userId) return err(401, "unauthorized");
 
     try {
       if (url.pathname === "/items") {
-        if (req.method === "GET") return listItems(url, env);
-        if (req.method === "POST") return createItem(req, env);
+        if (req.method === "GET") return listItems(url, env, userId);
+        if (req.method === "POST") return createItem(req, env, userId);
       }
 
-      if (url.pathname === "/items/bulk" && req.method === "POST") return bulkCreate(req, env);
+      if (url.pathname === "/items/bulk" && req.method === "POST") return bulkCreate(req, env, userId);
 
       const idMatch = url.pathname.match(/^\/items\/([^/]+)$/);
       if (idMatch) {
         const id = idMatch[1];
-        if (req.method === "PATCH") return updateItem(id, req, env);
-        if (req.method === "DELETE") return deleteItem(id, env);
+        if (req.method === "PATCH") return updateItem(id, req, env, userId);
+        if (req.method === "DELETE") return deleteItem(id, env, userId);
       }
 
       const refreshMatch = url.pathname.match(/^\/items\/([^/]+)\/refresh$/);
-      if (refreshMatch && req.method === "POST") return refreshItem(refreshMatch[1], env);
+      if (refreshMatch && req.method === "POST") return refreshItem(refreshMatch[1], env, userId);
 
       const coversMatch = url.pathname.match(/^\/items\/([^/]+)\/covers$/);
-      if (coversMatch && req.method === "GET") return listCovers(coversMatch[1], env);
+      if (coversMatch && req.method === "GET") return listCovers(coversMatch[1], env, userId);
 
       const scoresMatch = url.pathname.match(/^\/items\/([^/]+)\/scores$/);
-      if (scoresMatch && req.method === "GET") return itemScores(scoresMatch[1], env);
+      if (scoresMatch && req.method === "GET") return itemScores(scoresMatch[1], env, userId);
 
       if (url.pathname === "/search/books") return searchBooks(url, env);
       if (url.pathname === "/search/movies") return searchTmdb(url, env, "movie");
@@ -148,9 +258,9 @@ export default {
 
       // Steam: store the API key + SteamID so the daily cron can auto-add new purchases,
       // and expose a manual sync for testing / immediate refresh.
-      if (url.pathname === "/steam/config" && req.method === "POST") return steamConfig(req, env);
-      if (url.pathname === "/steam/sync" && req.method === "POST") return json(await syncSteamLibrary(env));
-      if (url.pathname === "/steam/status" && req.method === "GET") return steamStatus(env);
+      if (url.pathname === "/steam/config" && req.method === "POST") return steamConfig(req, env, userId);
+      if (url.pathname === "/steam/sync" && req.method === "POST") return json(await syncSteamLibrary(env, userId));
+      if (url.pathname === "/steam/status" && req.method === "GET") return steamStatus(env, userId);
 
       return err(404, "not found");
     } catch (e) {
@@ -159,48 +269,71 @@ export default {
     }
   },
 
-  // Daily cron: poll Steam for newly-purchased games and add them to the shelf. No-op unless
-  // the user has connected Steam (which stores their key + id in the settings table).
+  // Daily cron: poll Steam for newly-purchased games for every user who has connected Steam.
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    ctx.waitUntil(syncSteamLibrary(env).catch(() => ({ added: 0 })));
+    ctx.waitUntil(syncAllUsersSteam(env).catch(() => {}));
   },
 } satisfies ExportedHandler<Env>;
 
 // ---------- settings + Steam library sync ----------
 
-async function settingGet(env: Env, key: string): Promise<string | null> {
-  const row = await env.DB.prepare("SELECT value FROM settings WHERE key = ?1")
-    .bind(key)
+async function settingGet(env: Env, userId: string, key: string): Promise<string | null> {
+  const row = await env.DB.prepare("SELECT value FROM user_settings WHERE user_id = ?1 AND key = ?2")
+    .bind(userId, key)
     .first<{ value: string }>();
   return row?.value ?? null;
 }
 
-async function settingSet(env: Env, key: string, value: string): Promise<void> {
+async function settingSet(env: Env, userId: string, key: string, value: string): Promise<void> {
   await env.DB.prepare(
-    "INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    "INSERT INTO user_settings (user_id, key, value) VALUES (?1, ?2, ?3)" +
+      " ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value",
   )
-    .bind(key, value)
+    .bind(userId, key, value)
     .run();
 }
 
+// App-wide (not per-user) settings live under a reserved bucket, e.g. which user owns the /k view.
+const GLOBAL_SETTINGS = "__global__";
+const settingGetGlobal = (env: Env, key: string) => settingGet(env, GLOBAL_SETTINGS, key);
+const settingSetGlobal = (env: Env, key: string, value: string) =>
+  settingSet(env, GLOBAL_SETTINGS, key, value);
+
+/** The account that owns single-owner integrations (Plex, /k view) until per-user wiring lands. */
+async function ownerUserId(env: Env): Promise<string> {
+  return (await settingGetGlobal(env, "owner_user_id")) ?? LEGACY_USER;
+}
+
+/** Cron helper: run the Steam sync for every user who has stored Steam credentials. */
+async function syncAllUsersSteam(env: Env): Promise<void> {
+  const rows = await env.DB.prepare(
+    "SELECT DISTINCT user_id FROM user_settings WHERE key = 'steam_api_key'",
+  ).all<{ user_id: string }>();
+  for (const r of rows.results ?? []) {
+    await syncSteamLibrary(env, r.user_id).catch(() => ({ added: 0, updated: 0 }));
+  }
+}
+
 /** Persist the Steam credentials the daily sync needs (sent by the app when connecting Steam). */
-async function steamConfig(req: Request, env: Env): Promise<Response> {
+async function steamConfig(req: Request, env: Env, userId: string): Promise<Response> {
   const body = (await req.json().catch(() => null)) as { apiKey?: string; steamId?: string } | null;
   const apiKey = body?.apiKey?.trim();
   const steamId = body?.steamId?.trim();
   if (!apiKey || !steamId) return err(400, "apiKey and steamId required");
-  await settingSet(env, "steam_api_key", apiKey);
-  await settingSet(env, "steam_id", steamId);
+  await settingSet(env, userId, "steam_api_key", apiKey);
+  await settingSet(env, userId, "steam_id", steamId);
   return json({ ok: true });
 }
 
-/** Whether the backend has Steam credentials (i.e. the cron is armed) + how many are on the shelf. */
-async function steamStatus(env: Env): Promise<Response> {
-  const apiKey = await settingGet(env, "steam_api_key");
-  const steamId = await settingGet(env, "steam_id");
+/** Whether this user has Steam credentials (i.e. the cron is armed) + how many are on their shelf. */
+async function steamStatus(env: Env, userId: string): Promise<Response> {
+  const apiKey = await settingGet(env, userId, "steam_api_key");
+  const steamId = await settingGet(env, userId, "steam_id");
   const row = await env.DB.prepare(
-    "SELECT COUNT(*) AS n FROM items WHERE kind = 'game' AND external_src = 'steam'",
-  ).first<{ n: number }>();
+    "SELECT COUNT(*) AS n FROM items WHERE user_id = ?1 AND kind = 'game' AND external_src = 'steam'",
+  )
+    .bind(userId)
+    .first<{ n: number }>();
   return json({ connected: !!(apiKey && steamId), games: row?.n ?? 0 });
 }
 
@@ -251,23 +384,23 @@ async function steamOwnedGames(apiKey: string, steamId: string): Promise<SteamOw
  * enrichment here — the app backfills cover/description on first open), and bounds the work per
  * run so a first sync of a big library can't blow past Worker subrequest limits.
  */
-async function syncSteamLibrary(env: Env): Promise<{ added: number; updated: number }> {
-  const apiKey = await settingGet(env, "steam_api_key");
-  const rawId = await settingGet(env, "steam_id");
+async function syncSteamLibrary(env: Env, userId: string): Promise<{ added: number; updated: number }> {
+  const apiKey = await settingGet(env, userId, "steam_api_key");
+  const rawId = await settingGet(env, userId, "steam_id");
   if (!apiKey || !rawId) return { added: 0, updated: 0 };
 
   // Stored id may be a vanity name / URL — GetOwnedGames needs the 64-bit id.
   const steamId = await steamResolveId(apiKey, rawId);
   if (!steamId) return { added: 0, updated: 0 };
   // Cache the resolved id so future runs skip the vanity lookup.
-  if (steamId !== rawId) await settingSet(env, "steam_id", steamId);
+  if (steamId !== rawId) await settingSet(env, userId, "steam_id", steamId);
 
   const owned = await steamOwnedGames(apiKey, steamId);
   if (owned.length === 0) return { added: 0, updated: 0 };
 
   const existing = await env.DB.prepare(
-    "SELECT external_id FROM items WHERE kind = 'game' AND external_src = 'steam'",
-  ).all<{ external_id: string }>();
+    "SELECT external_id FROM items WHERE user_id = ?1 AND kind = 'game' AND external_src = 'steam'",
+  ).bind(userId).all<{ external_id: string }>();
   const have = new Set((existing.results ?? []).map((r) => String(r.external_id)));
 
   const fresh = owned.filter((g) => g.appid && g.name && !have.has(String(g.appid))).slice(0, 60);
@@ -276,15 +409,15 @@ async function syncSteamLibrary(env: Env): Promise<{ added: number; updated: num
     const now = Date.now();
     const stmt = env.DB.prepare(
       `INSERT INTO items
-        (id, kind, title, subtitle, cover_url, external_id, external_src, status, user_platform, format, added_at, updated_at)
+        (id, user_id, kind, title, subtitle, cover_url, external_id, external_src, status, user_platform, format, added_at, updated_at)
        VALUES
-        (?1,'game',?2,'PC',?3,?4,'steam',?5,'pc','digital',?6,?6)
+        (?1,?2,'game',?3,'PC',?4,?5,'steam',?6,'pc','digital',?7,?7)
        ON CONFLICT(kind, external_src, external_id) DO NOTHING`,
     );
     const batch = fresh.map((g) => {
       const status = (g.playtime_forever ?? 0) > 0 ? "owned,played" : "owned";
       const cover = `https://cdn.cloudflare.steamstatic.com/steam/apps/${g.appid}/library_600x900.jpg`;
-      return stmt.bind(uuid(), g.name, cover, String(g.appid), status, now);
+      return stmt.bind(uuid(), userId, g.name, cover, String(g.appid), status, now);
     });
     const results = await env.DB.batch(batch);
     added = results.reduce((n, r) => n + (r.meta?.changes ?? 0), 0);
@@ -292,16 +425,16 @@ async function syncSteamLibrary(env: Env): Promise<{ added: number; updated: num
 
   // Steam imports land without a release year — backfill a batch of the ones still missing it
   // (bounded per run to respect Worker subrequest limits; converges over a few runs).
-  const updated = await backfillSteamYears(env, 25);
+  const updated = await backfillSteamYears(env, userId, 25);
   return { added, updated };
 }
 
-/** Fill in the release year for up to `limit` Steam games still missing one, via the store API. */
-async function backfillSteamYears(env: Env, limit: number): Promise<number> {
+/** Fill in the release year for up to `limit` of a user's Steam games still missing one. */
+async function backfillSteamYears(env: Env, userId: string, limit: number): Promise<number> {
   const rows = await env.DB.prepare(
-    "SELECT id, external_id FROM items WHERE kind = 'game' AND external_src = 'steam'" +
-      " AND year IS NULL AND external_id IS NOT NULL LIMIT ?1",
-  ).bind(limit).all<{ id: string; external_id: string }>();
+    "SELECT id, external_id FROM items WHERE user_id = ?1 AND kind = 'game' AND external_src = 'steam'" +
+      " AND year IS NULL AND external_id IS NOT NULL LIMIT ?2",
+  ).bind(userId, limit).all<{ id: string; external_id: string }>();
   const list = rows.results ?? [];
   let n = 0;
   for (const r of list) {
@@ -319,11 +452,11 @@ async function backfillSteamYears(env: Env, limit: number): Promise<number> {
 
 // ---------- shelf CRUD ----------
 
-async function listItems(url: URL, env: Env): Promise<Response> {
+async function listItems(url: URL, env: Env, userId: string): Promise<Response> {
   const kind = url.searchParams.get("kind");
   const stmt = kind
-    ? env.DB.prepare("SELECT * FROM items WHERE kind = ?1 ORDER BY added_at DESC").bind(kind)
-    : env.DB.prepare("SELECT * FROM items ORDER BY added_at DESC");
+    ? env.DB.prepare("SELECT * FROM items WHERE user_id = ?1 AND kind = ?2 ORDER BY added_at DESC").bind(userId, kind)
+    : env.DB.prepare("SELECT * FROM items WHERE user_id = ?1 ORDER BY added_at DESC").bind(userId);
   const { results } = await stmt.all<Item>();
   return json({ items: results || [] });
 }
@@ -338,7 +471,7 @@ async function listItems(url: URL, env: Env): Promise<Response> {
  * and any other statuses the user added are all preserved. This makes a re-import double as
  * a "pull watched state from Plex" sync for items already on the shelf.
  */
-async function bulkCreate(req: Request, env: Env): Promise<Response> {
+async function bulkCreate(req: Request, env: Env, userId: string): Promise<Response> {
   const body = (await req.json().catch(() => null)) as { items?: Partial<Item>[] } | null;
   const list = body?.items;
   if (!Array.isArray(list) || list.length === 0) return err(400, "items array required");
@@ -347,11 +480,11 @@ async function bulkCreate(req: Request, env: Env): Promise<Response> {
   const now = Date.now();
   const stmt = env.DB.prepare(
     `INSERT INTO items
-      (id, kind, title, subtitle, year, cover_url, external_id, external_src,
+      (id, user_id, kind, title, subtitle, year, cover_url, external_id, external_src,
        description, rating, status, notes, user_platform, consoles, format,
        seasons, episodes, cur_season, cur_episode, completed_at, added_at, updated_at)
      VALUES
-      (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22)
+      (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23)
      ON CONFLICT(kind, external_src, external_id) DO UPDATE SET
        status = CASE
          WHEN excluded.status LIKE '%watched%' AND COALESCE(items.status,'') NOT LIKE '%watched%'
@@ -369,6 +502,7 @@ async function bulkCreate(req: Request, env: Env): Promise<Response> {
     .map((b) =>
       stmt.bind(
         b.id || uuid(),
+        userId,
         b.kind,
         b.title,
         b.subtitle ?? null,
@@ -399,13 +533,14 @@ async function bulkCreate(req: Request, env: Env): Promise<Response> {
   return json({ inserted, received: list.length });
 }
 
-async function createItem(req: Request, env: Env): Promise<Response> {
+async function createItem(req: Request, env: Env, userId: string): Promise<Response> {
   const body = (await req.json()) as Partial<Item>;
   if (!body.kind || !body.title) return err(400, "kind and title required");
 
   const now = Date.now();
   let item: Item = {
     id: body.id || uuid(),
+    user_id: userId,
     kind: body.kind,
     title: body.title,
     subtitle: body.subtitle ?? null,
@@ -437,17 +572,18 @@ async function createItem(req: Request, env: Env): Promise<Response> {
   // ON CONFLICT: if the user re-adds the same external item, just touch updated_at.
   await env.DB.prepare(
     `INSERT INTO items
-      (id, kind, title, subtitle, year, cover_url, external_id, external_src,
+      (id, user_id, kind, title, subtitle, year, cover_url, external_id, external_src,
        description, rating, status, notes, user_platform, consoles, format,
        seasons, episodes, cur_season, cur_episode, completed_at, added_at, updated_at)
      VALUES
-      (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22)
+      (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23)
      ON CONFLICT(kind, external_src, external_id) DO UPDATE SET
        updated_at = excluded.updated_at,
        status     = excluded.status`,
   )
     .bind(
       item.id,
+      item.user_id,
       item.kind,
       item.title,
       item.subtitle,
@@ -476,16 +612,16 @@ async function createItem(req: Request, env: Env): Promise<Response> {
   // key (catches the upsert case where the existing row's id wins). Otherwise by id.
   const row = item.external_id
     ? await env.DB.prepare(
-        "SELECT * FROM items WHERE kind=?1 AND external_src=?2 AND external_id=?3 LIMIT 1",
+        "SELECT * FROM items WHERE user_id=?1 AND kind=?2 AND external_src=?3 AND external_id=?4 LIMIT 1",
       )
-        .bind(item.kind, item.external_src, item.external_id)
+        .bind(userId, item.kind, item.external_src, item.external_id)
         .first<Item>()
-    : await env.DB.prepare("SELECT * FROM items WHERE id=?1").bind(item.id).first<Item>();
+    : await env.DB.prepare("SELECT * FROM items WHERE id=?1 AND user_id=?2").bind(item.id, userId).first<Item>();
 
   return json({ item: row || item }, { status: 201 });
 }
 
-async function updateItem(id: string, req: Request, env: Env): Promise<Response> {
+async function updateItem(id: string, req: Request, env: Env, userId: string): Promise<Response> {
   const body = (await req.json()) as Partial<Item>;
   const fields: string[] = [];
   const values: unknown[] = [];
@@ -499,9 +635,15 @@ async function updateItem(id: string, req: Request, env: Env): Promise<Response>
   if (!fields.length) return err(400, "no fields to update");
   fields.push(`updated_at = ?${i++}`);
   values.push(Date.now());
+  // Scope to the owner so one user can't patch another's row.
+  const idParam = i++;
+  const userParam = i;
   values.push(id);
+  values.push(userId);
 
-  const res = await env.DB.prepare(`UPDATE items SET ${fields.join(", ")} WHERE id = ?${i}`)
+  const res = await env.DB.prepare(
+    `UPDATE items SET ${fields.join(", ")} WHERE id = ?${idParam} AND user_id = ?${userParam}`,
+  )
     .bind(...values)
     .run();
   if (res.meta.changes === 0) return err(404, "item not found");
@@ -517,8 +659,10 @@ async function updateItem(id: string, req: Request, env: Env): Promise<Response>
   return json({ item: row });
 }
 
-async function deleteItem(id: string, env: Env): Promise<Response> {
-  const res = await env.DB.prepare("DELETE FROM items WHERE id = ?1").bind(id).run();
+async function deleteItem(id: string, env: Env, userId: string): Promise<Response> {
+  const res = await env.DB.prepare("DELETE FROM items WHERE id = ?1 AND user_id = ?2")
+    .bind(id, userId)
+    .run();
   if (res.meta.changes === 0) return err(404, "item not found");
   return json({ ok: true });
 }
@@ -703,11 +847,14 @@ async function plexWebhook(req: Request, url: URL, env: Env): Promise<Response> 
   const md = payload.Metadata || {};
   const type = md.type;
 
+  // A Plex server belongs to one person, so everything it sends lands on the owner's shelf.
+  const owner = await ownerUserId(env);
+
   // "Watched" sync: Plex scrobbles when playback finishes (~90%). A movie scrobble means the
   // movie is watched; an episode scrobble advances the show's progress (a whole series can't be
   // flipped to Watched from webhooks alone -- that needs the server's episode counts).
-  if (event === "media.scrobble" && type === "movie") return scrobbleMovieWatched(md, env);
-  if (event === "media.scrobble" && type === "episode") return scrobbleEpisodeProgress(md, env);
+  if (event === "media.scrobble" && type === "movie") return scrobbleMovieWatched(md, env, owner);
+  if (event === "media.scrobble" && type === "episode") return scrobbleEpisodeProgress(md, env, owner);
 
   if (event !== "library.new" || (type !== "movie" && type !== "show")) {
     return json({ ok: true, skipped: `${event}/${type}` });
@@ -725,6 +872,7 @@ async function plexWebhook(req: Request, url: URL, env: Env): Promise<Response> 
   const now = Date.now();
   let item: Item = {
     id: uuid(),
+    user_id: owner,
     kind,
     title: hit.title,
     subtitle: hit.subtitle ?? null,
@@ -752,15 +900,15 @@ async function plexWebhook(req: Request, url: URL, env: Env): Promise<Response> 
 
   await env.DB.prepare(
     `INSERT INTO items
-      (id, kind, title, subtitle, year, cover_url, external_id, external_src,
+      (id, user_id, kind, title, subtitle, year, cover_url, external_id, external_src,
        description, rating, status, notes, user_platform, consoles, format,
        seasons, episodes, cur_season, cur_episode, completed_at, added_at, updated_at)
      VALUES
-      (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22)
+      (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23)
      ON CONFLICT(kind, external_src, external_id) DO NOTHING`,
   )
     .bind(
-      item.id, item.kind, item.title, item.subtitle, item.year, item.cover_url,
+      item.id, item.user_id, item.kind, item.title, item.subtitle, item.year, item.cover_url,
       item.external_id, item.external_src, item.description, item.rating, item.status,
       item.notes, item.user_platform, item.consoles, item.format, item.seasons,
       item.episodes, item.cur_season, item.cur_episode, item.completed_at,
@@ -825,7 +973,7 @@ async function flipIfCaughtUp(row: Item, env: Env): Promise<boolean> {
 }
 
 /** Movie finished on Plex -> mark it Watched (adding it as owned+digital if it's not on a shelf yet). */
-async function scrobbleMovieWatched(md: any, env: Env): Promise<Response> {
+async function scrobbleMovieWatched(md: any, env: Env, owner: string): Promise<Response> {
   const tmdbId = extractTmdbFromMetadata(md);
   const title: string | null = typeof md.title === "string" ? md.title : null;
   let hit = tmdbId ? await tmdbLookup("movie", { id: tmdbId }, env) : null;
@@ -835,6 +983,7 @@ async function scrobbleMovieWatched(md: any, env: Env): Promise<Response> {
   const now = Date.now();
   let item: Item = {
     id: uuid(),
+    user_id: owner,
     kind: "movie",
     title: hit.title,
     subtitle: hit.subtitle ?? null,
@@ -864,11 +1013,11 @@ async function scrobbleMovieWatched(md: any, env: Env): Promise<Response> {
   // a completion date if it didn't have one.
   await env.DB.prepare(
     `INSERT INTO items
-      (id, kind, title, subtitle, year, cover_url, external_id, external_src,
+      (id, user_id, kind, title, subtitle, year, cover_url, external_id, external_src,
        description, rating, status, notes, user_platform, consoles, format,
        seasons, episodes, cur_season, cur_episode, completed_at, added_at, updated_at)
      VALUES
-      (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22)
+      (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23)
      ON CONFLICT(kind, external_src, external_id) DO UPDATE SET
        status = CASE
          WHEN COALESCE(items.status,'') LIKE '%watched%' THEN items.status
@@ -878,7 +1027,7 @@ async function scrobbleMovieWatched(md: any, env: Env): Promise<Response> {
        updated_at = excluded.updated_at`,
   )
     .bind(
-      item.id, item.kind, item.title, item.subtitle, item.year, item.cover_url,
+      item.id, item.user_id, item.kind, item.title, item.subtitle, item.year, item.cover_url,
       item.external_id, item.external_src, item.description, item.rating, item.status,
       item.notes, item.user_platform, item.consoles, item.format, item.seasons,
       item.episodes, item.cur_season, item.cur_episode, item.completed_at,
@@ -890,16 +1039,16 @@ async function scrobbleMovieWatched(md: any, env: Env): Promise<Response> {
 }
 
 /** Episode finished on Plex -> mark the show Watching and advance its season/episode progress. */
-async function scrobbleEpisodeProgress(md: any, env: Env): Promise<Response> {
+async function scrobbleEpisodeProgress(md: any, env: Env, owner: string): Promise<Response> {
   const show: string | null = typeof md.grandparentTitle === "string" ? md.grandparentTitle : null;
   const season: number | null = typeof md.parentIndex === "number" ? md.parentIndex : null;
   const ep: number | null = typeof md.index === "number" ? md.index : null;
   if (!show) return json({ ok: true, skipped: "no show title" });
 
-  // Only touch shows already on the shelf; don't add a series from a single episode play.
+  // Only touch the owner's shows already on the shelf; don't add a series from a single episode play.
   const row = await env.DB
-    .prepare("SELECT * FROM items WHERE kind='tv' AND lower(title) = lower(?1) LIMIT 1")
-    .bind(show)
+    .prepare("SELECT * FROM items WHERE user_id = ?1 AND kind='tv' AND lower(title) = lower(?2) LIMIT 1")
+    .bind(owner, show)
     .first<Item>();
   if (!row) return json({ ok: true, skipped: "show not on shelf", show });
 
@@ -1199,8 +1348,10 @@ async function enrichForCreate(item: Item, env: Env, force = false): Promise<Ite
   }
 }
 
-async function refreshItem(id: string, env: Env): Promise<Response> {
-  const row = await env.DB.prepare("SELECT * FROM items WHERE id = ?1").bind(id).first<Item>();
+async function refreshItem(id: string, env: Env, userId: string): Promise<Response> {
+  const row = await env.DB.prepare("SELECT * FROM items WHERE id = ?1 AND user_id = ?2")
+    .bind(id, userId)
+    .first<Item>();
   if (!row) return err(404, "item not found");
 
   const refreshed = await enrichForCreate(row, env, /* force */ true);
@@ -1237,8 +1388,10 @@ interface CoverOption {
   label: string;
 }
 
-async function listCovers(id: string, env: Env): Promise<Response> {
-  const row = await env.DB.prepare("SELECT * FROM items WHERE id = ?1").bind(id).first<Item>();
+async function listCovers(id: string, env: Env, userId: string): Promise<Response> {
+  const row = await env.DB.prepare("SELECT * FROM items WHERE id = ?1 AND user_id = ?2")
+    .bind(id, userId)
+    .first<Item>();
   if (!row) return err(404, "item not found");
 
   let covers: CoverOption[] = [];
@@ -1332,8 +1485,10 @@ async function rawgCovers(item: Item, env: Env): Promise<CoverOption[]> {
  * users) and `aggregated_rating` (external critics). We surface both with their counts.
  * Returns nulls for non-IGDB items so the client can simply hide the section.
  */
-async function itemScores(id: string, env: Env): Promise<Response> {
-  const row = await env.DB.prepare("SELECT * FROM items WHERE id = ?1").bind(id).first<Item>();
+async function itemScores(id: string, env: Env, userId: string): Promise<Response> {
+  const row = await env.DB.prepare("SELECT * FROM items WHERE id = ?1 AND user_id = ?2")
+    .bind(id, userId)
+    .first<Item>();
   if (!row) return err(404, "item not found");
 
   const empty = { players: null, playersCount: null, critics: null, criticsCount: null };
@@ -1667,8 +1822,12 @@ async function enrichTmdb(item: Item, env: Env): Promise<Item> {
 // ---------- public read-only HTML view at /k ----------
 
 async function publicShelves(env: Env): Promise<Response> {
+  // The public view shows only the owner's shelf (the account that claimed the legacy library),
+  // falling back to the legacy bucket before any Google sign-in has happened.
+  const owner = (await settingGetGlobal(env, "owner_user_id")) ?? LEGACY_USER;
   const { results } = await env.DB
-    .prepare("SELECT * FROM items ORDER BY kind, added_at DESC")
+    .prepare("SELECT * FROM items WHERE user_id = ?1 ORDER BY kind, added_at DESC")
+    .bind(owner)
     .all<Item>();
   return new Response(renderShelvesHtml(results || []), {
     headers: {
