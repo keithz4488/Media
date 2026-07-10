@@ -174,6 +174,16 @@ class ShelfRepository(context: Context) {
         api.saveSteamConfig(com.kzaller.shelf.data.models.SteamConfigRequest(apiKey, steamId))
     }
 
+    /** Run the Steam library sync now; returns how many new games were added. */
+    suspend fun syncSteam(): Result<Int> = runCatching {
+        api.syncSteam().added
+    }
+
+    /** Backend Steam connection status (credentials present + games already synced). */
+    suspend fun steamStatus(): Result<com.kzaller.shelf.data.models.SteamStatusResponse> = runCatching {
+        api.steamStatus()
+    }
+
     suspend fun identify(jpegBytes: ByteArray): Result<IdentifyResult> = runCatching {
         val b64 = Base64.encodeToString(jpegBytes, Base64.NO_WRAP)
         api.identify(IdentifyRequest(image = b64)).result

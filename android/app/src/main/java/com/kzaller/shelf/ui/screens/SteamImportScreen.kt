@@ -1,9 +1,11 @@
 package com.kzaller.shelf.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,12 +18,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
@@ -56,6 +62,10 @@ fun SteamImportScreen(vm: SteamImportViewModel, onBack: () -> Unit, onDone: () -
     val state by vm.state.collectAsState()
     val savedKey by vm.savedKey.collectAsState()
     val savedId by vm.savedId.collectAsState()
+    val syncing by vm.syncing.collectAsState()
+    val syncMessage by vm.syncMessage.collectAsState()
+    val backendConnected by vm.backendConnected.collectAsState()
+    val backendGames by vm.backendGames.collectAsState()
 
     MediaShelfTheme(dark = true) {
         Scaffold(
@@ -83,7 +93,16 @@ fun SteamImportScreen(vm: SteamImportViewModel, onBack: () -> Unit, onDone: () -
             ) {
                 when (val s = state) {
                     is SteamImportState.Idle ->
-                        ConnectForm(savedKey, savedId, onImport = vm::connectAndImport)
+                        ConnectForm(
+                            initialKey = savedKey,
+                            initialId = savedId,
+                            onImport = vm::connectAndImport,
+                            backendConnected = backendConnected,
+                            backendGames = backendGames,
+                            syncing = syncing,
+                            syncMessage = syncMessage,
+                            onSyncNow = vm::syncNow,
+                        )
                     is SteamImportState.Scanning ->
                         Busy("Fetching your Steam library…")
                     is SteamImportState.Importing ->
@@ -103,9 +122,15 @@ private fun ConnectForm(
     initialKey: String,
     initialId: String,
     onImport: (String, String) -> Unit,
+    backendConnected: Boolean,
+    backendGames: Int,
+    syncing: Boolean,
+    syncMessage: String?,
+    onSyncNow: () -> Unit,
 ) {
     var key by rememberSaveable(initialKey) { mutableStateOf(initialKey) }
     var id by rememberSaveable(initialId) { mutableStateOf(initialId) }
+    val hasSaved = initialKey.isNotBlank() && initialId.isNotBlank()
 
     Column(
         modifier = Modifier
@@ -152,6 +177,47 @@ private fun ConnectForm(
             Icon(Icons.Default.CloudDownload, contentDescription = null)
             Spacer(Modifier.width(8.dp))
             Text("Import library", fontWeight = FontWeight.Bold)
+        }
+
+        // Once Steam is connected, offer a manual "Sync now" — the same job the daily cron runs —
+        // plus a live status line so you can see the backend actually has your credentials.
+        if (hasSaved) {
+            HorizontalDivider(color = Color(0xFF2A3A4C), modifier = Modifier.padding(vertical = 4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = if (backendConnected) Icons.Default.CheckCircle else Icons.Default.CloudOff,
+                    contentDescription = null,
+                    tint = if (backendConnected) Color(0xFF7FD18C) else Color(0xFFB9C4D0),
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    if (backendConnected) "Steam connected · $backendGames games synced · auto-syncs daily"
+                    else "Not yet armed on the backend — open the app once, then try Sync now",
+                    color = Color(0xFFB9C4D0),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            OutlinedButton(
+                onClick = onSyncNow,
+                enabled = !syncing,
+                border = BorderStroke(1.dp, steamGold),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = steamGold),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                if (syncing) {
+                    CircularProgressIndicator(color = steamGold, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Syncing…")
+                } else {
+                    Icon(Icons.Default.Sync, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Sync now", fontWeight = FontWeight.Bold)
+                }
+            }
+            if (syncMessage != null) {
+                Text(syncMessage, color = steamGold, style = MaterialTheme.typography.bodyMedium)
+            }
         }
     }
 }

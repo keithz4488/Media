@@ -39,10 +39,42 @@ class SteamImportViewModel(
     val savedKey = MutableStateFlow("")
     val savedId = MutableStateFlow("")
 
+    // "Sync now" (manual trigger of the same job the daily cron runs) + backend connection status.
+    val syncing = MutableStateFlow(false)
+    val syncMessage = MutableStateFlow<String?>(null)
+    val backendConnected = MutableStateFlow(false)
+    val backendGames = MutableStateFlow(0)
+
     init {
         viewModelScope.launch {
             savedKey.value = prefs.observeSteamKey().first()
             savedId.value = prefs.observeSteamId().first()
+            refreshStatus()
+        }
+    }
+
+    private suspend fun refreshStatus() {
+        repo.steamStatus().onSuccess {
+            backendConnected.value = it.connected
+            backendGames.value = it.games
+        }
+    }
+
+    /** Manually run the Steam sync now and report how many new games landed. */
+    fun syncNow() {
+        viewModelScope.launch {
+            syncing.value = true
+            syncMessage.value = null
+            repo.syncSteam()
+                .onSuccess { added ->
+                    syncMessage.value =
+                        if (added > 0) "Added $added new game${if (added == 1) "" else "s"}"
+                        else "Up to date — no new games"
+                    if (added > 0) repo.refresh(MediaKind.GAME, force = true)
+                    refreshStatus()
+                }
+                .onFailure { syncMessage.value = it.message ?: "Sync failed" }
+            syncing.value = false
         }
     }
 

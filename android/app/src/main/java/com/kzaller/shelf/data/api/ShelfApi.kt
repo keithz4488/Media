@@ -61,4 +61,12 @@ interface ShelfApi {
     /** Store the Steam key + id server-side so the daily cron can auto-add new purchases. */
     @POST("steam/config")
     suspend fun saveSteamConfig(@Body body: com.kzaller.shelf.data.models.SteamConfigRequest)
+
+    /** Manually run the Steam library sync now (same job the daily cron runs). */
+    @POST("steam/sync")
+    suspend fun syncSteam(): com.kzaller.shelf.data.models.SteamSyncResponse
+
+    /** Whether the backend has Steam credentials (cron armed) + games already synced. */
+    @GET("steam/status")
+    suspend fun steamStatus(): com.kzaller.shelf.data.models.SteamStatusResponse
 }

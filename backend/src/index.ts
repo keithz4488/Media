@@ -150,6 +150,7 @@ export default {
       // and expose a manual sync for testing / immediate refresh.
       if (url.pathname === "/steam/config" && req.method === "POST") return steamConfig(req, env);
       if (url.pathname === "/steam/sync" && req.method === "POST") return json(await syncSteamLibrary(env));
+      if (url.pathname === "/steam/status" && req.method === "GET") return steamStatus(env);
 
       return err(404, "not found");
     } catch (e) {
@@ -191,6 +192,16 @@ async function steamConfig(req: Request, env: Env): Promise<Response> {
   await settingSet(env, "steam_api_key", apiKey);
   await settingSet(env, "steam_id", steamId);
   return json({ ok: true });
+}
+
+/** Whether the backend has Steam credentials (i.e. the cron is armed) + how many are on the shelf. */
+async function steamStatus(env: Env): Promise<Response> {
+  const apiKey = await settingGet(env, "steam_api_key");
+  const steamId = await settingGet(env, "steam_id");
+  const row = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM items WHERE kind = 'game' AND external_src = 'steam'",
+  ).first<{ n: number }>();
+  return json({ connected: !!(apiKey && steamId), games: row?.n ?? 0 });
 }
 
 interface SteamOwnedGame {
