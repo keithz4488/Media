@@ -1169,6 +1169,14 @@ async function itemScores(id: string, env: Env): Promise<Response> {
   if (!row) return err(404, "item not found");
 
   const empty = { players: null, playersCount: null, critics: null, criticsCount: null };
+
+  // Steam games carry a Metacritic critic score in the store API (no IGDB match).
+  if (row.external_src === "steam" && row.external_id) {
+    const d = await steamStoreDetails(row.external_id);
+    const score = typeof d?.metacritic?.score === "number" ? d.metacritic.score : null;
+    return json({ scores: { ...empty, critics: score } });
+  }
+
   if (row.external_src !== "igdb" || !row.external_id || !env.IGDB_CLIENT_ID) {
     return json({ scores: empty });
   }
@@ -1250,11 +1258,35 @@ async function igdbCovers(item: Item, env: Env): Promise<CoverOption[]> {
   return opts;
 }
 
-/** Steam-imported game: upgrade its cover to SteamGridDB box art (by app id) when available. */
+/** Fetch a game's Steam store details (description, metacritic, etc.) by app id. */
+async function steamStoreDetails(appId: string): Promise<any | null> {
+  const r = await fetchWithTimeout(
+    `https://store.steampowered.com/api/appdetails?appids=${appId}&l=english`,
+    {},
+    7000,
+  );
+  if (!r.ok) return null;
+  const data = (await r.json()) as any;
+  const entry = data?.[appId];
+  return entry && entry.success ? entry.data ?? null : null;
+}
+
+/**
+ * Steam-imported game: fill in the description from the Steam store and upgrade the cover to
+ * SteamGridDB box art (matched by app id) when available.
+ */
 async function enrichSteam(item: Item, env: Env): Promise<Item> {
-  const covers = await steamGridDbCovers(item, env);
+  const [covers, details] = await Promise.all([
+    steamGridDbCovers(item, env),
+    item.external_id ? steamStoreDetails(item.external_id) : Promise.resolve(null),
+  ]);
   const best = covers.find((c) => c.url)?.url;
-  return best ? { ...item, cover_url: best } : item;
+  const desc = trimDescription(details?.short_description) ?? trimDescription(details?.about_the_game);
+  return {
+    ...item,
+    cover_url: best || item.cover_url || null,
+    description: desc ?? item.description,
+  };
 }
 
 async function steamGridDbCovers(item: Item, env: Env): Promise<CoverOption[]> {
