@@ -526,7 +526,12 @@ private fun DetailPage(
 
                     if (current.kind == MediaKind.GAME && current.externalSrc == "steam") {
                         Spacer(Modifier.height(20.dp))
-                        SteamAchievementsSection(data = steamAch, loading = steamAchLoading, accent = flavor.accent)
+                        SteamAchievementsSection(
+                            data = steamAch,
+                            loading = steamAchLoading,
+                            connected = steamKey.isNotBlank() && steamId.isNotBlank(),
+                            accent = flavor.accent,
+                        )
                     }
 
                     if (!current.description.isNullOrBlank()) {
@@ -827,16 +832,22 @@ private fun Stepper(
 private fun SteamAchievementsSection(
     data: SteamAchievementData?,
     loading: Boolean,
+    connected: Boolean,
     accent: Color,
 ) {
-    if (data == null) {
-        if (loading) {
-            Text(
-                "Loading achievements…",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-            )
-        }
+    // Always show the header so it's clear where achievements live, with a status when empty.
+    if (data == null || data.total == 0) {
+        Text("Achievements", style = MaterialTheme.typography.titleSmall)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = when {
+                loading -> "Loading achievements…"
+                !connected -> "Import your Steam library (top-right ☁ → From Steam) to see achievements."
+                else -> "No achievements for this game, or your Steam profile's game details are set to private."
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+        )
         return
     }
 
