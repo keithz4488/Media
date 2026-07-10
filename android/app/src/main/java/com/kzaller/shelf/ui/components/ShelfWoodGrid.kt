@@ -1,5 +1,8 @@
 package com.kzaller.shelf.ui.components
 
+import androidx.compose.animation.core.EaseIn
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -22,14 +25,21 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -40,11 +50,16 @@ import com.kzaller.shelf.data.models.ItemDto
 import com.kzaller.shelf.ui.theme.LocalShelfFlavor
 
 private const val COLUMNS = 3
+private const val FALL_MS = 620
 
 /**
  * Cibby-style shelf: rows of standing covers resting on tinted wooden planks, with quiet
  * titles beneath each cover. Items are chunked into rows of [COLUMNS]; each row draws its
  * own plank so partial last rows still get a shelf to stand on.
+ *
+ * When a filter removes items, the outgoing covers "fall off the shelf": we hold them in
+ * place for one beat (so the surviving covers don't jump yet) while they tip over, drop, and
+ * fade, then prune them so the shelf reflows.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -57,7 +72,29 @@ fun ShelfWoodGrid(
     onToggle: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val rows = remember(items) { items.chunked(COLUMNS) }
+    // What's actually laid out. Usually equals `items`, but during a fall it keeps the outgoing
+    // covers on the shelf (in their old slots) so the survivors stay put until the drop finishes.
+    var display by remember { mutableStateOf(items) }
+    var falling by remember { mutableStateOf<Set<String>>(emptySet()) }
+
+    LaunchedEffect(items) {
+        val newIds = items.mapTo(HashSet()) { it.id }
+        val outgoing = display.filter { it.id !in newIds }
+        if (outgoing.isEmpty()) {
+            // Pure addition / reorder / first load — no drop needed, show it straight away.
+            display = items
+            falling = emptySet()
+        } else {
+            // Keep the current layout, mark the removed covers as falling, let them drop,
+            // then swap to the filtered set so the shelf reflows.
+            falling = outgoing.mapTo(HashSet()) { it.id }
+            kotlinx.coroutines.delay(FALL_MS.toLong())
+            display = items
+            falling = emptySet()
+        }
+    }
+
+    val rows = remember(display) { display.chunked(COLUMNS) }
     LazyColumn(
         modifier = modifier,
         contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 24.dp),
@@ -67,6 +104,7 @@ fun ShelfWoodGrid(
                 row = row,
                 kind = kind,
                 selection = selection,
+                falling = falling,
                 inSelectionMode = inSelectionMode,
                 onItem = onItem,
                 onToggle = onToggle,
@@ -81,6 +119,7 @@ private fun ShelfRow(
     row: List<ItemDto>,
     kind: MediaKind,
     selection: Set<String>,
+    falling: Set<String>,
     inSelectionMode: Boolean,
     onItem: (String) -> Unit,
     onToggle: (String) -> Unit,
@@ -125,6 +164,7 @@ private fun ShelfRow(
                             item = item,
                             aspect = coverAspect,
                             selected = item.id in selection,
+                            falling = item.id in falling,
                             onClick = {
                                 if (inSelectionMode) onToggle(item.id) else onItem(item.id)
                             },
@@ -175,15 +215,36 @@ private fun StandingCover(
     item: ItemDto,
     aspect: Float,
     selected: Boolean,
+    falling: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
     val flavor = LocalShelfFlavor.current
     val shape = RoundedCornerShape(8.dp)
+
+    // Fall-off-the-shelf: covers pivot at their base, tip a little, then accelerate off-screen
+    // and fade. The tip direction is stable per-item so the same cover always falls the same way.
+    val fall by animateFloatAsState(
+        targetValue = if (falling) 1f else 0f,
+        animationSpec = tween(durationMillis = FALL_MS, easing = EaseIn),
+        label = "fall",
+    )
+    val fallPx = with(LocalDensity.current) { 900.dp.toPx() }
+    val tipDir = if (item.id.hashCode() and 1 == 0) 1f else -1f
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .aspectRatio(aspect)
+            .graphicsLayer {
+                if (fall > 0f) {
+                    transformOrigin = TransformOrigin(0.5f, 1f)
+                    // Ease into the tip early, then let the drop take over.
+                    rotationZ = tipDir * 42f * fall
+                    translationY = fallPx * fall * fall
+                    alpha = (1f - fall * 1.3f).coerceIn(0f, 1f)
+                }
+            }
             // soft drop shadow so the cover looks like it's standing on the plank
             .shadow(elevation = 10.dp, shape = shape, clip = false)
             .clip(shape)
