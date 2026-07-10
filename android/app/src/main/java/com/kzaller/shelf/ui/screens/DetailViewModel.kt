@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.ShelfRepository
 import com.kzaller.shelf.data.Status
+import com.kzaller.shelf.data.SteamAchievementData
+import com.kzaller.shelf.data.SteamAchievementsClient
 import com.kzaller.shelf.data.models.CoverOption
 import com.kzaller.shelf.data.models.ItemDto
 import com.kzaller.shelf.data.models.Scores
@@ -36,6 +38,36 @@ class DetailViewModel(
 
     private val _scores = MutableStateFlow<Scores?>(null)
     val scores = _scores.asStateFlow()
+
+    private val steamAchClient = SteamAchievementsClient()
+    private val _steamAch = MutableStateFlow<SteamAchievementData?>(null)
+    val steamAch = _steamAch.asStateFlow()
+    private val _steamAchLoading = MutableStateFlow(false)
+    val steamAchLoading = _steamAchLoading.asStateFlow()
+    private var steamAchLoaded = false
+
+    /**
+     * Live-fetch this Steam game's achievements (progress changes as you play, so we don't cache).
+     * When the game is fully achieved, flip it to "100%" — which feeds Perfectionist + the ticker.
+     */
+    fun loadSteamAchievements(apiKey: String, steamId: String) {
+        val cur = item.value ?: return
+        val appId = cur.externalId
+        if (steamAchLoaded || cur.externalSrc != "steam" || appId.isNullOrBlank()) return
+        if (apiKey.isBlank() || steamId.isBlank()) return
+        steamAchLoaded = true
+        viewModelScope.launch {
+            _steamAchLoading.value = true
+            val data = runCatching { steamAchClient.fetch(apiKey, steamId, appId) }.getOrNull()
+            _steamAch.value = data
+            _steamAchLoading.value = false
+            if (data != null && data.total > 0 && data.unlocked == data.total &&
+                !Status.parse(cur.status).contains(Status.COMPLETE)
+            ) {
+                launchUpdate(UpdateItemRequest(status = Status.ensure(cur.status, Status.COMPLETE)))
+            }
+        }
+    }
 
     /** Fetch IGDB review scores once. No-op result for non-game / non-IGDB items. */
     fun loadScores() {

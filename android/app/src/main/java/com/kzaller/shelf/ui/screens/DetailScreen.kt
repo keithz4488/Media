@@ -83,11 +83,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import kotlin.math.roundToInt
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -97,6 +99,9 @@ import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.Platform
 import com.kzaller.shelf.data.ShelfRepository
 import com.kzaller.shelf.data.Status
+import com.kzaller.shelf.data.SteamAchievement
+import com.kzaller.shelf.data.SteamAchievementData
+import com.kzaller.shelf.data.preferences.AppPreferences
 import com.kzaller.shelf.data.models.CoverOption
 import com.kzaller.shelf.ui.components.WoodBackground
 import com.kzaller.shelf.ui.components.shelfTextFieldColors
@@ -146,8 +151,15 @@ private fun DetailPage(
     val covers by vm.covers.collectAsState()
     val loadingCovers by vm.loadingCovers.collectAsState()
     val scores by vm.scores.collectAsState()
+    val steamAch by vm.steamAch.collectAsState()
+    val steamAchLoading by vm.steamAchLoading.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     var coverSheetOpen by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+    val prefs = remember { AppPreferences(context) }
+    val steamKey by prefs.observeSteamKey().collectAsState(initial = "")
+    val steamId by prefs.observeSteamId().collectAsState(initial = "")
 
     LaunchedEffect(error) { error?.let { snackbar.showSnackbar(it); vm.clearError() } }
     LaunchedEffect(toast) { toast?.let { snackbar.showSnackbar(it); vm.clearToast() } }
@@ -157,6 +169,12 @@ private fun DetailPage(
     }
     // Bulk-imported shows arrive without season counts; fill them in on first open.
     LaunchedEffect(current?.id) { vm.ensureEnriched() }
+    // Steam games: live-load achievements once the saved Steam credentials are available.
+    LaunchedEffect(current?.id, steamKey, steamId) {
+        if (current?.externalSrc == "steam" && steamKey.isNotBlank() && steamId.isNotBlank()) {
+            vm.loadSteamAchievements(steamKey, steamId)
+        }
+    }
 
     // Force the dark (light-text) scheme so text stays readable on the wood backdrop.
     val dark = true
@@ -506,6 +524,11 @@ private fun DetailPage(
                         }
                     }
 
+                    if (current.kind == MediaKind.GAME && current.externalSrc == "steam") {
+                        Spacer(Modifier.height(20.dp))
+                        SteamAchievementsSection(data = steamAch, loading = steamAchLoading, accent = flavor.accent)
+                    }
+
                     if (!current.description.isNullOrBlank()) {
                         Spacer(Modifier.height(20.dp))
                         Text("About", style = MaterialTheme.typography.titleSmall)
@@ -792,6 +815,124 @@ private fun Stepper(
             }
         }
     }
+}
+
+/**
+ * Steam achievements gallery. A completion meter (tap to expand), a progress bar, the rarest
+ * achievement the player has earned, and — when expanded — a grid of every achievement icon
+ * (unlocked in color, locked greyed); tapping one shows its details.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SteamAchievementsSection(
+    data: SteamAchievementData?,
+    loading: Boolean,
+    accent: Color,
+) {
+    if (data == null) {
+        if (loading) {
+            Text(
+                "Loading achievements…",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+            )
+        }
+        return
+    }
+
+    var expanded by remember(data) { mutableStateOf(false) }
+    var selected by remember(data) { mutableStateOf<SteamAchievement?>(null) }
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded },
+    ) {
+        Text("Achievements", style = MaterialTheme.typography.titleSmall)
+        Spacer(Modifier.weight(1f))
+        Text(
+            text = "${data.unlocked} / ${data.total} · ${data.pct}%",
+            style = MaterialTheme.typography.bodyMedium,
+            color = accent,
+        )
+        Icon(
+            imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+            contentDescription = if (expanded) "Collapse" else "Show all",
+            tint = accent,
+        )
+    }
+    Spacer(Modifier.height(6.dp))
+    LinearProgressIndicator(
+        progress = { (data.pct / 100f).coerceIn(0f, 1f) },
+        color = accent,
+        trackColor = Color.White.copy(alpha = 0.12f),
+        modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+    )
+    data.rarestUnlocked?.let { r ->
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = "Rarest earned: ${r.name} · ${steamPct(r.percent)}",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+        )
+    }
+
+    if (expanded) {
+        Spacer(Modifier.height(10.dp))
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            data.achievements.forEach { a ->
+                val url = if (a.unlocked) a.iconUrl else a.iconGrayUrl.ifBlank { a.iconUrl }
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color.Black.copy(alpha = 0.25f))
+                        .clickable { selected = a },
+                ) {
+                    AsyncImage(
+                        model = url,
+                        contentDescription = a.name,
+                        contentScale = ContentScale.Crop,
+                        alpha = if (a.unlocked) 1f else 0.45f,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+            }
+        }
+    }
+
+    selected?.let { a ->
+        AlertDialog(
+            onDismissRequest = { selected = null },
+            confirmButton = { TextButton(onClick = { selected = null }) { Text("Close") } },
+            title = { Text(a.name) },
+            text = {
+                Column {
+                    Text(
+                        text = a.description.ifBlank { "Hidden achievement." },
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = buildString {
+                            append(if (a.unlocked) "Unlocked" else "Locked")
+                            a.percent?.let { append(" · ${steamPct(it)} of players") }
+                        },
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                    )
+                }
+            },
+        )
+    }
+}
+
+private fun steamPct(p: Double?): String = when {
+    p == null -> "—"
+    p < 1.0 -> String.format("%.1f%%", p)
+    else -> "${p.roundToInt()}%"
 }
 
 /** A colored review-score chip: number on a tinted square + label and (optional) rating count. */
