@@ -317,6 +317,9 @@ fun ShelfScreen(
                                 onItem = onItem,
                                 onToggle = vm::toggleSelection,
                                 modifier = Modifier.fillMaxSize(),
+                                // Freeze the shelf while the filter sheet is open so the
+                                // fall-off animation plays only after the user hits Done.
+                                frozen = sheetOpen,
                             )
                         } else {
                             LazyColumn(

@@ -50,7 +50,7 @@ import com.kzaller.shelf.data.models.ItemDto
 import com.kzaller.shelf.ui.theme.LocalShelfFlavor
 
 private const val COLUMNS = 3
-private const val FALL_MS = 620
+private const val FALL_MS = 950
 
 /**
  * Cibby-style shelf: rows of standing covers resting on tinted wooden planks, with quiet
@@ -71,13 +71,18 @@ fun ShelfWoodGrid(
     onItem: (String) -> Unit,
     onToggle: (String) -> Unit,
     modifier: Modifier = Modifier,
+    frozen: Boolean = false,
 ) {
     // What's actually laid out. Usually equals `items`, but during a fall it keeps the outgoing
     // covers on the shelf (in their old slots) so the survivors stay put until the drop finishes.
     var display by remember { mutableStateOf(items) }
     var falling by remember { mutableStateOf<Set<String>>(emptySet()) }
 
-    LaunchedEffect(items) {
+    LaunchedEffect(items, frozen) {
+        // While the filter sheet is open the shelf is frozen: we don't touch the layout or start
+        // any drop, so the fall only plays once the user commits the filter (hits Done) and the
+        // sheet is out of the way to reveal it.
+        if (frozen) return@LaunchedEffect
         val newIds = items.mapTo(HashSet()) { it.id }
         val outgoing = display.filter { it.id !in newIds }
         if (outgoing.isEmpty()) {
