@@ -3,8 +3,10 @@ package com.kzaller.shelf.ui.screens
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.kzaller.shelf.data.Console
 import com.kzaller.shelf.data.Format
 import com.kzaller.shelf.data.MediaKind
+import com.kzaller.shelf.data.Platform
 import com.kzaller.shelf.data.ShelfRepository
 import com.kzaller.shelf.data.Status
 import com.kzaller.shelf.data.models.ItemDto
@@ -40,6 +42,14 @@ class ShelfViewModel(
     private val _formatFilters = MutableStateFlow<Set<String>>(emptySet())
     val formatFilters: StateFlow<Set<String>> = _formatFilters.asStateFlow()
 
+    // Games only: filter by platform "company" (PC/Xbox/PlayStation/Nintendo/Mobile) and,
+    // cascading from the selected platforms, by specific console.
+    private val _platformFilters = MutableStateFlow<Set<String>>(emptySet())
+    val platformFilters: StateFlow<Set<String>> = _platformFilters.asStateFlow()
+
+    private val _consoleFilters = MutableStateFlow<Set<String>>(emptySet())
+    val consoleFilters: StateFlow<Set<String>> = _consoleFilters.asStateFlow()
+
     private val _query = MutableStateFlow("")
     val query: StateFlow<String> = _query.asStateFlow()
 
@@ -51,33 +61,57 @@ class ShelfViewModel(
     val viewMode: StateFlow<ViewMode> =
         prefs.observeViewMode(kind).stateIn(viewModelScope, SharingStarted.Eagerly, ViewMode.GRID)
 
-    /** Items visible on the shelf: kind -> status + format filter -> text search -> sort. */
+    /** All active filters bundled together so the items combine stays within combine's arity. */
+    private data class ActiveFilters(
+        val status: Set<String>,
+        val format: Set<String>,
+        val platform: Set<String>,
+        val console: Set<String>,
+    )
+
+    private val activeFilters =
+        combine(_filters, _formatFilters, _platformFilters, _consoleFilters) { s, f, p, c ->
+            ActiveFilters(s, f, p, c)
+        }
+
+    /** Items visible on the shelf: kind -> status/format/platform/console filters -> search -> sort. */
     val items: StateFlow<List<ItemDto>> =
-        combine(repo.observeShelf(kind), _filters, _formatFilters, _query, sort) { all, filters, formatFilters, query, sort ->
+        combine(repo.observeShelf(kind), activeFilters, _query, sort) { all, af, query, sort ->
             // Defensive: the DAO already filters by kind in SQL, but enforce here too
             // so a stale emission can't slip a different-kind item into the grid.
             val ofKind = all.filter { it.kind == kind }
 
-            val statusFiltered = if (filters.isEmpty()) ofKind
+            val statusFiltered = if (af.status.isEmpty()) ofKind
                 else ofKind.filter { item ->
                     val s = Status.parse(item.status)
                     // Real statuses match by intersection; the pseudo-filters ("Not Watched",
                     // "Show To") match on other fields. Everything combines as OR, like the rest.
-                    val regular = filters - Status.NOT_WATCHED - Status.HAS_SHOW_TO
+                    val regular = af.status - Status.NOT_WATCHED - Status.HAS_SHOW_TO
                     val matchesRegular = regular.any { it in s }
-                    val matchesNotWatched = Status.NOT_WATCHED in filters && Status.WATCHED !in s
-                    val matchesShowTo = Status.HAS_SHOW_TO in filters && !item.showTo.isNullOrBlank()
+                    val matchesNotWatched = Status.NOT_WATCHED in af.status && Status.WATCHED !in s
+                    val matchesShowTo = Status.HAS_SHOW_TO in af.status && !item.showTo.isNullOrBlank()
                     matchesRegular || matchesNotWatched || matchesShowTo
                 }
 
-            val formatFiltered = if (formatFilters.isEmpty()) statusFiltered
+            val formatFiltered = if (af.format.isEmpty()) statusFiltered
                 else statusFiltered.filter { item ->
                     val f = Format.parse(item.format)
-                    f.any { it in formatFilters }
+                    f.any { it in af.format }
                 }
 
-            val searched = if (query.isBlank()) formatFiltered
+            // Platform + console narrow independently (each AND-ed with the rest, OR within itself).
+            val platformFiltered = if (af.platform.isEmpty()) formatFiltered
                 else formatFiltered.filter { item ->
+                    Platform.parse(item.userPlatform).any { it in af.platform }
+                }
+
+            val consoleFiltered = if (af.console.isEmpty()) platformFiltered
+                else platformFiltered.filter { item ->
+                    Console.parse(item.consoles).any { it in af.console }
+                }
+
+            val searched = if (query.isBlank()) consoleFiltered
+                else consoleFiltered.filter { item ->
                     item.title.contains(query, ignoreCase = true) ||
                         (item.subtitle?.contains(query, ignoreCase = true) == true)
                 }
@@ -129,9 +163,30 @@ class ShelfViewModel(
         }
     }
 
+    fun togglePlatformFilter(code: String) {
+        val next = _platformFilters.value.toMutableSet().apply {
+            if (!add(code)) remove(code)
+        }
+        _platformFilters.value = next
+        // Console filters cascade from platforms: drop any console whose parent platform is
+        // no longer selected so the two stay consistent (and the console chips can hide).
+        _consoleFilters.value = Console.pruneToPlatforms(
+            _consoleFilters.value.joinToString(","),
+            next,
+        ).let { Console.parse(it) }
+    }
+
+    fun toggleConsoleFilter(code: String) {
+        _consoleFilters.value = _consoleFilters.value.toMutableSet().apply {
+            if (!add(code)) remove(code)
+        }
+    }
+
     fun clearFilters() {
         _filters.value = emptySet()
         _formatFilters.value = emptySet()
+        _platformFilters.value = emptySet()
+        _consoleFilters.value = emptySet()
     }
 
     fun setSearch(q: String) { _query.value = q }

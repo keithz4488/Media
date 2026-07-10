@@ -65,8 +65,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.kzaller.shelf.data.Console
 import com.kzaller.shelf.data.Format
 import com.kzaller.shelf.data.MediaKind
+import com.kzaller.shelf.data.Platform
 import com.kzaller.shelf.data.Status
 import com.kzaller.shelf.ui.components.ExpandingAddFab
 import com.kzaller.shelf.ui.components.ItemListRow
@@ -96,7 +98,10 @@ fun ShelfScreen(
         val total by vm.totalCount.collectAsState()
         val activeFilters by vm.filters.collectAsState()
         val activeFormatFilters by vm.formatFilters.collectAsState()
-        val totalActiveFilters = activeFilters.size + activeFormatFilters.size
+        val activePlatformFilters by vm.platformFilters.collectAsState()
+        val activeConsoleFilters by vm.consoleFilters.collectAsState()
+        val totalActiveFilters = activeFilters.size + activeFormatFilters.size +
+            activePlatformFilters.size + activeConsoleFilters.size
         val anyFilterActive = totalActiveFilters > 0
         val query by vm.query.collectAsState()
         val sort by vm.sort.collectAsState()
@@ -274,6 +279,8 @@ fun ShelfScreen(
                             kind = kind,
                             active = activeFilters,
                             activeFormats = activeFormatFilters,
+                            activePlatforms = activePlatformFilters,
+                            activeConsoles = activeConsoleFilters,
                             shownCount = items.size,
                             totalCount = total,
                             onClear = vm::clearFilters,
@@ -359,8 +366,12 @@ fun ShelfScreen(
                     kind = kind,
                     selected = activeFilters,
                     selectedFormats = activeFormatFilters,
+                    selectedPlatforms = activePlatformFilters,
+                    selectedConsoles = activeConsoleFilters,
                     onToggle = vm::toggleFilter,
                     onToggleFormat = vm::toggleFormatFilter,
+                    onTogglePlatform = vm::togglePlatformFilter,
+                    onToggleConsole = vm::toggleConsoleFilter,
                     onClear = vm::clearFilters,
                     onClose = { sheetOpen = false },
                 )
@@ -375,6 +386,8 @@ private fun ActiveFilterBar(
     kind: MediaKind,
     active: Set<String>,
     activeFormats: Set<String>,
+    activePlatforms: Set<String>,
+    activeConsoles: Set<String>,
     shownCount: Int,
     totalCount: Int,
     onClear: () -> Unit,
@@ -405,6 +418,26 @@ private fun ActiveFilterBar(
                 AssistChip(
                     onClick = onClear,
                     label = { Text(Format.label(code)) },
+                    colors = AssistChipDefaults.assistChipColors(
+                        containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
+                        labelColor = MaterialTheme.colorScheme.primary,
+                    ),
+                )
+            }
+            Platform.ALL.filter { it in activePlatforms }.forEach { code ->
+                AssistChip(
+                    onClick = onClear,
+                    label = { Text(Platform.label(code)) },
+                    colors = AssistChipDefaults.assistChipColors(
+                        containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
+                        labelColor = MaterialTheme.colorScheme.primary,
+                    ),
+                )
+            }
+            Platform.ALL.flatMap { Console.forPlatform(it) }.filter { it in activeConsoles }.forEach { code ->
+                AssistChip(
+                    onClick = onClear,
+                    label = { Text(Console.label(code)) },
                     colors = AssistChipDefaults.assistChipColors(
                         containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
                         labelColor = MaterialTheme.colorScheme.primary,
@@ -501,8 +534,12 @@ private fun FilterSheet(
     kind: MediaKind,
     selected: Set<String>,
     selectedFormats: Set<String>,
+    selectedPlatforms: Set<String>,
+    selectedConsoles: Set<String>,
     onToggle: (String) -> Unit,
     onToggleFormat: (String) -> Unit,
+    onTogglePlatform: (String) -> Unit,
+    onToggleConsole: (String) -> Unit,
     onClear: () -> Unit,
     onClose: () -> Unit,
 ) {
@@ -552,6 +589,61 @@ private fun FilterSheet(
                     } else null,
                     colors = FilterChipDefaults.filterChipColors(),
                 )
+            }
+        }
+        // Platform + console are a games-only concept. Console chips cascade: they only appear
+        // for the platforms currently selected, and only for platforms that have sub-consoles.
+        if (kind == MediaKind.GAME) {
+            Spacer(Modifier.height(16.dp))
+            Text("Platform", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+            Spacer(Modifier.height(6.dp))
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Platform.ALL.forEach { code ->
+                    val on = code in selectedPlatforms
+                    FilterChip(
+                        selected = on,
+                        onClick = { onTogglePlatform(code) },
+                        label = { Text(Platform.label(code)) },
+                        leadingIcon = if (on) {
+                            { Icon(Icons.Default.Check, contentDescription = null) }
+                        } else null,
+                        colors = FilterChipDefaults.filterChipColors(),
+                    )
+                }
+            }
+
+            val consoleOptions = selectedPlatforms
+                .flatMap { Console.forPlatform(it) }
+                .distinct()
+            if (consoleOptions.isNotEmpty()) {
+                Spacer(Modifier.height(16.dp))
+                Text("Console", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                Spacer(Modifier.height(6.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    // Keep platform-grouped order for a predictable layout.
+                    Platform.ALL.flatMap { Console.forPlatform(it) }
+                        .filter { it in consoleOptions }
+                        .forEach { code ->
+                            val on = code in selectedConsoles
+                            FilterChip(
+                                selected = on,
+                                onClick = { onToggleConsole(code) },
+                                label = { Text(Console.label(code)) },
+                                leadingIcon = if (on) {
+                                    { Icon(Icons.Default.Check, contentDescription = null) }
+                                } else null,
+                                colors = FilterChipDefaults.filterChipColors(),
+                            )
+                        }
+                }
             }
         }
         Spacer(Modifier.height(20.dp))
