@@ -1,6 +1,8 @@
 package com.kzaller.shelf.ui.components
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.EaseIn
+import androidx.compose.animation.core.EaseOutBack
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -51,6 +53,7 @@ import com.kzaller.shelf.ui.theme.LocalShelfFlavor
 
 private const val COLUMNS = 3
 private const val FALL_MS = 950
+private const val RISE_MS = 620
 
 /**
  * Cibby-style shelf: rows of standing covers resting on tinted wooden planks, with quiet
@@ -77,6 +80,8 @@ fun ShelfWoodGrid(
     // covers on the shelf (in their old slots) so the survivors stay put until the drop finishes.
     var display by remember { mutableStateOf(items) }
     var falling by remember { mutableStateOf<Set<String>>(emptySet()) }
+    // Covers that just returned to the shelf (e.g. a filter cleared) — they settle back into place.
+    var rising by remember { mutableStateOf<Set<String>>(emptySet()) }
 
     LaunchedEffect(items, frozen) {
         // While the filter sheet is open the shelf is frozen: we don't touch the layout or start
@@ -84,18 +89,31 @@ fun ShelfWoodGrid(
         // sheet is out of the way to reveal it.
         if (frozen) return@LaunchedEffect
         val newIds = items.mapTo(HashSet()) { it.id }
+        val oldIds = display.mapTo(HashSet()) { it.id }
         val outgoing = display.filter { it.id !in newIds }
-        if (outgoing.isEmpty()) {
-            // Pure addition / reorder / first load — no drop needed, show it straight away.
-            display = items
-            falling = emptySet()
-        } else {
-            // Keep the current layout, mark the removed covers as falling, let them drop,
-            // then swap to the filtered set so the shelf reflows.
-            falling = outgoing.mapTo(HashSet()) { it.id }
-            kotlinx.coroutines.delay(FALL_MS.toLong())
-            display = items
-            falling = emptySet()
+        val incoming = items.filter { it.id !in oldIds }
+        when {
+            outgoing.isNotEmpty() -> {
+                // Keep the current layout, mark the removed covers as falling, let them drop,
+                // then swap to the filtered set so the shelf reflows.
+                falling = outgoing.mapTo(HashSet()) { it.id }
+                kotlinx.coroutines.delay(FALL_MS.toLong())
+                display = items
+                falling = emptySet()
+            }
+            incoming.isNotEmpty() -> {
+                // Items came back (filter cleared/loosened): lay them out now and let the new
+                // covers settle down onto the shelf instead of snapping in.
+                display = items
+                rising = incoming.mapTo(HashSet()) { it.id }
+                kotlinx.coroutines.delay(RISE_MS.toLong())
+                rising = emptySet()
+            }
+            else -> {
+                // Reorder / first load — nothing to animate.
+                display = items
+                falling = emptySet()
+            }
         }
     }
 
@@ -110,6 +128,7 @@ fun ShelfWoodGrid(
                 kind = kind,
                 selection = selection,
                 falling = falling,
+                rising = rising,
                 inSelectionMode = inSelectionMode,
                 onItem = onItem,
                 onToggle = onToggle,
@@ -125,6 +144,7 @@ private fun ShelfRow(
     kind: MediaKind,
     selection: Set<String>,
     falling: Set<String>,
+    rising: Set<String>,
     inSelectionMode: Boolean,
     onItem: (String) -> Unit,
     onToggle: (String) -> Unit,
@@ -170,6 +190,7 @@ private fun ShelfRow(
                             aspect = coverAspect,
                             selected = item.id in selection,
                             falling = item.id in falling,
+                            rising = item.id in rising,
                             onClick = {
                                 if (inSelectionMode) onToggle(item.id) else onItem(item.id)
                             },
@@ -221,11 +242,13 @@ private fun StandingCover(
     aspect: Float,
     selected: Boolean,
     falling: Boolean,
+    rising: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
     val flavor = LocalShelfFlavor.current
     val shape = RoundedCornerShape(8.dp)
+    val density = LocalDensity.current
 
     // Fall-off-the-shelf: covers pivot at their base, tip a little, then accelerate off-screen
     // and fade. The tip direction is stable per-item so the same cover always falls the same way.
@@ -234,8 +257,16 @@ private fun StandingCover(
         animationSpec = tween(durationMillis = FALL_MS, easing = EaseIn),
         label = "fall",
     )
-    val fallPx = with(LocalDensity.current) { 900.dp.toPx() }
+    val fallPx = with(density) { 900.dp.toPx() }
     val tipDir = if (item.id.hashCode() and 1 == 0) 1f else -1f
+
+    // Settle-back-onto-the-shelf: a cover that just returned starts a touch above its slot,
+    // faded, and drops into place with a small bounce. 1 = above/faded, 0 = home.
+    val settle = remember { Animatable(if (rising) 1f else 0f) }
+    LaunchedEffect(Unit) {
+        if (rising) settle.animateTo(0f, tween(durationMillis = RISE_MS, easing = EaseOutBack))
+    }
+    val risePx = with(density) { 64.dp.toPx() }
 
     Box(
         modifier = Modifier
@@ -248,6 +279,9 @@ private fun StandingCover(
                     rotationZ = tipDir * 42f * fall
                     translationY = fallPx * fall * fall
                     alpha = (1f - fall * 1.3f).coerceIn(0f, 1f)
+                } else if (settle.value > 0f) {
+                    translationY = -risePx * settle.value
+                    alpha = (1f - settle.value).coerceIn(0f, 1f)
                 }
             }
             // soft drop shadow so the cover looks like it's standing on the plank
