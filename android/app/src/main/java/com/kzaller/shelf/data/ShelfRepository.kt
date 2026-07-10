@@ -174,9 +174,9 @@ class ShelfRepository(context: Context) {
         api.saveSteamConfig(com.kzaller.shelf.data.models.SteamConfigRequest(apiKey, steamId))
     }
 
-    /** Run the Steam library sync now; returns how many new games were added. */
-    suspend fun syncSteam(): Result<Int> = runCatching {
-        api.syncSteam().added
+    /** Run the Steam library sync now; returns games added + release years backfilled. */
+    suspend fun syncSteam(): Result<com.kzaller.shelf.data.models.SteamSyncResponse> = runCatching {
+        api.syncSteam()
     }
 
     /** Backend Steam connection status (credentials present + games already synced). */

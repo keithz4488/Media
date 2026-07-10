@@ -121,7 +121,7 @@ data class BulkCreateResponse(val inserted: Int = 0, val received: Int = 0)
 data class SteamConfigRequest(val apiKey: String, val steamId: String)
 
 @Serializable
-data class SteamSyncResponse(val added: Int = 0)
+data class SteamSyncResponse(val added: Int = 0, val updated: Int = 0)
 
 @Serializable
 data class SteamStatusResponse(val connected: Boolean = false, val games: Int = 0)

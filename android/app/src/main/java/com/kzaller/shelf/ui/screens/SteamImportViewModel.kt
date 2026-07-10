@@ -66,11 +66,18 @@ class SteamImportViewModel(
             syncing.value = true
             syncMessage.value = null
             repo.syncSteam()
-                .onSuccess { added ->
-                    syncMessage.value =
-                        if (added > 0) "Added $added new game${if (added == 1) "" else "s"}"
-                        else "Up to date — no new games"
-                    if (added > 0) repo.refresh(MediaKind.GAME, force = true)
+                .onSuccess { res ->
+                    val added = res.added
+                    val updated = res.updated
+                    val addedPart = if (added > 0) "Added $added new game${if (added == 1) "" else "s"}" else null
+                    val yearPart = if (updated > 0) "filled $updated release year${if (updated == 1) "" else "s"}" else null
+                    syncMessage.value = when {
+                        addedPart != null && yearPart != null -> "$addedPart · $yearPart"
+                        addedPart != null -> addedPart
+                        yearPart != null -> yearPart.replaceFirstChar { it.uppercase() }
+                        else -> "Up to date — no new games"
+                    }
+                    if (added > 0 || updated > 0) repo.refresh(MediaKind.GAME, force = true)
                     refreshStatus()
                 }
                 .onFailure { syncMessage.value = it.message ?: "Sync failed" }

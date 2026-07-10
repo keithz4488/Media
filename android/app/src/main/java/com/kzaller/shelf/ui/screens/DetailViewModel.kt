@@ -123,9 +123,10 @@ class DetailViewModel(
     fun ensureEnriched() {
         val cur = item.value ?: return
         val needsTv = cur.kind == MediaKind.TV && (cur.seasons == null || cur.seasonEpisodes == null)
-        // Steam-imported games are created without enrichment, so their "About" (description)
-        // and box art are blank until the first open — backfill them then.
-        val needsSteam = cur.externalSrc == "steam" && cur.description.isNullOrBlank()
+        // Steam-imported games are created without enrichment, so their "About" (description),
+        // box art, and release year are blank until the first open — backfill them then.
+        val needsSteam = cur.externalSrc == "steam" &&
+            (cur.description.isNullOrBlank() || cur.year == null)
         if (needsTv || needsSteam) {
             viewModelScope.launch { repo.refreshDetails(id) }
         }

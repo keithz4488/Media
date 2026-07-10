@@ -251,19 +251,19 @@ async function steamOwnedGames(apiKey: string, steamId: string): Promise<SteamOw
  * enrichment here — the app backfills cover/description on first open), and bounds the work per
  * run so a first sync of a big library can't blow past Worker subrequest limits.
  */
-async function syncSteamLibrary(env: Env): Promise<{ added: number }> {
+async function syncSteamLibrary(env: Env): Promise<{ added: number; updated: number }> {
   const apiKey = await settingGet(env, "steam_api_key");
   const rawId = await settingGet(env, "steam_id");
-  if (!apiKey || !rawId) return { added: 0 };
+  if (!apiKey || !rawId) return { added: 0, updated: 0 };
 
   // Stored id may be a vanity name / URL — GetOwnedGames needs the 64-bit id.
   const steamId = await steamResolveId(apiKey, rawId);
-  if (!steamId) return { added: 0 };
+  if (!steamId) return { added: 0, updated: 0 };
   // Cache the resolved id so future runs skip the vanity lookup.
   if (steamId !== rawId) await settingSet(env, "steam_id", steamId);
 
   const owned = await steamOwnedGames(apiKey, steamId);
-  if (owned.length === 0) return { added: 0 };
+  if (owned.length === 0) return { added: 0, updated: 0 };
 
   const existing = await env.DB.prepare(
     "SELECT external_id FROM items WHERE kind = 'game' AND external_src = 'steam'",
@@ -271,24 +271,50 @@ async function syncSteamLibrary(env: Env): Promise<{ added: number }> {
   const have = new Set((existing.results ?? []).map((r) => String(r.external_id)));
 
   const fresh = owned.filter((g) => g.appid && g.name && !have.has(String(g.appid))).slice(0, 60);
-  if (fresh.length === 0) return { added: 0 };
+  let added = 0;
+  if (fresh.length > 0) {
+    const now = Date.now();
+    const stmt = env.DB.prepare(
+      `INSERT INTO items
+        (id, kind, title, subtitle, cover_url, external_id, external_src, status, user_platform, format, added_at, updated_at)
+       VALUES
+        (?1,'game',?2,'PC',?3,?4,'steam',?5,'pc','digital',?6,?6)
+       ON CONFLICT(kind, external_src, external_id) DO NOTHING`,
+    );
+    const batch = fresh.map((g) => {
+      const status = (g.playtime_forever ?? 0) > 0 ? "owned,played" : "owned";
+      const cover = `https://cdn.cloudflare.steamstatic.com/steam/apps/${g.appid}/library_600x900.jpg`;
+      return stmt.bind(uuid(), g.name, cover, String(g.appid), status, now);
+    });
+    const results = await env.DB.batch(batch);
+    added = results.reduce((n, r) => n + (r.meta?.changes ?? 0), 0);
+  }
 
-  const now = Date.now();
-  const stmt = env.DB.prepare(
-    `INSERT INTO items
-      (id, kind, title, subtitle, cover_url, external_id, external_src, status, user_platform, format, added_at, updated_at)
-     VALUES
-      (?1,'game',?2,'PC',?3,?4,'steam',?5,'pc','digital',?6,?6)
-     ON CONFLICT(kind, external_src, external_id) DO NOTHING`,
-  );
-  const batch = fresh.map((g) => {
-    const status = (g.playtime_forever ?? 0) > 0 ? "owned,played" : "owned";
-    const cover = `https://cdn.cloudflare.steamstatic.com/steam/apps/${g.appid}/library_600x900.jpg`;
-    return stmt.bind(uuid(), g.name, cover, String(g.appid), status, now);
-  });
-  const results = await env.DB.batch(batch);
-  const added = results.reduce((n, r) => n + (r.meta?.changes ?? 0), 0);
-  return { added };
+  // Steam imports land without a release year — backfill a batch of the ones still missing it
+  // (bounded per run to respect Worker subrequest limits; converges over a few runs).
+  const updated = await backfillSteamYears(env, 25);
+  return { added, updated };
+}
+
+/** Fill in the release year for up to `limit` Steam games still missing one, via the store API. */
+async function backfillSteamYears(env: Env, limit: number): Promise<number> {
+  const rows = await env.DB.prepare(
+    "SELECT id, external_id FROM items WHERE kind = 'game' AND external_src = 'steam'" +
+      " AND year IS NULL AND external_id IS NOT NULL LIMIT ?1",
+  ).bind(limit).all<{ id: string; external_id: string }>();
+  const list = rows.results ?? [];
+  let n = 0;
+  for (const r of list) {
+    const d = await steamStoreDetails(r.external_id);
+    const year = steamReleaseYear(d?.release_date?.date);
+    if (year) {
+      await env.DB.prepare("UPDATE items SET year = ?1, updated_at = ?2 WHERE id = ?3")
+        .bind(year, Date.now(), r.id)
+        .run();
+      n++;
+    }
+  }
+  return n;
 }
 
 // ---------- shelf CRUD ----------
@@ -1186,8 +1212,9 @@ async function refreshItem(id: string, env: Env): Promise<Response> {
            seasons     = COALESCE(?3, seasons),
            episodes    = COALESCE(?4, episodes),
            season_episodes = COALESCE(?5, season_episodes),
-           updated_at  = ?6
-     WHERE id = ?7`,
+           year        = COALESCE(?6, year),
+           updated_at  = ?7
+     WHERE id = ?8`,
   )
     .bind(
       refreshed.description ?? null,
@@ -1195,6 +1222,7 @@ async function refreshItem(id: string, env: Env): Promise<Response> {
       refreshed.seasons ?? null,
       refreshed.episodes ?? null,
       refreshed.season_episodes ?? null,
+      refreshed.year ?? null,
       Date.now(),
       id,
     )
@@ -1429,6 +1457,7 @@ async function urlOk(url: string): Promise<boolean> {
 async function enrichSteam(item: Item, env: Env): Promise<Item> {
   const details = item.external_id ? await steamStoreDetails(item.external_id) : null;
   const desc = trimDescription(details?.short_description) ?? trimDescription(details?.about_the_game);
+  const year = item.year ?? steamReleaseYear(details?.release_date?.date);
 
   let cover = item.cover_url ?? null;
   if (!cover || !(await urlOk(cover))) {
@@ -1439,7 +1468,15 @@ async function enrichSteam(item: Item, env: Env): Promise<Item> {
     ...item,
     cover_url: cover,
     description: desc ?? item.description,
+    year,
   };
+}
+
+/** Pull a 4-digit release year out of Steam's free-form release date (e.g. "23 Nov, 2018"). */
+function steamReleaseYear(date?: string | null): number | null {
+  if (!date) return null;
+  const m = String(date).match(/\b(19|20)\d{2}\b/);
+  return m ? Number(m[0]) : null;
 }
 
 /** Cover choices for a Steam game: official Steam portrait/header + SteamGridDB box art. */
