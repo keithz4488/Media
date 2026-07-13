@@ -2,6 +2,13 @@ name = "media-shelf"
 main = "src/index.ts"
 compatibility_date = "2025-01-15"
 
+# Public (non-secret) config. GOOGLE_CLIENT_ID is the Web OAuth client id that Google ID tokens
+# are minted for (the token audience we verify against). OWNER_EMAIL is the account that claims
+# the pre-auth library on first sign-in.
+[vars]
+GOOGLE_CLIENT_ID = "262141921179-e2e2c1va41qp7vq9kv1qn2p4b8r2igrl.apps.googleusercontent.com"
+OWNER_EMAIL = "keithz4488@gmail.com"
+
 # Daily Steam library sync: polls GetOwnedGames and auto-adds newly-purchased games.
 # Runs at 12:00 UTC once a day. Steam has no purchase webhook, so polling is the only option.
 [triggers]
