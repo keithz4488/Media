@@ -26,10 +26,24 @@ object ApiClient {
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .addInterceptor { chain ->
+                // Prefer the signed-in user's Google ID token; fall back to the legacy shared
+                // token so the app still works before/without Google sign-in.
+                val token = AuthTokenProvider.idToken ?: BuildConfig.API_TOKEN
                 val req = chain.request().newBuilder()
-                    .header("Authorization", "Bearer ${BuildConfig.API_TOKEN}")
+                    .header("Authorization", "Bearer $token")
                     .build()
                 chain.proceed(req)
+            }
+            .authenticator { _, response ->
+                // A 401 usually means the Google ID token expired. Try one silent refresh and
+                // retry; the header guard prevents an infinite auth loop.
+                if (response.request.header("X-Auth-Retry") != null) return@authenticator null
+                val fresh = AuthTokenProvider.refreshBlocking() ?: return@authenticator null
+                AuthTokenProvider.idToken = fresh
+                response.request.newBuilder()
+                    .header("Authorization", "Bearer $fresh")
+                    .header("X-Auth-Retry", "1")
+                    .build()
             }
             .apply {
                 if (BuildConfig.DEBUG) {

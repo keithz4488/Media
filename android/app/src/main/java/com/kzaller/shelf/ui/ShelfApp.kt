@@ -1,5 +1,6 @@
 package com.kzaller.shelf.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -22,6 +23,9 @@ import androidx.navigation.navArgument
 import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.ShelfRepository
 import com.kzaller.shelf.data.preferences.AppPreferences
+import com.kzaller.shelf.ui.screens.AuthState
+import com.kzaller.shelf.ui.screens.AuthViewModel
+import com.kzaller.shelf.ui.screens.SignInScreen
 import kotlinx.coroutines.flow.first
 import com.kzaller.shelf.ui.components.AchievementUnlockBanner
 import com.kzaller.shelf.ui.screens.AchievementsScreen
@@ -67,10 +71,33 @@ private fun NavController.navigateIfResumed(from: NavBackStackEntry?, route: Str
 }
 
 @Composable
+private fun AuthSplash() {
+    androidx.compose.material3.MaterialTheme {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(androidx.compose.ui.graphics.Color(0xFF160D06)),
+            contentAlignment = Alignment.Center,
+        ) {
+            androidx.compose.material3.CircularProgressIndicator(color = androidx.compose.ui.graphics.Color(0xFFE5C07B))
+        }
+    }
+}
+
+@Composable
 fun ShelfApp() {
     val context = LocalContext.current
-    val repo = remember { ShelfRepository(context) }
     val prefs = remember { AppPreferences(context) }
+
+    // Gate the whole app behind Google sign-in: the shelf is per-account now.
+    val authVm: AuthViewModel = viewModel(factory = AuthViewModel.factory(context, prefs))
+    val authState by authVm.state.collectAsState()
+    if (authState !is AuthState.SignedIn) {
+        if (authState is AuthState.Loading) AuthSplash() else SignInScreen(authVm)
+        return
+    }
+
+    val repo = remember { ShelfRepository(context) }
     val nav = rememberNavController()
 
     // One app-wide achievements watcher so unlock banners can appear on ANY screen, not just home.

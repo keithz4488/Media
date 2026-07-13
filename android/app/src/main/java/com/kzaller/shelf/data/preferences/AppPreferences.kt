@@ -90,6 +90,28 @@ class AppPreferences(private val context: Context) {
         context.dataStore.edit { it[knownAchKey] = ids.joinToString(",") }
     }
 
+    private val idTokenKey = stringPreferencesKey("auth_id_token")
+    private val emailKey = stringPreferencesKey("auth_email")
+
+    /** The last Google ID token we held (may be expired; refreshed silently on launch). */
+    fun observeIdToken(): Flow<String> = context.dataStore.data.map { it[idTokenKey] ?: "" }
+    /** The signed-in Google account email, or "" when signed out. */
+    fun observeEmail(): Flow<String> = context.dataStore.data.map { it[emailKey] ?: "" }
+
+    suspend fun setAuth(idToken: String, email: String) {
+        context.dataStore.edit {
+            it[idTokenKey] = idToken
+            it[emailKey] = email
+        }
+    }
+
+    suspend fun clearAuth() {
+        context.dataStore.edit {
+            it.remove(idTokenKey)
+            it.remove(emailKey)
+        }
+    }
+
     fun observeViewMode(kind: MediaKind): Flow<ViewMode> =
         context.dataStore.data.map { prefs ->
             val raw = prefs[viewKey(kind)] ?: return@map ViewMode.GRID

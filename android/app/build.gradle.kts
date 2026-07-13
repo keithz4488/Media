@@ -15,6 +15,11 @@ val localProps = Properties().apply {
 }
 val shelfApiBase: String = localProps.getProperty("shelf.api.base") ?: "https://media.kzaller.com"
 val shelfApiToken: String = localProps.getProperty("shelf.api.token") ?: ""
+// Google Web OAuth client id (the token audience). Not secret; safe to default in-source so a
+// build works without extra config, overridable via local.properties / env.
+val googleWebClientId: String = localProps.getProperty("google.web.client.id")
+    ?: System.getenv("GOOGLE_WEB_CLIENT_ID")
+    ?: "262141921179-e2e2c1va41qp7vq9kv1qn2p4b8r2igrl.apps.googleusercontent.com"
 
 // Release signing: read from local.properties locally, or env vars in CI. Either may be absent;
 // if all four are missing we fall back to no signing config and `assembleRelease` warns.
@@ -38,6 +43,7 @@ android {
 
         buildConfigField("String", "API_BASE", "\"$shelfApiBase\"")
         buildConfigField("String", "API_TOKEN", "\"$shelfApiToken\"")
+        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"$googleWebClientId\"")
     }
 
     signingConfigs {
@@ -130,4 +136,8 @@ dependencies {
     implementation(libs.accompanist.permissions)
 
     implementation(libs.androidx.datastore.preferences)
+
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services)
+    implementation(libs.google.identity.googleid)
 }
