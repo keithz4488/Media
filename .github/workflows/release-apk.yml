@@ -44,6 +44,18 @@ jobs:
           echo "$KEYSTORE_BASE64" | base64 -d > android/app/keystore/release.jks
           ls -la android/app/keystore/release.jks
 
+      - name: Print signing SHA-1 (for Google OAuth setup)
+        # A signing-cert fingerprint is not a secret -- it's meant to be registered with Google.
+        # Read the SHA1 line from this step's log when setting up the Android OAuth client.
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          keytool -list -v \
+            -keystore android/app/keystore/release.jks \
+            -storepass "$KEYSTORE_PASSWORD" \
+            -alias "$KEY_ALIAS" | grep -E "SHA1:|SHA-1:|SHA256:" || true
+
       - name: Write local.properties
         working-directory: android
         env:
