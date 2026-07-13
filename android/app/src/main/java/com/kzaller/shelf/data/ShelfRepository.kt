@@ -184,6 +184,11 @@ class ShelfRepository(context: Context) {
         api.steamStatus()
     }
 
+    /** This user's personal Plex webhook URL for live sync (generated on first request). */
+    suspend fun plexConfig(): Result<com.kzaller.shelf.data.models.PlexConfigResponse> = runCatching {
+        api.plexConfig()
+    }
+
     suspend fun identify(jpegBytes: ByteArray): Result<IdentifyResult> = runCatching {
         val b64 = Base64.encodeToString(jpegBytes, Base64.NO_WRAP)
         api.identify(IdentifyRequest(image = b64)).result

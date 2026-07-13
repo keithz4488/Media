@@ -262,6 +262,9 @@ export default {
       if (url.pathname === "/steam/sync" && req.method === "POST") return json(await syncSteamLibrary(env, userId));
       if (url.pathname === "/steam/status" && req.method === "GET") return steamStatus(env, userId);
 
+      // Plex live sync: hand the user their personal webhook URL to paste into Plex.
+      if (url.pathname === "/plex/config" && req.method === "POST") return plexConfig(url, env, userId);
+
       return err(404, "not found");
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -822,12 +825,35 @@ async function tmdbLookup(kind: "movie" | "tv", opts: { id?: string; q?: string 
  * already exists is left untouched (ON CONFLICT DO NOTHING). Always returns 200 for handled or
  * ignored events so Plex doesn't retry-storm.
  */
+/** Look up which user owns a Plex webhook secret. */
+async function userByPlexSecret(env: Env, secret: string | null): Promise<string | null> {
+  if (!secret) return null;
+  const row = await env.DB.prepare(
+    "SELECT user_id FROM user_settings WHERE key = 'plex_webhook_secret' AND value = ?1 LIMIT 1",
+  ).bind(secret).first<{ user_id: string }>();
+  return row?.user_id ?? null;
+}
+
+/** Generate (once) and return this user's personal Plex webhook URL. */
+async function plexConfig(url: URL, env: Env, userId: string): Promise<Response> {
+  let secret = await settingGet(env, userId, "plex_webhook_secret");
+  if (!secret) {
+    secret = uuid();
+    await settingSet(env, userId, "plex_webhook_secret", secret);
+  }
+  return json({ secret, url: `${url.origin}/plex/webhook?u=${secret}` });
+}
+
 async function plexWebhook(req: Request, url: URL, env: Env): Promise<Response> {
-  const secret = url.searchParams.get("token") || url.searchParams.get("s");
-  // Prefer a dedicated webhook secret (so the app's main token stays out of Plex config/logs),
-  // but fall back to SHELF_TOKEN if no dedicated one is set.
-  const expected = env.PLEX_WEBHOOK_SECRET || env.SHELF_TOKEN;
-  if (!expected || secret !== expected) return err(401, "unauthorized");
+  const secret = url.searchParams.get("u") || url.searchParams.get("token") || url.searchParams.get("s");
+  // Resolve which user this webhook belongs to by their per-user secret. Fall back to the legacy
+  // shared secret (mapped to the owner) so an already-configured webhook keeps working.
+  let webhookUser = await userByPlexSecret(env, secret);
+  if (!webhookUser) {
+    const legacy = env.PLEX_WEBHOOK_SECRET || env.SHELF_TOKEN;
+    if (secret && legacy && secret === legacy) webhookUser = await ownerUserId(env);
+  }
+  if (!webhookUser) return err(401, "unauthorized");
 
   let payloadStr: string | null = null;
   try {
@@ -847,8 +873,8 @@ async function plexWebhook(req: Request, url: URL, env: Env): Promise<Response> 
   const md = payload.Metadata || {};
   const type = md.type;
 
-  // A Plex server belongs to one person, so everything it sends lands on the owner's shelf.
-  const owner = await ownerUserId(env);
+  // Everything this webhook sends lands on its owner's shelf (resolved from the secret above).
+  const owner = webhookUser;
 
   // "Watched" sync: Plex scrobbles when playback finishes (~90%). A movie scrobble means the
   // movie is watched; an episode scrobble advances the show's progress (a whole series can't be

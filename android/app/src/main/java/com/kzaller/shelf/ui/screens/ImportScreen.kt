@@ -2,6 +2,8 @@ package com.kzaller.shelf.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -67,6 +69,7 @@ fun ImportScreen(vm: ImportViewModel, onBack: () -> Unit, onDone: () -> Unit) {
     val state by vm.state.collectAsState()
     val savedUrl by vm.savedUrl.collectAsState()
     val savedToken by vm.savedToken.collectAsState()
+    val webhookUrl by vm.webhookUrl.collectAsState()
 
     MediaShelfTheme(dark = true) {
         Scaffold(
@@ -94,7 +97,7 @@ fun ImportScreen(vm: ImportViewModel, onBack: () -> Unit, onDone: () -> Unit) {
             ) {
                 when (val s = state) {
                     is ImportState.Idle ->
-                        ConnectForm(savedUrl, savedToken, onScan = vm::connectAndScan)
+                        ConnectForm(savedUrl, savedToken, webhookUrl, onScan = vm::connectAndScan)
                     is ImportState.Scanning ->
                         Busy("Scanning your Plex library…")
                     is ImportState.Matching ->
@@ -122,6 +125,7 @@ fun ImportScreen(vm: ImportViewModel, onBack: () -> Unit, onDone: () -> Unit) {
 private fun ConnectForm(
     initialUrl: String,
     initialToken: String,
+    webhookUrl: String?,
     onScan: (String, String) -> Unit,
 ) {
     var url by rememberSaveable(initialUrl) { mutableStateOf(initialUrl) }
@@ -130,6 +134,7 @@ private fun ConnectForm(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
@@ -171,6 +176,53 @@ private fun ConnectForm(
             Icon(Icons.Default.CloudDownload, contentDescription = null)
             Spacer(Modifier.width(8.dp))
             Text("Scan library", fontWeight = FontWeight.Bold)
+        }
+
+        if (webhookUrl != null) {
+            Spacer(Modifier.height(4.dp))
+            LiveSyncCard(webhookUrl)
+        }
+    }
+}
+
+/** Shows the user's personal Plex webhook URL for live sync, with a one-tap copy. */
+@Composable
+private fun LiveSyncCard(webhookUrl: String) {
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    var copied by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(panel)
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text("Live sync (Plex Pass)", color = gold, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+        Text(
+            "Add this webhook in Plex (Settings → Webhooks) and new movies & shows auto-add to your shelf, " +
+                "with watched status kept in sync.",
+            color = Color(0xFFD8C7AE),
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Text(
+            webhookUrl,
+            color = Color(0xFFE8E8EA),
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(0xFF1A1109))
+                .padding(10.dp),
+        )
+        TextButton(
+            onClick = {
+                clipboard.setText(androidx.compose.ui.text.AnnotatedString(webhookUrl))
+                copied = true
+            },
+        ) {
+            Text(if (copied) "Copied ✓" else "Copy webhook URL", color = gold, fontWeight = FontWeight.Bold)
         }
     }
 }

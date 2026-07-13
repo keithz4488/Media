@@ -53,6 +53,9 @@ class ImportViewModel(
     val savedUrl = MutableStateFlow("")
     val savedToken = MutableStateFlow("")
 
+    /** This user's personal Plex webhook URL for live sync (auto-add new movies/shows). */
+    val webhookUrl = MutableStateFlow<String?>(null)
+
     // Confirmed requests accumulate as matching runs; ambiguous ones await review.
     private val confirmed = mutableListOf<CreateItemRequest>()
     private var ambiguous = mutableListOf<AmbiguousMatch>()
@@ -62,6 +65,10 @@ class ImportViewModel(
         viewModelScope.launch {
             savedUrl.value = prefs.observePlexUrl().first()
             savedToken.value = prefs.observePlexToken().first()
+        }
+        // Fetch this user's personal live-sync webhook URL for the setup card.
+        viewModelScope.launch {
+            repo.plexConfig().onSuccess { webhookUrl.value = it.url }
         }
     }
 

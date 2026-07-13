@@ -127,6 +127,9 @@ data class SteamSyncResponse(val added: Int = 0, val updated: Int = 0)
 data class SteamStatusResponse(val connected: Boolean = false, val games: Int = 0)
 
 @Serializable
+data class PlexConfigResponse(val secret: String = "", val url: String = "")
+
+@Serializable
 data class ScoresResponse(val scores: Scores)
 
 @Serializable

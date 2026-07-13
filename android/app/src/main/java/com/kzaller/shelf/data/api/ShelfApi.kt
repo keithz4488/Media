@@ -69,4 +69,8 @@ interface ShelfApi {
     /** Whether the backend has Steam credentials (cron armed) + games already synced. */
     @GET("steam/status")
     suspend fun steamStatus(): com.kzaller.shelf.data.models.SteamStatusResponse
+
+    /** Get (generating if needed) this user's personal Plex webhook URL for live sync. */
+    @POST("plex/config")
+    suspend fun plexConfig(): com.kzaller.shelf.data.models.PlexConfigResponse
 }
