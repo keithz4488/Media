@@ -412,7 +412,7 @@ async function syncSteamLibrary(env: Env, userId: string): Promise<{ added: numb
         (id, user_id, kind, title, subtitle, cover_url, external_id, external_src, status, user_platform, format, added_at, updated_at)
        VALUES
         (?1,?2,'game',?3,'PC',?4,?5,'steam',?6,'pc','digital',?7,?7)
-       ON CONFLICT(kind, external_src, external_id) DO NOTHING`,
+       ON CONFLICT(user_id, kind, external_src, external_id) DO NOTHING`,
     );
     const batch = fresh.map((g) => {
       const status = (g.playtime_forever ?? 0) > 0 ? "owned,played" : "owned";
@@ -485,7 +485,7 @@ async function bulkCreate(req: Request, env: Env, userId: string): Promise<Respo
        seasons, episodes, cur_season, cur_episode, completed_at, added_at, updated_at)
      VALUES
       (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23)
-     ON CONFLICT(kind, external_src, external_id) DO UPDATE SET
+     ON CONFLICT(user_id, kind, external_src, external_id) DO UPDATE SET
        status = CASE
          WHEN excluded.status LIKE '%watched%' AND COALESCE(items.status,'') NOT LIKE '%watched%'
            THEN TRIM(COALESCE(items.status,'') || ',watched', ',')
@@ -577,7 +577,7 @@ async function createItem(req: Request, env: Env, userId: string): Promise<Respo
        seasons, episodes, cur_season, cur_episode, completed_at, added_at, updated_at)
      VALUES
       (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23)
-     ON CONFLICT(kind, external_src, external_id) DO UPDATE SET
+     ON CONFLICT(user_id, kind, external_src, external_id) DO UPDATE SET
        updated_at = excluded.updated_at,
        status     = excluded.status`,
   )
@@ -905,7 +905,7 @@ async function plexWebhook(req: Request, url: URL, env: Env): Promise<Response> 
        seasons, episodes, cur_season, cur_episode, completed_at, added_at, updated_at)
      VALUES
       (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23)
-     ON CONFLICT(kind, external_src, external_id) DO NOTHING`,
+     ON CONFLICT(user_id, kind, external_src, external_id) DO NOTHING`,
   )
     .bind(
       item.id, item.user_id, item.kind, item.title, item.subtitle, item.year, item.cover_url,
@@ -1018,7 +1018,7 @@ async function scrobbleMovieWatched(md: any, env: Env, owner: string): Promise<R
        seasons, episodes, cur_season, cur_episode, completed_at, added_at, updated_at)
      VALUES
       (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23)
-     ON CONFLICT(kind, external_src, external_id) DO UPDATE SET
+     ON CONFLICT(user_id, kind, external_src, external_id) DO UPDATE SET
        status = CASE
          WHEN COALESCE(items.status,'') LIKE '%watched%' THEN items.status
          ELSE TRIM(COALESCE(items.status,'') || ',watched', ',')
