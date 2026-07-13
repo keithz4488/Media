@@ -84,6 +84,8 @@ class AuthViewModel(
             auth.signOut()
             prefs.clearAuth()
             AuthTokenProvider.idToken = null
+            // Drop the local cache so the next account doesn't briefly see this one's shelf.
+            runCatching { com.kzaller.shelf.data.ShelfRepository(appContext).clearLocal() }
             _state.value = AuthState.SignedOut
         }
     }

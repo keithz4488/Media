@@ -203,6 +203,12 @@ class ShelfRepository(context: Context) {
         api.scores(id).scores
     }
 
+    /** Wipe the local cache so a different account's shelf doesn't linger after switching users. */
+    suspend fun clearLocal() {
+        MediaKind.values().forEach { db.items().clearKind(it.wire) }
+        lastRefresh.clear()
+    }
+
     companion object {
         // Shared across repository instances (Room is a singleton): the last time each shelf
         // was pulled from the server, so back-to-back screen opens don't all re-fetch.

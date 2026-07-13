@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Search
@@ -68,6 +69,7 @@ fun HomeScreen(
     onAchievements: () -> Unit,
     onImport: () -> Unit,
     onImportSteam: () -> Unit,
+    onAccount: () -> Unit,
     onOpenItem: (MediaKind, String) -> Unit,
 ) {
     val context = LocalContext.current
@@ -147,6 +149,13 @@ fun HomeScreen(
                             Icon(
                                 imageVector = Icons.Default.Search,
                                 contentDescription = "Search all shelves",
+                                tint = Color(0xFFE5C07B),
+                            )
+                        }
+                        IconButton(onClick = onAccount) {
+                            Icon(
+                                imageVector = Icons.Default.AccountCircle,
+                                contentDescription = "Account",
                                 tint = Color(0xFFE5C07B),
                             )
                         }

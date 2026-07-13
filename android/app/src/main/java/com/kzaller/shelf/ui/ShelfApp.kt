@@ -28,6 +28,7 @@ import com.kzaller.shelf.ui.screens.AuthViewModel
 import com.kzaller.shelf.ui.screens.SignInScreen
 import kotlinx.coroutines.flow.first
 import com.kzaller.shelf.ui.components.AchievementUnlockBanner
+import com.kzaller.shelf.ui.screens.AccountScreen
 import com.kzaller.shelf.ui.screens.AchievementsScreen
 import com.kzaller.shelf.ui.screens.AchievementsViewModel
 import com.kzaller.shelf.ui.screens.AddItemScreen
@@ -59,6 +60,7 @@ object Routes {
     const val ACHIEVEMENTS = "achievements"
     const val IMPORT = "import"
     const val STEAM_IMPORT = "import/steam"
+    const val ACCOUNT = "account"
 }
 
 /** Guard against navigations issued during a back-transition: when the user has just
@@ -133,7 +135,15 @@ fun ShelfApp() {
                     onAchievements = { nav.navigateIfResumed(entry, Routes.ACHIEVEMENTS) },
                     onImport = { nav.navigateIfResumed(entry, Routes.IMPORT) },
                     onImportSteam = { nav.navigateIfResumed(entry, Routes.STEAM_IMPORT) },
+                    onAccount = { nav.navigateIfResumed(entry, Routes.ACCOUNT) },
                     onOpenItem = { k, id -> nav.navigateIfResumed(entry, Routes.detail(k, id)) },
+                )
+            }
+            composable(Routes.ACCOUNT) {
+                AccountScreen(
+                    email = (authState as? AuthState.SignedIn)?.email ?: "",
+                    onSignOut = { authVm.signOut() },
+                    onBack = { nav.popBackStack() },
                 )
             }
             composable(Routes.IMPORT) {
