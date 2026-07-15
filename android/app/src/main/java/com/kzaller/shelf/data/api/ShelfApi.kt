@@ -73,4 +73,8 @@ interface ShelfApi {
     /** Get (generating if needed) this user's personal Plex webhook URL for live sync. */
     @POST("plex/config")
     suspend fun plexConfig(): com.kzaller.shelf.data.models.PlexConfigResponse
+
+    /** Exchange the current (Google) auth for a long-lived app session token. */
+    @POST("auth/session")
+    suspend fun createSession(): com.kzaller.shelf.data.models.SessionResponse
 }

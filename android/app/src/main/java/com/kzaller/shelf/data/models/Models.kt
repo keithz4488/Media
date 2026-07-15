@@ -130,6 +130,9 @@ data class SteamStatusResponse(val connected: Boolean = false, val games: Int = 
 data class PlexConfigResponse(val secret: String = "", val url: String = "")
 
 @Serializable
+data class SessionResponse(val token: String = "", val expiresAt: Long = 0)
+
+@Serializable
 data class ScoresResponse(val scores: Scores)
 
 @Serializable

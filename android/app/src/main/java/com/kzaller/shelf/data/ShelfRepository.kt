@@ -189,6 +189,11 @@ class ShelfRepository(context: Context) {
         api.plexConfig()
     }
 
+    /** Exchange the current Google auth for a long-lived app session token. */
+    suspend fun createSession(): Result<com.kzaller.shelf.data.models.SessionResponse> = runCatching {
+        api.createSession()
+    }
+
     suspend fun identify(jpegBytes: ByteArray): Result<IdentifyResult> = runCatching {
         val b64 = Base64.encodeToString(jpegBytes, Base64.NO_WRAP)
         api.identify(IdentifyRequest(image = b64)).result

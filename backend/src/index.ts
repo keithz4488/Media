@@ -32,6 +32,7 @@ export interface Env {
   PLEX_WEBHOOK_SECRET?: string; // optional: dedicated secret for the Plex webhook URL (falls back to SHELF_TOKEN)
   GOOGLE_CLIENT_ID?: string;    // optional: when set, requests may authenticate with a Google ID token (aud = this)
   OWNER_EMAIL?: string;         // optional: the Google account that claims the pre-auth '__legacy__' library
+  SESSION_SECRET?: string;      // optional: HMAC key for app session tokens (falls back to SHELF_TOKEN)
 }
 
 /** Bucket that owns all pre-multi-user rows until the owner claims them on first Google sign-in. */
@@ -104,6 +105,52 @@ function b64urlToBytes(s: string): Uint8Array {
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
+}
+
+function bytesToB64url(bytes: Uint8Array): string {
+  let bin = "";
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+// ---- App session tokens: after a Google sign-in the app exchanges the short-lived Google ID
+// token for a 30-day HMAC-signed session token, so it never has to re-prompt Google on launch.
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+async function sessionKey(env: Env): Promise<CryptoKey> {
+  const secret = env.SESSION_SECRET || env.SHELF_TOKEN || "media-shelf";
+  return crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+}
+
+async function mintSession(uid: string, env: Env): Promise<{ token: string; expiresAt: number }> {
+  const expiresAt = Date.now() + SESSION_TTL_MS;
+  const payload = bytesToB64url(new TextEncoder().encode(JSON.stringify({ uid, exp: expiresAt })));
+  const key = await sessionKey(env);
+  const sig = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload)));
+  return { token: `s.${payload}.${bytesToB64url(sig)}`, expiresAt };
+}
+
+async function verifySession(token: string, env: Env): Promise<string | null> {
+  if (!token.startsWith("s.")) return null;
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  const [, payload, sig] = parts;
+  const key = await sessionKey(env);
+  const expected = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload)));
+  if (bytesToB64url(expected) !== sig) return null;
+  try {
+    const data = JSON.parse(new TextDecoder().decode(b64urlToBytes(payload)));
+    if (typeof data.exp !== "number" || data.exp < Date.now()) return null;
+    return typeof data.uid === "string" ? data.uid : null;
+  } catch {
+    return null;
+  }
 }
 
 // Google's signing keys rotate; cache them for an hour so we're not fetching JWKS per request.
@@ -184,6 +231,9 @@ async function resolveUser(req: Request, env: Env): Promise<string | null> {
   const token = bearer(req);
   if (!token) return null;
   if (env.SHELF_TOKEN && token === env.SHELF_TOKEN) return LEGACY_USER;
+  // App session token (the common case after sign-in) — a fast local HMAC check, no network.
+  const sessionUid = await verifySession(token, env);
+  if (sessionUid) return sessionUid;
   if (env.GOOGLE_CLIENT_ID) {
     const claims = await verifyGoogleToken(token, env.GOOGLE_CLIENT_ID);
     if (claims?.sub) {
@@ -255,6 +305,10 @@ export default {
       if (url.pathname === "/search/tv") return searchTmdb(url, env, "tv");
       if (url.pathname === "/search/games") return searchGames(url, env);
       if (url.pathname === "/identify" && req.method === "POST") return identifyImage(req, env);
+
+      // Exchange a verified Google sign-in (userId already resolved) for a long-lived app session
+      // token, so the app doesn't have to re-prompt Google on every launch.
+      if (url.pathname === "/auth/session" && req.method === "POST") return json(await mintSession(userId, env));
 
       // Steam: store the API key + SteamID so the daily cron can auto-add new purchases,
       // and expose a manual sync for testing / immediate refresh.

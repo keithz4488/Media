@@ -90,24 +90,29 @@ class AppPreferences(private val context: Context) {
         context.dataStore.edit { it[knownAchKey] = ids.joinToString(",") }
     }
 
-    private val idTokenKey = stringPreferencesKey("auth_id_token")
+    private val sessionTokenKey = stringPreferencesKey("auth_session_token")
+    private val sessionExpiryKey = androidx.datastore.preferences.core.longPreferencesKey("auth_session_expiry")
     private val emailKey = stringPreferencesKey("auth_email")
 
-    /** The last Google ID token we held (may be expired; refreshed silently on launch). */
-    fun observeIdToken(): Flow<String> = context.dataStore.data.map { it[idTokenKey] ?: "" }
+    /** The long-lived app session token sent as the API bearer (empty when signed out). */
+    fun observeSessionToken(): Flow<String> = context.dataStore.data.map { it[sessionTokenKey] ?: "" }
+    /** Epoch millis when the session expires (0 if unknown). */
+    fun observeSessionExpiry(): Flow<Long> = context.dataStore.data.map { it[sessionExpiryKey] ?: 0L }
     /** The signed-in Google account email, or "" when signed out. */
     fun observeEmail(): Flow<String> = context.dataStore.data.map { it[emailKey] ?: "" }
 
-    suspend fun setAuth(idToken: String, email: String) {
+    suspend fun setSession(token: String, expiresAt: Long, email: String) {
         context.dataStore.edit {
-            it[idTokenKey] = idToken
+            it[sessionTokenKey] = token
+            it[sessionExpiryKey] = expiresAt
             it[emailKey] = email
         }
     }
 
     suspend fun clearAuth() {
         context.dataStore.edit {
-            it.remove(idTokenKey)
+            it.remove(sessionTokenKey)
+            it.remove(sessionExpiryKey)
             it.remove(emailKey)
         }
     }

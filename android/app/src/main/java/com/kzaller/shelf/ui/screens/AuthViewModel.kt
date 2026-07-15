@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.kzaller.shelf.data.AuthManager
+import com.kzaller.shelf.data.ShelfRepository
 import com.kzaller.shelf.data.api.AuthTokenProvider
 import com.kzaller.shelf.data.preferences.AppPreferences
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,6 +25,7 @@ class AuthViewModel(
 ) : ViewModel() {
 
     private val auth = AuthManager(appContext)
+    private val repo = ShelfRepository(appContext)
 
     private val _state = MutableStateFlow<AuthState>(AuthState.Loading)
     val state = _state.asStateFlow()
@@ -32,33 +34,39 @@ class AuthViewModel(
     val error = _error.asStateFlow()
 
     init {
-        // Let the API layer silently refresh an expired token via Credential Manager.
-        AuthTokenProvider.refresher = { refreshToken() }
+        // Only used on a 401 (a session shouldn't expire mid-use): silently re-mint a session.
+        AuthTokenProvider.refresher = { renewSession() }
         viewModelScope.launch { bootstrap() }
     }
 
     private suspend fun bootstrap() {
-        val stored = prefs.observeIdToken().first()
+        val token = prefs.observeSessionToken().first()
+        val expiry = prefs.observeSessionExpiry().first()
         val email = prefs.observeEmail().first()
-        if (stored.isNotBlank()) {
-            AuthTokenProvider.idToken = stored
+        // Use the cached session token straight away — no Google prompt on launch. The session
+        // lasts ~30 days, so this is the path virtually every launch takes.
+        if (token.isNotBlank() && (expiry == 0L || expiry > System.currentTimeMillis())) {
+            AuthTokenProvider.idToken = token
             _state.value = AuthState.SignedIn(email)
-        }
-        // Try to mint a fresh token silently (the stored one may be expired).
-        val user = auth.silentToken()
-        if (user != null) {
-            AuthTokenProvider.idToken = user.idToken
-            prefs.setAuth(user.idToken, user.email)
-            _state.value = AuthState.SignedIn(user.email)
-        } else if (stored.isBlank()) {
+        } else {
             _state.value = AuthState.SignedOut
         }
     }
 
-    private suspend fun refreshToken(): String? {
+    /** Exchange the current Google auth (already set as the bearer) for a session token. */
+    private suspend fun exchangeForSession(email: String): Boolean {
+        val res = repo.createSession().getOrNull() ?: return false
+        if (res.token.isBlank()) return false
+        AuthTokenProvider.idToken = res.token
+        prefs.setSession(res.token, res.expiresAt, email)
+        return true
+    }
+
+    /** 401 handler: get a fresh Google token silently and swap it for a new session. */
+    private suspend fun renewSession(): String? {
         val user = auth.silentToken() ?: return null
-        prefs.setAuth(user.idToken, user.email)
-        return user.idToken
+        AuthTokenProvider.idToken = user.idToken
+        return if (exchangeForSession(user.email)) prefs.observeSessionToken().first() else null
     }
 
     /** Interactive sign-in. Pass an Activity context so the account picker can render. */
@@ -67,10 +75,17 @@ class AuthViewModel(
             _state.value = AuthState.Loading
             _error.value = null
             auth.signIn(activityContext)
-                .onSuccess {
-                    AuthTokenProvider.idToken = it.idToken
-                    prefs.setAuth(it.idToken, it.email)
-                    _state.value = AuthState.SignedIn(it.email)
+                .onSuccess { user ->
+                    // Use the Google token just long enough to mint a durable session token.
+                    AuthTokenProvider.idToken = user.idToken
+                    if (exchangeForSession(user.email)) {
+                        _state.value = AuthState.SignedIn(user.email)
+                    } else {
+                        // Couldn't reach the session endpoint; fall back to the Google token so the
+                        // user is still signed in (short-lived), and store it so a launch retries.
+                        prefs.setSession(user.idToken, System.currentTimeMillis() + 50 * 60 * 1000, user.email)
+                        _state.value = AuthState.SignedIn(user.email)
+                    }
                 }
                 .onFailure {
                     _error.value = it.message ?: "Sign-in failed"
@@ -84,8 +99,7 @@ class AuthViewModel(
             auth.signOut()
             prefs.clearAuth()
             AuthTokenProvider.idToken = null
-            // Drop the local cache so the next account doesn't briefly see this one's shelf.
-            runCatching { com.kzaller.shelf.data.ShelfRepository(appContext).clearLocal() }
+            runCatching { repo.clearLocal() }
             _state.value = AuthState.SignedOut
         }
     }
