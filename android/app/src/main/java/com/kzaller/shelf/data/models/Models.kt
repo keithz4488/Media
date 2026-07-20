@@ -94,6 +94,9 @@ data class IdentifyRequest(val image: String)
 data class IdentifyResponse(val result: IdentifyResult)
 
 @Serializable
+data class IdentifyShelfResponse(val results: List<IdentifyResult> = emptyList())
+
+@Serializable
 data class IdentifyResult(
     val kind: String,
     val title: String,

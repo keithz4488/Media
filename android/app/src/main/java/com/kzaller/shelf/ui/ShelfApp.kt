@@ -30,6 +30,8 @@ import kotlinx.coroutines.flow.first
 import com.kzaller.shelf.ui.components.AchievementUnlockBanner
 import com.kzaller.shelf.ui.screens.AccountScreen
 import com.kzaller.shelf.ui.screens.AchievementsScreen
+import com.kzaller.shelf.ui.screens.ShelfScanScreen
+import com.kzaller.shelf.ui.screens.ShelfScanViewModel
 import com.kzaller.shelf.ui.screens.AchievementsViewModel
 import com.kzaller.shelf.ui.screens.AddItemScreen
 import com.kzaller.shelf.ui.screens.AddItemViewModel
@@ -60,6 +62,7 @@ object Routes {
     const val ACHIEVEMENTS = "achievements"
     const val IMPORT = "import"
     const val STEAM_IMPORT = "import/steam"
+    const val SHELF_SCAN = "scan/shelf"
     const val ACCOUNT = "account"
 }
 
@@ -135,8 +138,17 @@ fun ShelfApp() {
                     onAchievements = { nav.navigateIfResumed(entry, Routes.ACHIEVEMENTS) },
                     onImport = { nav.navigateIfResumed(entry, Routes.IMPORT) },
                     onImportSteam = { nav.navigateIfResumed(entry, Routes.STEAM_IMPORT) },
+                    onScanShelf = { nav.navigateIfResumed(entry, Routes.SHELF_SCAN) },
                     onAccount = { nav.navigateIfResumed(entry, Routes.ACCOUNT) },
                     onOpenItem = { k, id -> nav.navigateIfResumed(entry, Routes.detail(k, id)) },
+                )
+            }
+            composable(Routes.SHELF_SCAN) {
+                val vm: ShelfScanViewModel = viewModel(factory = ShelfScanViewModel.factory(repo))
+                ShelfScanScreen(
+                    vm = vm,
+                    onBack = { nav.popBackStack() },
+                    onDone = { nav.popBackStack() },
                 )
             }
             composable(Routes.ACCOUNT) {

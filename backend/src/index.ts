@@ -305,6 +305,7 @@ export default {
       if (url.pathname === "/search/tv") return searchTmdb(url, env, "tv");
       if (url.pathname === "/search/games") return searchGames(url, env);
       if (url.pathname === "/identify" && req.method === "POST") return identifyImage(req, env);
+      if (url.pathname === "/identify/shelf" && req.method === "POST") return identifyShelf(req, env);
 
       // Exchange a verified Google sign-in (userId already resolved) for a long-lived app session
       // token, so the app doesn't have to re-prompt Google on every launch.
@@ -1386,9 +1387,80 @@ async function identifyImage(req: Request, env: Env): Promise<Response> {
   return json({ result: parsed });
 }
 
-// ---------- per-source enrichment at item-create time ----------
+const IDENTIFY_SHELF_PROMPT = `You are looking at a photo of a shelf or row of media -- book spines, video game cases, movie/TV cases, or a group of covers side by side.
 
-/** Cap free-form description fields so a single huge synopsis can't bloat the row. */
+Identify EVERY distinct item you can read. Respond with ONLY a JSON array, no other text, in exactly this format:
+[{"kind":"book|movie|tv|game|unknown","title":"...","year":<integer or null>}]
+
+Rules:
+- One array element per distinct item visible on the shelf.
+- kind must be exactly one of: book, movie, tv, game, unknown
+- title is the work's title as printed on the spine/cover (no subtitle unless part of the official title)
+- year is the original release/publication year if you are confident, otherwise null
+- Read spines even at an angle. Skip any item whose title you cannot confidently read.
+- If you can't read any items, return []
+- No markdown, no preamble, no explanation.`;
+
+/** Identify every readable item in a shelf/row photo (bulk companion to /identify). */
+async function identifyShelf(req: Request, env: Env): Promise<Response> {
+  if (!env.ANTHROPIC_API_KEY) return err(500, "ANTHROPIC_API_KEY not configured");
+
+  const body = (await req.json().catch(() => null)) as { image?: string } | null;
+  const b64 = body?.image;
+  if (!b64) return err(400, "image (base64 JPEG) required");
+
+  const r = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": env.ANTHROPIC_API_KEY,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-5",
+      max_tokens: 1500,
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "image", source: { type: "base64", media_type: "image/jpeg", data: b64 } },
+            { type: "text", text: IDENTIFY_SHELF_PROMPT },
+          ],
+        },
+      ],
+    }),
+  });
+
+  if (!r.ok) {
+    const errBody = await r.text().catch(() => "");
+    return err(502, `claude ${r.status}: ${errBody.slice(0, 200)}`);
+  }
+  const data = (await r.json()) as any;
+  const text = String(data?.content?.[0]?.text ?? "").trim();
+
+  const match = text.match(/\[[\s\S]*\]/);
+  const results: IdentifyResult[] = [];
+  if (match) {
+    try {
+      const arr = JSON.parse(match[0]);
+      if (Array.isArray(arr)) {
+        for (const c of arr) {
+          const title = typeof c?.title === "string" ? c.title.trim() : "";
+          if (!title) continue;
+          const kind = ["book", "movie", "tv", "game", "unknown"].includes(c?.kind) ? c.kind : "unknown";
+          const year =
+            typeof c?.year === "number" && Number.isFinite(c.year) ? c.year : null;
+          results.push({ kind, title, year });
+        }
+      }
+    } catch {
+      // fall through with whatever we parsed
+    }
+  }
+  return json({ results });
+}
+
+// ---------- per-source enrichment at item-create time ----------
 const MAX_DESC_CHARS = 1500;
 
 function trimDescription(s: string | null | undefined): string | null {

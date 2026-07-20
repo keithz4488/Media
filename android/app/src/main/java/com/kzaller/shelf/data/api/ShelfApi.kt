@@ -58,6 +58,10 @@ interface ShelfApi {
     @POST("identify")
     suspend fun identify(@Body body: IdentifyRequest): IdentifyResponse
 
+    /** Identify every readable item in one shelf/row photo. */
+    @POST("identify/shelf")
+    suspend fun identifyShelf(@Body body: IdentifyRequest): com.kzaller.shelf.data.models.IdentifyShelfResponse
+
     /** Store the Steam key + id server-side so the daily cron can auto-add new purchases. */
     @POST("steam/config")
     suspend fun saveSteamConfig(@Body body: com.kzaller.shelf.data.models.SteamConfigRequest)

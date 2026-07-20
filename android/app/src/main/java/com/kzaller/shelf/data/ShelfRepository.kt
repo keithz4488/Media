@@ -199,6 +199,12 @@ class ShelfRepository(context: Context) {
         api.identify(IdentifyRequest(image = b64)).result
     }
 
+    /** Identify every readable item in one shelf/row photo. */
+    suspend fun identifyShelf(jpegBytes: ByteArray): Result<List<IdentifyResult>> = runCatching {
+        val b64 = Base64.encodeToString(jpegBytes, Base64.NO_WRAP)
+        api.identifyShelf(IdentifyRequest(image = b64)).results
+    }
+
     suspend fun refreshDetails(id: String): Result<ItemDto> = runCatching {
         val resp = api.refresh(id)
         db.items().upsert(ItemEntity.fromDto(resp.item))

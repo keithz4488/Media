@@ -69,6 +69,7 @@ fun HomeScreen(
     onAchievements: () -> Unit,
     onImport: () -> Unit,
     onImportSteam: () -> Unit,
+    onScanShelf: () -> Unit,
     onAccount: () -> Unit,
     onOpenItem: (MediaKind, String) -> Unit,
 ) {
@@ -128,6 +129,10 @@ fun HomeScreen(
                                 expanded = importMenuOpen,
                                 onDismissRequest = { importMenuOpen = false },
                             ) {
+                                DropdownMenuItem(
+                                    text = { Text("Scan a shelf") },
+                                    onClick = { importMenuOpen = false; onScanShelf() },
+                                )
                                 DropdownMenuItem(
                                     text = { Text("From Plex") },
                                     onClick = { importMenuOpen = false; onImport() },
