@@ -8,6 +8,12 @@ import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -21,8 +27,10 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -33,7 +41,6 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.outlined.Circle
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -49,6 +56,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -77,9 +88,9 @@ fun ShelfScanScreen(vm: ShelfScanViewModel, onBack: () -> Unit, onDone: () -> Un
         Box(modifier = Modifier.fillMaxSize().background(Color(0xFF160D06))) {
             when (val s = state) {
                 is ScanState.Camera -> ShelfCameraCapture(onCapture = vm::scan, onBack = onBack)
-                is ScanState.Identifying -> Busy("Reading the shelf…")
-                is ScanState.Matching -> Busy("Matching titles… ${s.done}/${s.total}")
-                is ScanState.Importing -> Busy("Adding to your shelves…")
+                is ScanState.Identifying -> Scanning("Reading the shelf…")
+                is ScanState.Matching -> Scanning("Matching titles… ${s.done}/${s.total}")
+                is ScanState.Importing -> Scanning("Adding to your shelves…")
                 is ScanState.Review -> ReviewList(s.items, onToggle = vm::toggle, onAdd = vm::confirmAndAdd, onRescan = vm::rescan)
                 is ScanState.Done -> DoneView(s.added, onDone)
                 is ScanState.Error -> ErrorView(s.message, onRescan = vm::rescan, onBack = onBack)
@@ -142,7 +153,11 @@ private fun ShelfCameraCapture(onCapture: (ByteArray) -> Unit, onBack: () -> Uni
                 .border(2.dp, gold, RoundedCornerShape(12.dp)),
         )
         Column(
-            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(24.dp),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
@@ -192,7 +207,7 @@ private fun ReviewList(
 ) {
     val matched = items.count { it.match != null }
     val willAdd = items.count { it.include && it.match != null }
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
         Text(
             "Found $matched of ${items.size} items. Tap to include or exclude, then add.",
             color = Color(0xFFE8E8EA),
@@ -272,23 +287,66 @@ private fun ScanRow(item: ScannedItem, onClick: () -> Unit) {
     }
 }
 
+/** A scanner-style loading state: a sweeping line inside viewfinder brackets. */
 @Composable
-private fun Busy(label: String) {
+private fun Scanning(label: String) {
+    val transition = rememberInfiniteTransition(label = "scan")
+    val pos by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(1500, easing = LinearEasing), RepeatMode.Reverse),
+        label = "pos",
+    )
     Column(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().systemBarsPadding().padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        CircularProgressIndicator(color = gold)
-        Spacer(Modifier.height(16.dp))
-        Text(label, color = Color(0xFFE8E8EA))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.74f)
+                .height(230.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(Color(0xFF0F0A05))
+                .drawBehind {
+                    val w = size.width
+                    val h = size.height
+                    val grid = gold.copy(alpha = 0.08f)
+                    var gy = h / 8f
+                    while (gy < h) { drawLine(grid, Offset(0f, gy), Offset(w, gy), 1f); gy += h / 8f }
+                    var gx = w / 6f
+                    while (gx < w) { drawLine(grid, Offset(gx, 0f), Offset(gx, h), 1f); gx += w / 6f }
+                    // sweeping glow band + line
+                    val y = h * pos
+                    val band = 48.dp.toPx()
+                    drawRect(
+                        brush = Brush.verticalGradient(
+                            0f to Color.Transparent,
+                            0.5f to gold.copy(alpha = 0.28f),
+                            1f to Color.Transparent,
+                        ),
+                        topLeft = Offset(0f, y - band / 2f),
+                        size = Size(w, band),
+                    )
+                    drawLine(gold, Offset(0f, y), Offset(w, y), 3.dp.toPx())
+                    // corner brackets
+                    val c = 22.dp.toPx()
+                    val sw = 3.dp.toPx()
+                    drawLine(gold, Offset(0f, 0f), Offset(c, 0f), sw); drawLine(gold, Offset(0f, 0f), Offset(0f, c), sw)
+                    drawLine(gold, Offset(w, 0f), Offset(w - c, 0f), sw); drawLine(gold, Offset(w, 0f), Offset(w, c), sw)
+                    drawLine(gold, Offset(0f, h), Offset(c, h), sw); drawLine(gold, Offset(0f, h), Offset(0f, h - c), sw)
+                    drawLine(gold, Offset(w, h), Offset(w - c, h), sw); drawLine(gold, Offset(w, h), Offset(w, h - c), sw)
+                },
+        )
+        Spacer(Modifier.height(22.dp))
+        Text(label, color = gold, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
     }
 }
 
 @Composable
 private fun DoneView(added: Int, onDone: () -> Unit) {
     Column(
-        modifier = Modifier.fillMaxSize().padding(28.dp),
+        modifier = Modifier.fillMaxSize().systemBarsPadding().padding(28.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -306,7 +364,7 @@ private fun DoneView(added: Int, onDone: () -> Unit) {
 @Composable
 private fun ErrorView(message: String, onRescan: () -> Unit, onBack: () -> Unit) {
     Column(
-        modifier = Modifier.fillMaxSize().padding(28.dp),
+        modifier = Modifier.fillMaxSize().systemBarsPadding().padding(28.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
