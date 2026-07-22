@@ -42,10 +42,15 @@ class ShelfScanViewModel(private val repo: ShelfRepository) : ViewModel() {
     private val _state = MutableStateFlow<ScanState>(ScanState.Camera)
     val state: StateFlow<ScanState> = _state.asStateFlow()
 
+    /** The photo just captured, shown behind the scanner animation while identifying/matching. */
+    var capturedJpeg: ByteArray? = null
+        private set
+
     private var items = listOf<ScannedItem>()
 
     /** Send the shelf photo to vision, then match each recognized title to the catalog. */
     fun scan(jpeg: ByteArray) {
+        capturedJpeg = jpeg
         viewModelScope.launch {
             _state.value = ScanState.Identifying
             val found = repo.identifyShelf(jpeg).getOrElse {
@@ -90,6 +95,7 @@ class ShelfScanViewModel(private val repo: ShelfRepository) : ViewModel() {
 
     fun rescan() {
         items = emptyList()
+        capturedJpeg = null
         _state.value = ScanState.Camera
     }
 

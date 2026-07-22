@@ -14,6 +14,8 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -56,11 +58,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
@@ -88,9 +91,9 @@ fun ShelfScanScreen(vm: ShelfScanViewModel, onBack: () -> Unit, onDone: () -> Un
         Box(modifier = Modifier.fillMaxSize().background(Color(0xFF160D06))) {
             when (val s = state) {
                 is ScanState.Camera -> ShelfCameraCapture(onCapture = vm::scan, onBack = onBack)
-                is ScanState.Identifying -> Scanning("Reading the shelf…")
-                is ScanState.Matching -> Scanning("Matching titles… ${s.done}/${s.total}")
-                is ScanState.Importing -> Scanning("Adding to your shelves…")
+                is ScanState.Identifying -> Scanning("Reading the shelf…", vm.capturedJpeg)
+                is ScanState.Matching -> Scanning("Matching titles… ${s.done}/${s.total}", vm.capturedJpeg)
+                is ScanState.Importing -> Scanning("Adding to your shelves…", vm.capturedJpeg)
                 is ScanState.Review -> ReviewList(s.items, onToggle = vm::toggle, onAdd = vm::confirmAndAdd, onRescan = vm::rescan)
                 is ScanState.Done -> DoneView(s.added, onDone)
                 is ScanState.Error -> ErrorView(s.message, onRescan = vm::rescan, onBack = onBack)
@@ -287,9 +290,17 @@ private fun ScanRow(item: ScannedItem, onClick: () -> Unit) {
     }
 }
 
-/** A scanner-style loading state: a sweeping line inside viewfinder brackets. */
+/** A scanner-style loading state: the captured photo with a sweeping line + viewfinder brackets. */
 @Composable
-private fun Scanning(label: String) {
+private fun Scanning(label: String, imageBytes: ByteArray?) {
+    val bitmap = remember(imageBytes) {
+        imageBytes?.let { bytes ->
+            runCatching {
+                val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = 2 }
+                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)?.asImageBitmap()
+            }.getOrNull()
+        }
+    }
     val transition = rememberInfiniteTransition(label = "scan")
     val pos by transition.animateFloat(
         initialValue = 0f,
@@ -298,46 +309,59 @@ private fun Scanning(label: String) {
         label = "pos",
     )
     Column(
-        modifier = Modifier.fillMaxSize().systemBarsPadding().padding(24.dp),
+        modifier = Modifier.fillMaxSize().systemBarsPadding().padding(20.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
         Box(
             modifier = Modifier
-                .fillMaxWidth(0.74f)
-                .height(230.dp)
+                .fillMaxWidth(0.9f)
+                .fillMaxHeight(0.62f)
                 .clip(RoundedCornerShape(14.dp))
-                .background(Color(0xFF0F0A05))
-                .drawBehind {
-                    val w = size.width
-                    val h = size.height
+                .background(Color(0xFF0F0A05)),
+        ) {
+            if (bitmap != null) {
+                Image(
+                    bitmap = bitmap,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.matchParentSize(),
+                )
+                // darken slightly so the scan line + brackets read clearly over the photo
+                Box(Modifier.matchParentSize().background(Color.Black.copy(alpha = 0.25f)))
+            }
+            Canvas(modifier = Modifier.matchParentSize()) {
+                val w = size.width
+                val h = size.height
+                if (bitmap == null) {
                     val grid = gold.copy(alpha = 0.08f)
                     var gy = h / 8f
                     while (gy < h) { drawLine(grid, Offset(0f, gy), Offset(w, gy), 1f); gy += h / 8f }
                     var gx = w / 6f
                     while (gx < w) { drawLine(grid, Offset(gx, 0f), Offset(gx, h), 1f); gx += w / 6f }
-                    // sweeping glow band + line
-                    val y = h * pos
-                    val band = 48.dp.toPx()
-                    drawRect(
-                        brush = Brush.verticalGradient(
-                            0f to Color.Transparent,
-                            0.5f to gold.copy(alpha = 0.28f),
-                            1f to Color.Transparent,
-                        ),
-                        topLeft = Offset(0f, y - band / 2f),
-                        size = Size(w, band),
-                    )
-                    drawLine(gold, Offset(0f, y), Offset(w, y), 3.dp.toPx())
-                    // corner brackets
-                    val c = 22.dp.toPx()
-                    val sw = 3.dp.toPx()
-                    drawLine(gold, Offset(0f, 0f), Offset(c, 0f), sw); drawLine(gold, Offset(0f, 0f), Offset(0f, c), sw)
-                    drawLine(gold, Offset(w, 0f), Offset(w - c, 0f), sw); drawLine(gold, Offset(w, 0f), Offset(w, c), sw)
-                    drawLine(gold, Offset(0f, h), Offset(c, h), sw); drawLine(gold, Offset(0f, h), Offset(0f, h - c), sw)
-                    drawLine(gold, Offset(w, h), Offset(w - c, h), sw); drawLine(gold, Offset(w, h), Offset(w, h - c), sw)
-                },
-        )
+                }
+                // sweeping glow band + line
+                val y = h * pos
+                val band = 56.dp.toPx()
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        0f to Color.Transparent,
+                        0.5f to gold.copy(alpha = 0.35f),
+                        1f to Color.Transparent,
+                    ),
+                    topLeft = Offset(0f, y - band / 2f),
+                    size = Size(w, band),
+                )
+                drawLine(gold, Offset(0f, y), Offset(w, y), 3.dp.toPx())
+                // corner brackets
+                val c = 24.dp.toPx()
+                val sw = 3.dp.toPx()
+                drawLine(gold, Offset(0f, 0f), Offset(c, 0f), sw); drawLine(gold, Offset(0f, 0f), Offset(0f, c), sw)
+                drawLine(gold, Offset(w, 0f), Offset(w - c, 0f), sw); drawLine(gold, Offset(w, 0f), Offset(w, c), sw)
+                drawLine(gold, Offset(0f, h), Offset(c, h), sw); drawLine(gold, Offset(0f, h), Offset(0f, h - c), sw)
+                drawLine(gold, Offset(w, h), Offset(w - c, h), sw); drawLine(gold, Offset(w, h), Offset(w, h - c), sw)
+            }
+        }
         Spacer(Modifier.height(22.dp))
         Text(label, color = gold, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
     }
