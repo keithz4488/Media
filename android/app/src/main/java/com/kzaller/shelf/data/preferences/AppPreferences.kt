@@ -117,6 +117,16 @@ class AppPreferences(private val context: Context) {
         }
     }
 
+    private val columnsKey = androidx.datastore.preferences.core.intPreferencesKey("shelf_columns")
+
+    /** How many covers sit across a shelf row (2–6). Global; higher = smaller covers. */
+    fun observeColumns(): Flow<Int> =
+        context.dataStore.data.map { (it[columnsKey] ?: 3).coerceIn(2, 6) }
+
+    suspend fun setColumns(n: Int) {
+        context.dataStore.edit { it[columnsKey] = n.coerceIn(2, 6) }
+    }
+
     fun observeViewMode(kind: MediaKind): Flow<ViewMode> =
         context.dataStore.data.map { prefs ->
             val raw = prefs[viewKey(kind)] ?: return@map ViewMode.GRID

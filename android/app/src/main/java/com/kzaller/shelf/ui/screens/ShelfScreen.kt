@@ -46,6 +46,10 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.filled.Tune
+import kotlin.math.roundToInt
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -106,6 +110,7 @@ fun ShelfScreen(
         val query by vm.query.collectAsState()
         val sort by vm.sort.collectAsState()
         val viewMode by vm.viewMode.collectAsState()
+        val columns by vm.columns.collectAsState()
         val refreshing by vm.refreshing.collectAsState()
         val selection by vm.selection.collectAsState()
         val inSelectionMode = selection.isNotEmpty()
@@ -117,6 +122,7 @@ fun ShelfScreen(
         val sheetState = rememberModalBottomSheetState()
         var searchOpen by remember { mutableStateOf(false) }
         var sortMenuOpen by remember { mutableStateOf(false) }
+        var sizeMenuOpen by remember { mutableStateOf(false) }
         var grouped by remember { mutableStateOf(false) }
         var bulkStatusMenuOpen by remember { mutableStateOf(false) }
 
@@ -198,6 +204,32 @@ fun ShelfScreen(
                                     imageVector = if (viewMode == ViewMode.GRID) Icons.Default.ViewList else Icons.Default.GridView,
                                     contentDescription = if (viewMode == ViewMode.GRID) "Switch to list view" else "Switch to grid view",
                                 )
+                            }
+                            if (viewMode == ViewMode.GRID) {
+                                Box {
+                                    IconButton(onClick = { sizeMenuOpen = true }) {
+                                        Icon(Icons.Default.Tune, contentDescription = "Cover size")
+                                    }
+                                    DropdownMenu(
+                                        expanded = sizeMenuOpen,
+                                        onDismissRequest = { sizeMenuOpen = false },
+                                    ) {
+                                        Column(modifier = Modifier.width(248.dp).padding(horizontal = 16.dp, vertical = 8.dp)) {
+                                            Text("Cover size", style = MaterialTheme.typography.labelLarge)
+                                            Text(
+                                                "$columns across",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                            Slider(
+                                                value = columns.toFloat(),
+                                                onValueChange = { vm.setColumns(it.roundToInt()) },
+                                                valueRange = 2f..6f,
+                                                steps = 3,
+                                            )
+                                        }
+                                    }
+                                }
                             }
                             Box {
                                 IconButton(onClick = { sortMenuOpen = true }) {
@@ -316,6 +348,7 @@ fun ShelfScreen(
                                 inSelectionMode = inSelectionMode,
                                 onItem = onItem,
                                 onToggle = vm::toggleSelection,
+                                columns = columns,
                                 modifier = Modifier.fillMaxSize(),
                                 // Freeze the shelf while the filter sheet is open so the
                                 // fall-off animation plays only after the user hits Done.

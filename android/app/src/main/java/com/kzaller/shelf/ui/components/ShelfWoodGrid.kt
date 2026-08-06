@@ -51,7 +51,6 @@ import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.models.ItemDto
 import com.kzaller.shelf.ui.theme.LocalShelfFlavor
 
-private const val COLUMNS = 3
 private const val FALL_MS = 950
 private const val RISE_MS = 1400
 
@@ -73,6 +72,7 @@ fun ShelfWoodGrid(
     inSelectionMode: Boolean,
     onItem: (String) -> Unit,
     onToggle: (String) -> Unit,
+    columns: Int,
     modifier: Modifier = Modifier,
     frozen: Boolean = false,
 ) {
@@ -117,7 +117,7 @@ fun ShelfWoodGrid(
         }
     }
 
-    val rows = remember(display) { display.chunked(COLUMNS) }
+    val rows = remember(display, columns) { display.chunked(columns) }
     LazyColumn(
         modifier = modifier,
         contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 24.dp),
@@ -126,6 +126,7 @@ fun ShelfWoodGrid(
             ShelfRow(
                 row = row,
                 kind = kind,
+                columns = columns,
                 selection = selection,
                 falling = falling,
                 rising = rising,
@@ -142,6 +143,7 @@ fun ShelfWoodGrid(
 private fun ShelfRow(
     row: List<ItemDto>,
     kind: MediaKind,
+    columns: Int,
     selection: Set<String>,
     falling: Set<String>,
     rising: Set<String>,
@@ -177,7 +179,7 @@ private fun ShelfRow(
                 .padding(bottom = 34.dp), // leave room for the plank under the covers
             verticalAlignment = Alignment.Bottom,
         ) {
-            for (col in 0 until COLUMNS) {
+            for (col in 0 until columns) {
                 val item = row.getOrNull(col)
                 Box(
                     modifier = Modifier
@@ -203,7 +205,7 @@ private fun ShelfRow(
         Spacer(Modifier.height(8.dp))
         // Quiet titles beneath, aligned to each column.
         Row(modifier = Modifier.fillMaxWidth()) {
-            for (col in 0 until COLUMNS) {
+            for (col in 0 until columns) {
                 val item = row.getOrNull(col)
                 Box(modifier = Modifier.weight(1f).padding(horizontal = 6.dp)) {
                     if (item != null) {

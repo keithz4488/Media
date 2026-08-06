@@ -61,6 +61,9 @@ class ShelfViewModel(
     val viewMode: StateFlow<ViewMode> =
         prefs.observeViewMode(kind).stateIn(viewModelScope, SharingStarted.Eagerly, ViewMode.GRID)
 
+    val columns: StateFlow<Int> =
+        prefs.observeColumns().stateIn(viewModelScope, SharingStarted.Eagerly, 3)
+
     /** All active filters bundled together so the items combine stays within combine's arity. */
     private data class ActiveFilters(
         val status: Set<String>,
@@ -198,6 +201,10 @@ class ShelfViewModel(
 
     fun setViewMode(mode: ViewMode) {
         viewModelScope.launch { prefs.setViewMode(kind, mode) }
+    }
+
+    fun setColumns(n: Int) {
+        viewModelScope.launch { prefs.setColumns(n) }
     }
 
     fun toggleSelection(id: String) {
