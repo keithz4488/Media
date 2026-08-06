@@ -47,6 +47,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.filled.Tune
 import kotlin.math.roundToInt
@@ -110,7 +111,11 @@ fun ShelfScreen(
         val query by vm.query.collectAsState()
         val sort by vm.sort.collectAsState()
         val viewMode by vm.viewMode.collectAsState()
-        val columns by vm.columns.collectAsState()
+        // Foldables remember a separate cover density folded vs unfolded; pick by current width.
+        val expandedScreen = LocalConfiguration.current.screenWidthDp >= 600
+        val columnsCompact by vm.columnsCompact.collectAsState()
+        val columnsExpanded by vm.columnsExpanded.collectAsState()
+        val columns = if (expandedScreen) columnsExpanded else columnsCompact
         val refreshing by vm.refreshing.collectAsState()
         val selection by vm.selection.collectAsState()
         val inSelectionMode = selection.isNotEmpty()
@@ -217,15 +222,15 @@ fun ShelfScreen(
                                         Column(modifier = Modifier.width(248.dp).padding(horizontal = 16.dp, vertical = 8.dp)) {
                                             Text("Cover size", style = MaterialTheme.typography.labelLarge)
                                             Text(
-                                                "$columns across",
+                                                "$columns across · ${if (expandedScreen) "unfolded" else "folded"}",
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             )
                                             Slider(
                                                 value = columns.toFloat(),
-                                                onValueChange = { vm.setColumns(it.roundToInt()) },
-                                                valueRange = 2f..6f,
-                                                steps = 3,
+                                                onValueChange = { vm.setColumns(expandedScreen, it.roundToInt()) },
+                                                valueRange = 2f..8f,
+                                                steps = 5,
                                             )
                                         }
                                     }

@@ -117,14 +117,23 @@ class AppPreferences(private val context: Context) {
         }
     }
 
-    private val columnsKey = androidx.datastore.preferences.core.intPreferencesKey("shelf_columns")
+    private val columnsCompactKey = androidx.datastore.preferences.core.intPreferencesKey("shelf_columns_compact")
+    private val columnsExpandedKey = androidx.datastore.preferences.core.intPreferencesKey("shelf_columns_expanded")
 
-    /** How many covers sit across a shelf row (2–6). Global; higher = smaller covers. */
-    fun observeColumns(): Flow<Int> =
-        context.dataStore.data.map { (it[columnsKey] ?: 3).coerceIn(2, 6) }
+    /**
+     * Covers across a shelf row (2–8; higher = smaller covers). Folded (compact) and unfolded
+     * (expanded) screens remember separate values, so a foldable keeps a comfortable density in
+     * each posture.
+     */
+    fun observeColumns(expanded: Boolean): Flow<Int> =
+        context.dataStore.data.map {
+            val key = if (expanded) columnsExpandedKey else columnsCompactKey
+            (it[key] ?: if (expanded) 5 else 3).coerceIn(2, 8)
+        }
 
-    suspend fun setColumns(n: Int) {
-        context.dataStore.edit { it[columnsKey] = n.coerceIn(2, 6) }
+    suspend fun setColumns(expanded: Boolean, n: Int) {
+        val key = if (expanded) columnsExpandedKey else columnsCompactKey
+        context.dataStore.edit { it[key] = n.coerceIn(2, 8) }
     }
 
     fun observeViewMode(kind: MediaKind): Flow<ViewMode> =
