@@ -931,6 +931,15 @@ async function plexWebhook(req: Request, url: URL, env: Env): Promise<Response> 
   // Everything this webhook sends lands on its owner's shelf (resolved from the secret above).
   const owner = webhookUser;
 
+  // Plex fires webhooks for EVERY account on the server -- Plex Home users and shared users
+  // (e.g. a sibling with access to the library) included. Only the server owner's own plays
+  // should update the owner's watched state, so skip scrobbles from non-owner accounts. Plex
+  // marks these with owner=false; when the field is absent (older servers) we don't block, to
+  // avoid dropping the owner's own plays.
+  if (event === "media.scrobble" && payload.owner === false) {
+    return json({ ok: true, skipped: "non-owner scrobble", account: payload.Account?.title ?? null });
+  }
+
   // "Watched" sync: Plex scrobbles when playback finishes (~90%). A movie scrobble means the
   // movie is watched; an episode scrobble advances the show's progress (a whole series can't be
   // flipped to Watched from webhooks alone -- that needs the server's episode counts).
