@@ -1,50 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-
-    <!-- Glyphs sit inside the 72x72 safe zone (18..90 on each axis) so adaptive
-         icon shapes (round, squircle) won't crop them.
-
-         Top-left:  book spines (Books)
-         Top-right: marquee bulbs (Movies)
-         Bottom-left: color bars (TV)
-         Bottom-right: retro sun (Games) -->
-
-    <!-- Books: three spines centered in TL quadrant -->
-    <path android:fillColor="#B54B2A" android:pathData="M19,20 L26,20 L26,45 L19,45 Z" />
-    <path android:fillColor="#E3B25A" android:pathData="M27,16 L34,16 L34,45 L27,45 Z" />
-    <path android:fillColor="#6E3018" android:pathData="M35,24 L42,24 L42,45 L35,45 Z" />
-    <path android:fillColor="#C9824A" android:pathData="M43,18 L50,18 L50,45 L43,45 Z" />
-
-    <!-- Movies: two rows of marquee bulbs in TR quadrant (gold dots) -->
-    <path android:fillColor="#FFD56B" android:pathData="M66,18 m-2.5,0 a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0 Z" />
-    <path android:fillColor="#FFD56B" android:pathData="M74,18 m-2.5,0 a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0 Z" />
-    <path android:fillColor="#FFD56B" android:pathData="M82,18 m-2.5,0 a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0 Z" />
-    <path android:fillColor="#FFD56B" android:pathData="M90,18 m-2.5,0 a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0 Z" />
-    <path android:fillColor="#FFD56B" android:pathData="M66,26 m-2.5,0 a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0 Z" />
-    <path android:fillColor="#FFD56B" android:pathData="M74,26 m-2.5,0 a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0 Z" />
-    <path android:fillColor="#FFD56B" android:pathData="M82,26 m-2.5,0 a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0 Z" />
-    <path android:fillColor="#FFD56B" android:pathData="M90,26 m-2.5,0 a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0 Z" />
-    <path android:fillColor="#FFD56B" android:pathData="M66,34 m-2.5,0 a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0 Z" />
-    <path android:fillColor="#FFD56B" android:pathData="M74,34 m-2.5,0 a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0 Z" />
-    <path android:fillColor="#FFD56B" android:pathData="M82,34 m-2.5,0 a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0 Z" />
-    <path android:fillColor="#FFD56B" android:pathData="M90,34 m-2.5,0 a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0 Z" />
-
-    <!-- TV: 7 color bars in BL quadrant -->
-    <path android:fillColor="#C0C0C0" android:fillAlpha="0.85" android:pathData="M18,63 L23,63 L23,90 L18,90 Z" />
-    <path android:fillColor="#C0C000" android:fillAlpha="0.85" android:pathData="M23,63 L28,63 L28,90 L23,90 Z" />
-    <path android:fillColor="#00C0C0" android:fillAlpha="0.85" android:pathData="M28,63 L33,63 L33,90 L28,90 Z" />
-    <path android:fillColor="#00C000" android:fillAlpha="0.85" android:pathData="M33,63 L38,63 L38,90 L33,90 Z" />
-    <path android:fillColor="#C000C0" android:fillAlpha="0.85" android:pathData="M38,63 L43,63 L43,90 L38,90 Z" />
-    <path android:fillColor="#C00000" android:fillAlpha="0.85" android:pathData="M43,63 L47,63 L47,90 L43,90 Z" />
-    <path android:fillColor="#0000C0" android:fillAlpha="0.85" android:pathData="M47,63 L51,63 L51,90 L47,90 Z" />
-
-    <!-- Games: retro sun in BR quadrant -->
-    <path android:fillColor="#FFB6E0" android:pathData="M80,76 m-14,0 a14,14 0 1,0 28,0 a14,14 0 1,0 -28,0 Z" />
-    <path android:fillColor="#3A0E5C" android:pathData="M66,80 L94,80 L94,82 L66,82 Z" />
-    <path android:fillColor="#3A0E5C" android:pathData="M66,84 L94,84 L94,86 L66,86 Z" />
-    <path android:fillColor="#3A0E5C" android:pathData="M66,88 L94,88 L94,90 L66,90 Z" />
-</vector>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:drawable="@drawable/ic_launcher_image"
+        android:left="18dp"
+        android:top="18dp"
+        android:right="18dp"
+        android:bottom="18dp" />
+</layer-list>
