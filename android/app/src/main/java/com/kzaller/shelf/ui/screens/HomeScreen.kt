@@ -1,6 +1,7 @@
 package com.kzaller.shelf.ui.screens
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.MarqueeSpacing
 import androidx.compose.foundation.background
@@ -48,13 +49,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.PI
 import kotlin.math.sin
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.kzaller.shelf.R
 import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.ShelfRepository
 import com.kzaller.shelf.ui.components.SynthwaveBackground
@@ -325,18 +329,39 @@ private fun CubbyCell(
     modifier: Modifier = Modifier,
 ) {
     val flavor = flavorFor(kind, dark = true)
+    val art = shelfArtFor(kind)
     Box(
         modifier = modifier
             .background(cubbyBackBrush(kind))
             .border(width = 3.dp, color = Color.Black.copy(alpha = 0.55f))
             .clickable(onClick = onClick),
     ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            when (kind) {
-                MediaKind.BOOK  -> drawBookSpines(this)
-                MediaKind.MOVIE -> drawMarquee(this)
-                MediaKind.TV    -> drawCrtBars(this)
-                MediaKind.GAME  -> drawArcadeGrid(this)
+        if (art != null) {
+            Image(
+                painter = painterResource(id = art),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+            // Keep the title/count legible over whatever artwork sits behind them.
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            0f to Color.Black.copy(alpha = 0.45f),
+                            0.35f to Color.Transparent,
+                        ),
+                    ),
+            )
+        } else {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                when (kind) {
+                    MediaKind.BOOK  -> drawBookSpines(this)
+                    MediaKind.MOVIE -> drawMarquee(this)
+                    MediaKind.TV    -> drawCrtBars(this)
+                    MediaKind.GAME  -> drawArcadeGrid(this)
+                }
             }
         }
         // Count badge top-right
@@ -370,6 +395,15 @@ private fun CubbyCell(
             )
         }
     }
+}
+
+/**
+ * Custom artwork for a shelf cubby, or null to fall back to the drawn art. Add a drawable here
+ * as each shelf's illustration lands.
+ */
+private fun shelfArtFor(kind: MediaKind): Int? = when (kind) {
+    MediaKind.GAME -> R.drawable.shelf_game
+    else -> null
 }
 
 private fun tagline(kind: MediaKind): String = when (kind) {
