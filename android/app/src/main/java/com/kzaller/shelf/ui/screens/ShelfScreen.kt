@@ -47,7 +47,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Switch
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.filled.Tune
@@ -117,7 +116,6 @@ fun ShelfScreen(
         val columnsCompact by vm.columnsCompact.collectAsState()
         val columnsExpanded by vm.columnsExpanded.collectAsState()
         val columns = if (expandedScreen) columnsExpanded else columnsCompact
-        val boxes3d by vm.boxes3d.collectAsState()
         val refreshing by vm.refreshing.collectAsState()
         val selection by vm.selection.collectAsState()
         val inSelectionMode = selection.isNotEmpty()
@@ -234,14 +232,6 @@ fun ShelfScreen(
                                                 valueRange = 2f..8f,
                                                 steps = 5,
                                             )
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Text("3D boxes", style = MaterialTheme.typography.labelLarge)
-                                                Spacer(Modifier.weight(1f))
-                                                Switch(
-                                                    checked = boxes3d,
-                                                    onCheckedChange = { vm.setBoxes3d(it) },
-                                                )
-                                            }
                                         }
                                     }
                                 }
@@ -364,7 +354,6 @@ fun ShelfScreen(
                                 onItem = onItem,
                                 onToggle = vm::toggleSelection,
                                 columns = columns,
-                                boxes3d = boxes3d,
                                 modifier = Modifier.fillMaxSize(),
                                 // Freeze the shelf while the filter sheet is open so the
                                 // fall-off animation plays only after the user hits Done.

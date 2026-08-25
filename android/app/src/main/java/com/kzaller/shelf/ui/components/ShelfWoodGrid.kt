@@ -5,24 +5,18 @@ import androidx.compose.animation.core.EaseIn
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -43,30 +37,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.models.ItemDto
 import com.kzaller.shelf.ui.theme.LocalShelfFlavor
-
-/** Widest a spine may get, so cases never crowd their neighbour across the gutter. */
-private val MAX_SPINE = 14.dp
 
 private const val FALL_MS = 950
 private const val RISE_MS = 1400
@@ -90,7 +73,6 @@ fun ShelfWoodGrid(
     onItem: (String) -> Unit,
     onToggle: (String) -> Unit,
     columns: Int,
-    boxes3d: Boolean,
     modifier: Modifier = Modifier,
     frozen: Boolean = false,
 ) {
@@ -145,7 +127,6 @@ fun ShelfWoodGrid(
                 row = row,
                 kind = kind,
                 columns = columns,
-                boxes3d = boxes3d,
                 selection = selection,
                 falling = falling,
                 rising = rising,
@@ -163,7 +144,6 @@ private fun ShelfRow(
     row: List<ItemDto>,
     kind: MediaKind,
     columns: Int,
-    boxes3d: Boolean,
     selection: Set<String>,
     falling: Set<String>,
     rising: Set<String>,
@@ -213,7 +193,6 @@ private fun ShelfRow(
                             selected = item.id in selection,
                             falling = item.id in falling,
                             rising = item.id in rising,
-                            boxes3d = boxes3d,
                             onClick = {
                                 if (inSelectionMode) onToggle(item.id) else onItem(item.id)
                             },
@@ -266,7 +245,6 @@ private fun StandingCover(
     selected: Boolean,
     falling: Boolean,
     rising: Boolean,
-    boxes3d: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
@@ -294,9 +272,7 @@ private fun StandingCover(
     }
     val risePx = with(density) { 120.dp.toPx() }
 
-    // The spine is drawn into the gutter beside the slot rather than taking width from it, so
-    // the cover art itself is never narrowed or cropped -- it stays exactly as it looks flat.
-    BoxWithConstraints(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .aspectRatio(aspect)
@@ -312,200 +288,46 @@ private fun StandingCover(
                     alpha = (1f - settle.value).coerceIn(0f, 1f)
                 }
             }
+            // soft drop shadow so the cover looks like it's standing on the plank
+            .shadow(elevation = 10.dp, shape = shape, clip = false)
+            .clip(shape)
+            .background(Color.Black.copy(alpha = 0.25f))
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+        contentAlignment = Alignment.Center,
     ) {
-        val slotH = maxHeight
-        // Spine picks up the cover's own colouring once the image lands; until then it falls
-        // back to the shelf accent.
-        var coverTone by remember(item.id) { mutableStateOf<Color?>(null) }
-        val spineBase = coverTone ?: lerp(Color.Black, flavor.accent, 0.30f)
-        // Butt the cover flush against the spine: a rounded corner there reads as a gap.
-        val frontShape = if (boxes3d) {
-            RoundedCornerShape(topStart = 0.dp, bottomStart = 0.dp, topEnd = 8.dp, bottomEnd = 8.dp)
+        if (item.coverUrl != null) {
+            AsyncImage(
+                model = item.coverUrl,
+                contentDescription = item.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxWidth().aspectRatio(aspect),
+            )
         } else {
-            shape
+            Text(
+                text = item.title.take(2).uppercase(),
+                style = flavor.titleStyle.copy(color = flavor.accent),
+            )
         }
-        // Cap the spine to the gutter between neighbours so cases never collide.
-        val spineW = if (boxes3d) {
-            (maxWidth * spineDepthFor(item.kind)).coerceAtMost(MAX_SPINE)
-        } else {
-            0.dp
-        }
-
-        if (boxes3d) {
+        FormatBadge(
+            formatCsv = item.format,
+            kind = item.kind,
+            modifier = Modifier.align(Alignment.TopEnd).padding(4.dp),
+        )
+        if (selected) {
             Box(
                 modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .offset(x = -spineW)
-                    .width(spineW)
-                    .fillMaxHeight(),
-                contentAlignment = Alignment.Center,
-            ) {
-                Canvas(modifier = Modifier.matchParentSize()) { drawSpine(spineBase) }
-                // Below this the strip is too narrow for type to be anything but mush.
-                if (spineW >= 9.dp) {
-                    Text(
-                        text = item.title,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.Center,
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontSize = (spineW.value * 0.55f).sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFFF3E7CE).copy(alpha = 0.85f),
-                        ),
-                        modifier = Modifier
-                            // Laid out horizontally, then turned on its side: the text needs the
-                            // spine's *height* as its width before it is rotated.
-                            .requiredWidth(slotH * 0.88f)
-                            .graphicsLayer { rotationZ = -90f },
-                    )
-                }
-            }
-        }
-
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                // soft drop shadow so the cover looks like it's standing on the plank
-                .shadow(elevation = 10.dp, shape = frontShape, clip = false)
-                .clip(frontShape)
-                .background(Color.Black.copy(alpha = 0.25f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (item.coverUrl != null) {
-                AsyncImage(
-                    // Hardware bitmaps can't be read back, so allow them only when we don't
-                    // need to sample the artwork for a spine colour.
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(item.coverUrl)
-                        .allowHardware(!boxes3d)
-                        .build(),
-                    contentDescription = item.title,
-                    contentScale = ContentScale.Crop,
-                    onSuccess = { state ->
-                        if (boxes3d && coverTone == null) {
-                            coverTone = spineToneFrom(state.result.drawable)
-                        }
-                    },
-                    modifier = Modifier.fillMaxSize(),
-                )
-            } else {
-                Text(
-                    text = item.title.take(2).uppercase(),
-                    style = flavor.titleStyle.copy(color = flavor.accent),
-                )
-            }
-            FormatBadge(
-                formatCsv = item.format,
-                kind = item.kind,
-                modifier = Modifier.align(Alignment.TopEnd).padding(4.dp),
+                    .fillMaxWidth()
+                    .aspectRatio(aspect)
+                    .background(flavor.accent.copy(alpha = 0.35f)),
             )
-            if (selected) {
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .background(flavor.accent.copy(alpha = 0.35f)),
-                )
-                Icon(
-                    imageVector = Icons.Default.CheckCircle,
-                    contentDescription = "Selected",
-                    tint = flavor.accent,
-                    modifier = Modifier.align(Alignment.Center),
-                )
-            }
+            Icon(
+                imageVector = Icons.Default.CheckCircle,
+                contentDescription = "Selected",
+                tint = flavor.accent,
+                modifier = Modifier.align(Alignment.Center),
+            )
         }
     }
-}
-
-/** How thick each kind's case reads, as a fraction of the slot width. */
-private fun spineDepthFor(kind: MediaKind): Float = when (kind) {
-    MediaKind.BOOK -> 0.15f   // hardbacks are chunky
-    MediaKind.GAME -> 0.13f
-    else -> 0.09f             // DVD / Blu-ray cases are thin
-}
-
-/**
- * The visible side of the case: a trapezoid whose back edge is inset top and bottom so it reads
- * as receding, shaded dark at the back and lifting toward the front crease, with a thin highlight
- * along the corner where it meets the cover.
- */
-private fun DrawScope.drawSpine(base: Color) {
-    val w = size.width
-    val h = size.height
-    val inset = h * 0.035f
-    val path = Path().apply {
-        moveTo(w, 0f)
-        lineTo(w, h)
-        lineTo(0f, h - inset)
-        lineTo(0f, inset)
-        close()
-    }
-    drawPath(
-        path = path,
-        brush = Brush.horizontalGradient(
-            0f to lerp(Color.Black, base, 0.30f),
-            0.7f to lerp(Color.Black, base, 0.78f),
-            1f to base,
-        ),
-    )
-    // Corner highlight where the side meets the front face.
-    drawLine(
-        color = Color.White.copy(alpha = 0.18f),
-        start = Offset(w, 0f),
-        end = Offset(w, h),
-        strokeWidth = 1.5f,
-    )
-}
-
-/**
- * A spine colour drawn from the cover itself: the most colourful tone in the artwork, or its
- * average when the cover is essentially greyscale. Brightness is clamped well below the
- * midpoint so the cream spine lettering always stays legible on top of it.
- */
-private fun spineToneFrom(drawable: android.graphics.drawable.Drawable): Color? {
-    val source = (drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap ?: return null
-    if (source.config == android.graphics.Bitmap.Config.HARDWARE) return null
-    val w = 8
-    val h = 12
-    val small = runCatching {
-        android.graphics.Bitmap.createScaledBitmap(source, w, h, true)
-    }.getOrNull() ?: return null
-
-    var bestPixel = 0
-    var bestScore = -1f
-    var rSum = 0L
-    var gSum = 0L
-    var bSum = 0L
-    for (x in 0 until w) {
-        for (y in 0 until h) {
-            val p = small.getPixel(x, y)
-            val r = (p shr 16) and 0xFF
-            val g = (p shr 8) and 0xFF
-            val b = p and 0xFF
-            rSum += r; gSum += g; bSum += b
-            val mx = maxOf(r, g, b)
-            val mn = minOf(r, g, b)
-            val sat = if (mx == 0) 0f else (mx - mn).toFloat() / mx
-            val score = sat * (mx / 255f)
-            if (score > bestScore) {
-                bestScore = score
-                bestPixel = p
-            }
-        }
-    }
-    val n = w * h
-    // A washed-out "most colourful" pixel means the art is basically greyscale; average instead.
-    val chosen = if (bestScore >= 0.12f) {
-        bestPixel
-    } else {
-        android.graphics.Color.rgb((rSum / n).toInt(), (gSum / n).toInt(), (bSum / n).toInt())
-    }
-    val hsv = FloatArray(3)
-    android.graphics.Color.colorToHSV(chosen, hsv)
-    hsv[1] = hsv[1].coerceAtMost(0.72f)
-    hsv[2] = 0.46f
-    return Color(android.graphics.Color.HSVToColor(hsv))
 }
 
 /** Readable warm-cream text that sits well on every tinted wood. */

@@ -1,5 +1,9 @@
 package com.kzaller.shelf.ui
 
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -240,6 +244,11 @@ fun ShelfApp() {
                     navArgument("kind") { type = NavType.StringType },
                     navArgument("id") { type = NavType.StringType },
                 ),
+                // Keep the crossfade brief: the detail page's own open-spin carries the
+                // transition, and a long fade on top of it just muddies the motion.
+                enterTransition = { fadeIn(tween(90)) },
+                // Going back closes it down again, the reverse of arriving.
+                popExitTransition = { scaleOut(targetScale = 0.88f, animationSpec = tween(240)) + fadeOut(tween(240)) },
             ) { entry ->
                 val kind = MediaKind.fromWire(entry.arguments?.getString("kind")!!)
                 val id = entry.arguments?.getString("id")!!

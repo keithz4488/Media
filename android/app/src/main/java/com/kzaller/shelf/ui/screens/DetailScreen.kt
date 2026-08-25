@@ -1,5 +1,8 @@
 package com.kzaller.shelf.ui.screens
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -82,6 +85,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -125,6 +129,28 @@ fun DetailScreen(
     val initialIndex = items.indexOfFirst { it.id == initialId }.coerceAtLeast(0)
     val pagerState = rememberPagerState(initialPage = initialIndex) { items.size }
 
+    // Opening a cover swings the page around like the item is being turned to face you.
+    // Runs once, when the detail page first has content to show.
+    val openSpin = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        openSpin.animateTo(1f, tween(durationMillis = OPEN_SPIN_MS, easing = FastOutSlowInEasing))
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .graphicsLayer {
+                val t = openSpin.value
+                // A near-flat start reads as the cover edge-on, then it turns to face the viewer.
+                cameraDistance = 16f * density
+                rotationY = -82f * (1f - t)
+                val scale = 0.88f + 0.12f * t
+                scaleX = scale
+                scaleY = scale
+                // Fade in quickly so the tail of the spin plays on a fully visible page.
+                alpha = (t * 2.2f).coerceAtMost(1f)
+            },
+    ) {
     HorizontalPager(
         state = pagerState,
         key = { idx -> items[idx].id },
@@ -136,7 +162,11 @@ fun DetailScreen(
         )
         DetailPage(vm = vm, onBack = onBack)
     }
+    }
 }
+
+/** How long the open-spin takes; long enough to read, short enough to stay out of the way. */
+private const val OPEN_SPIN_MS = 480
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
