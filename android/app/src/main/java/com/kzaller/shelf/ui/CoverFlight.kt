@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalSharedTransitionApi::class)
+
 package com.kzaller.shelf.ui
 
 import androidx.compose.animation.AnimatedVisibilityScope
@@ -29,7 +31,6 @@ const val COVER_FLIGHT_MS = 520
  *
  * A no-op when the scopes aren't present, so covers still render anywhere else they're used.
  */
-@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun Modifier.coverFlight(id: String): Modifier {
     val shared = LocalSharedTransitionScope.current
