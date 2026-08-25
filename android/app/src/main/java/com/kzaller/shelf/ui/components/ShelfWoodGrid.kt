@@ -10,6 +10,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -19,7 +20,9 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -54,10 +57,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.models.ItemDto
 import com.kzaller.shelf.ui.theme.LocalShelfFlavor
+
+/** Widest a spine may get, so cases never crowd their neighbour across the gutter. */
+private val MAX_SPINE = 14.dp
 
 private const val FALL_MS = 950
 private const val RISE_MS = 1400
@@ -285,16 +292,9 @@ private fun StandingCover(
     }
     val risePx = with(density) { 120.dp.toPx() }
 
-    // In box mode the slot is shared between a receding spine and the (foreshortened) cover
-    // front, the way a real case looks when it's turned slightly on the shelf.
-    val depth = if (boxes3d) spineDepthFor(item.kind) else 0f
-    val frontShape = if (boxes3d) {
-        RoundedCornerShape(topStart = 2.dp, bottomStart = 2.dp, topEnd = 8.dp, bottomEnd = 8.dp)
-    } else {
-        shape
-    }
-
-    Box(
+    // The spine is drawn into the gutter beside the slot rather than taking width from it, so
+    // the cover art itself is never narrowed or cropped -- it stays exactly as it looks flat.
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
             .aspectRatio(aspect)
@@ -310,55 +310,87 @@ private fun StandingCover(
                     alpha = (1f - settle.value).coerceIn(0f, 1f)
                 }
             }
-            // soft drop shadow so the cover looks like it's standing on the plank
-            .shadow(elevation = 10.dp, shape = shape, clip = false)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
     ) {
-        Row(modifier = Modifier.fillMaxSize()) {
-            if (boxes3d) {
-                Canvas(modifier = Modifier.weight(depth).fillMaxHeight()) {
-                    drawSpine(flavor.accent)
-                }
-            }
+        val slotH = maxHeight
+        // Cap the spine to the gutter between neighbours so cases never collide.
+        val spineW = if (boxes3d) {
+            (maxWidth * spineDepthFor(item.kind)).coerceAtMost(MAX_SPINE)
+        } else {
+            0.dp
+        }
+
+        if (boxes3d) {
             Box(
                 modifier = Modifier
-                    .weight(1f - depth)
-                    .fillMaxHeight()
-                    .clip(frontShape)
-                    .background(Color.Black.copy(alpha = 0.25f)),
+                    .align(Alignment.CenterStart)
+                    .offset(x = -spineW)
+                    .width(spineW)
+                    .fillMaxHeight(),
                 contentAlignment = Alignment.Center,
             ) {
-                if (item.coverUrl != null) {
-                    AsyncImage(
-                        model = item.coverUrl,
-                        contentDescription = item.title,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                } else {
+                Canvas(modifier = Modifier.matchParentSize()) { drawSpine(flavor.accent) }
+                // Below this the strip is too narrow for type to be anything but mush.
+                if (spineW >= 9.dp) {
                     Text(
-                        text = item.title.take(2).uppercase(),
-                        style = flavor.titleStyle.copy(color = flavor.accent),
-                    )
-                }
-                FormatBadge(
-                    formatCsv = item.format,
-                    kind = item.kind,
-                    modifier = Modifier.align(Alignment.TopEnd).padding(4.dp),
-                )
-                if (selected) {
-                    Box(
+                        text = item.title,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = (spineW.value * 0.55f).sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFFF3E7CE).copy(alpha = 0.85f),
+                        ),
                         modifier = Modifier
-                            .matchParentSize()
-                            .background(flavor.accent.copy(alpha = 0.35f)),
-                    )
-                    Icon(
-                        imageVector = Icons.Default.CheckCircle,
-                        contentDescription = "Selected",
-                        tint = flavor.accent,
-                        modifier = Modifier.align(Alignment.Center),
+                            // Laid out horizontally, then turned on its side: the text needs the
+                            // spine's *height* as its width before it is rotated.
+                            .requiredWidth(slotH * 0.88f)
+                            .graphicsLayer { rotationZ = -90f },
                     )
                 }
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                // soft drop shadow so the cover looks like it's standing on the plank
+                .shadow(elevation = 10.dp, shape = shape, clip = false)
+                .clip(shape)
+                .background(Color.Black.copy(alpha = 0.25f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (item.coverUrl != null) {
+                AsyncImage(
+                    model = item.coverUrl,
+                    contentDescription = item.title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                Text(
+                    text = item.title.take(2).uppercase(),
+                    style = flavor.titleStyle.copy(color = flavor.accent),
+                )
+            }
+            FormatBadge(
+                formatCsv = item.format,
+                kind = item.kind,
+                modifier = Modifier.align(Alignment.TopEnd).padding(4.dp),
+            )
+            if (selected) {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(flavor.accent.copy(alpha = 0.35f)),
+                )
+                Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = "Selected",
+                    tint = flavor.accent,
+                    modifier = Modifier.align(Alignment.Center),
+                )
             }
         }
     }
