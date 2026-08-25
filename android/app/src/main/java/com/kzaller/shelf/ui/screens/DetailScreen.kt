@@ -89,6 +89,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.kzaller.shelf.ui.LocalFlyingCoverId
 import com.kzaller.shelf.ui.coverFlight
 import kotlin.math.roundToInt
 import androidx.compose.foundation.pager.HorizontalPager
@@ -125,6 +126,12 @@ fun DetailScreen(
     if (items.isEmpty()) return // initial load hasn't populated cache yet; brief blank
     val initialIndex = items.indexOfFirst { it.id == initialId }.coerceAtLeast(0)
     val pagerState = rememberPagerState(initialPage = initialIndex) { items.size }
+
+    // Swiping to another item makes that one the cover that flies back to the shelf.
+    val flyingCover = LocalFlyingCoverId.current
+    LaunchedEffect(pagerState.currentPage, items) {
+        items.getOrNull(pagerState.currentPage)?.let { flyingCover.value = it.id }
+    }
 
     HorizontalPager(
         state = pagerState,

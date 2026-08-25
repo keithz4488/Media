@@ -10,6 +10,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
@@ -21,8 +22,14 @@ import androidx.compose.ui.graphics.graphicsLayer
 val LocalSharedTransitionScope = compositionLocalOf<SharedTransitionScope?> { null }
 val LocalAnimatedVisibilityScope = compositionLocalOf<AnimatedVisibilityScope?> { null }
 
-/** Long enough for a full turn to read without holding up the detail page. */
-const val COVER_FLIGHT_MS = 520
+/**
+ * The one cover currently making the trip. Without this every cover on the shelf would turn when
+ * the screen transitions -- only the tapped one should move.
+ */
+val LocalFlyingCoverId = compositionLocalOf { mutableStateOf<String?>(null) }
+
+/** Slow enough to watch the turn land, short enough not to hold up the detail page. */
+const val COVER_FLIGHT_MS = 900
 
 /**
  * Marks a cover as the same physical object on both screens: tapping one on the shelf flies it
@@ -36,6 +43,8 @@ fun Modifier.coverFlight(id: String): Modifier {
     val shared = LocalSharedTransitionScope.current
     val anim = LocalAnimatedVisibilityScope.current
     if (shared == null || anim == null) return this
+    // Every other cover stays perfectly still.
+    if (LocalFlyingCoverId.current.value != id) return this
 
     // 0 while the cover is at rest on either screen, 1 at the far end of the transition, so the
     // spin winds up as it leaves and unwinds as it lands.

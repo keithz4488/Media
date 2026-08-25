@@ -13,6 +13,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -137,7 +138,11 @@ fun ShelfApp() {
     MediaShelfTheme {
         Box(modifier = Modifier.fillMaxSize()) {
         SharedTransitionLayout {
-        CompositionLocalProvider(LocalSharedTransitionScope provides this) {
+        val flyingCover = remember { mutableStateOf<String?>(null) }
+        CompositionLocalProvider(
+            LocalSharedTransitionScope provides this,
+            LocalFlyingCoverId provides flyingCover,
+        ) {
         NavHost(navController = nav, startDestination = Routes.HOME) {
             composable(Routes.HOME) { entry ->
                 HomeScreen(
@@ -216,7 +221,10 @@ fun ShelfApp() {
                     vm = vm,
                     onBack = { nav.popBackStack() },
                     onAdd = { start -> nav.navigateIfResumed(entry, Routes.add(kind, start)) },
-                    onItem = { nav.navigateIfResumed(entry, Routes.detail(kind, it)) },
+                    onItem = { id ->
+                        flyingCover.value = id
+                        nav.navigateIfResumed(entry, Routes.detail(kind, id))
+                    },
                     onSwitchShelf = { target ->
                         // Swap shelves without stacking: pop back to home, then open the target.
                         if (entry.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
