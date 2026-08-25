@@ -1,6 +1,7 @@
 package com.kzaller.shelf.ui
 
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.fadeIn
@@ -215,7 +216,17 @@ fun ShelfApp() {
             ) { entry ->
                 val kind = MediaKind.fromWire(entry.arguments?.getString("kind")!!)
                 val vm: ShelfViewModel = viewModel(factory = ShelfViewModel.factory(repo, prefs, kind))
-                CompositionLocalProvider(LocalAnimatedVisibilityScope provides this) {
+                val animScope = this
+                CompositionLocalProvider(LocalAnimatedVisibilityScope provides animScope) {
+                // Once the shelf has settled back into view the trip is over. Without this the
+                // id lingers, and the same cover would turn again on the way out to anywhere else.
+                LaunchedEffect(animScope.transition.currentState, animScope.transition.isRunning) {
+                    if (animScope.transition.currentState == EnterExitState.Visible &&
+                        !animScope.transition.isRunning
+                    ) {
+                        flyingCover.value = null
+                    }
+                }
                 ShelfScreen(
                     kind = kind,
                     vm = vm,
