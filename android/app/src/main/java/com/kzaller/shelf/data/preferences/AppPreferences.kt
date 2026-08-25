@@ -136,6 +136,15 @@ class AppPreferences(private val context: Context) {
         context.dataStore.edit { it[key] = n.coerceIn(2, 8) }
     }
 
+    private val boxes3dKey = booleanPreferencesKey("shelf_boxes_3d")
+
+    /** Render shelf items as 3D boxes (cover front + spine) rather than flat covers. */
+    fun observeBoxes3d(): Flow<Boolean> = context.dataStore.data.map { it[boxes3dKey] ?: true }
+
+    suspend fun setBoxes3d(on: Boolean) {
+        context.dataStore.edit { it[boxes3dKey] = on }
+    }
+
     fun observeViewMode(kind: MediaKind): Flow<ViewMode> =
         context.dataStore.data.map { prefs ->
             val raw = prefs[viewKey(kind)] ?: return@map ViewMode.GRID

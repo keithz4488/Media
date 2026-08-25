@@ -66,6 +66,9 @@ class ShelfViewModel(
     val columnsExpanded: StateFlow<Int> =
         prefs.observeColumns(expanded = true).stateIn(viewModelScope, SharingStarted.Eagerly, 5)
 
+    val boxes3d: StateFlow<Boolean> =
+        prefs.observeBoxes3d().stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
     /** All active filters bundled together so the items combine stays within combine's arity. */
     private data class ActiveFilters(
         val status: Set<String>,
@@ -207,6 +210,10 @@ class ShelfViewModel(
 
     fun setColumns(expanded: Boolean, n: Int) {
         viewModelScope.launch { prefs.setColumns(expanded, n) }
+    }
+
+    fun setBoxes3d(on: Boolean) {
+        viewModelScope.launch { prefs.setBoxes3d(on) }
     }
 
     fun toggleSelection(id: String) {

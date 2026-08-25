@@ -5,6 +5,7 @@ import androidx.compose.animation.core.EaseIn
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -14,6 +15,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -37,9 +40,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -73,6 +81,7 @@ fun ShelfWoodGrid(
     onItem: (String) -> Unit,
     onToggle: (String) -> Unit,
     columns: Int,
+    boxes3d: Boolean,
     modifier: Modifier = Modifier,
     frozen: Boolean = false,
 ) {
@@ -127,6 +136,7 @@ fun ShelfWoodGrid(
                 row = row,
                 kind = kind,
                 columns = columns,
+                boxes3d = boxes3d,
                 selection = selection,
                 falling = falling,
                 rising = rising,
@@ -144,6 +154,7 @@ private fun ShelfRow(
     row: List<ItemDto>,
     kind: MediaKind,
     columns: Int,
+    boxes3d: Boolean,
     selection: Set<String>,
     falling: Set<String>,
     rising: Set<String>,
@@ -193,6 +204,7 @@ private fun ShelfRow(
                             selected = item.id in selection,
                             falling = item.id in falling,
                             rising = item.id in rising,
+                            boxes3d = boxes3d,
                             onClick = {
                                 if (inSelectionMode) onToggle(item.id) else onItem(item.id)
                             },
@@ -245,6 +257,7 @@ private fun StandingCover(
     selected: Boolean,
     falling: Boolean,
     rising: Boolean,
+    boxes3d: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
@@ -272,6 +285,15 @@ private fun StandingCover(
     }
     val risePx = with(density) { 120.dp.toPx() }
 
+    // In box mode the slot is shared between a receding spine and the (foreshortened) cover
+    // front, the way a real case looks when it's turned slightly on the shelf.
+    val depth = if (boxes3d) spineDepthFor(item.kind) else 0f
+    val frontShape = if (boxes3d) {
+        RoundedCornerShape(topStart = 2.dp, bottomStart = 2.dp, topEnd = 8.dp, bottomEnd = 8.dp)
+    } else {
+        shape
+    }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -290,44 +312,96 @@ private fun StandingCover(
             }
             // soft drop shadow so the cover looks like it's standing on the plank
             .shadow(elevation = 10.dp, shape = shape, clip = false)
-            .clip(shape)
-            .background(Color.Black.copy(alpha = 0.25f))
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
-        contentAlignment = Alignment.Center,
     ) {
-        if (item.coverUrl != null) {
-            AsyncImage(
-                model = item.coverUrl,
-                contentDescription = item.title,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxWidth().aspectRatio(aspect),
-            )
-        } else {
-            Text(
-                text = item.title.take(2).uppercase(),
-                style = flavor.titleStyle.copy(color = flavor.accent),
-            )
-        }
-        FormatBadge(
-            formatCsv = item.format,
-            kind = item.kind,
-            modifier = Modifier.align(Alignment.TopEnd).padding(4.dp),
-        )
-        if (selected) {
+        Row(modifier = Modifier.fillMaxSize()) {
+            if (boxes3d) {
+                Canvas(modifier = Modifier.weight(depth).fillMaxHeight()) {
+                    drawSpine(flavor.accent)
+                }
+            }
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(aspect)
-                    .background(flavor.accent.copy(alpha = 0.35f)),
-            )
-            Icon(
-                imageVector = Icons.Default.CheckCircle,
-                contentDescription = "Selected",
-                tint = flavor.accent,
-                modifier = Modifier.align(Alignment.Center),
-            )
+                    .weight(1f - depth)
+                    .fillMaxHeight()
+                    .clip(frontShape)
+                    .background(Color.Black.copy(alpha = 0.25f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (item.coverUrl != null) {
+                    AsyncImage(
+                        model = item.coverUrl,
+                        contentDescription = item.title,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    Text(
+                        text = item.title.take(2).uppercase(),
+                        style = flavor.titleStyle.copy(color = flavor.accent),
+                    )
+                }
+                FormatBadge(
+                    formatCsv = item.format,
+                    kind = item.kind,
+                    modifier = Modifier.align(Alignment.TopEnd).padding(4.dp),
+                )
+                if (selected) {
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .background(flavor.accent.copy(alpha = 0.35f)),
+                    )
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = "Selected",
+                        tint = flavor.accent,
+                        modifier = Modifier.align(Alignment.Center),
+                    )
+                }
+            }
         }
     }
+}
+
+/** How thick each kind's case reads, as a fraction of the slot width. */
+private fun spineDepthFor(kind: MediaKind): Float = when (kind) {
+    MediaKind.BOOK -> 0.15f   // hardbacks are chunky
+    MediaKind.GAME -> 0.13f
+    else -> 0.09f             // DVD / Blu-ray cases are thin
+}
+
+/**
+ * The visible side of the case: a trapezoid whose back edge is inset top and bottom so it reads
+ * as receding, shaded dark at the back and lifting toward the front crease, with a thin highlight
+ * along the corner where it meets the cover.
+ */
+private fun DrawScope.drawSpine(accent: Color) {
+    val w = size.width
+    val h = size.height
+    val inset = h * 0.035f
+    val path = Path().apply {
+        moveTo(w, 0f)
+        lineTo(w, h)
+        lineTo(0f, h - inset)
+        lineTo(0f, inset)
+        close()
+    }
+    drawPath(
+        path = path,
+        brush = Brush.horizontalGradient(
+            0f to lerp(Color.Black, accent, 0.06f),
+            0.7f to lerp(Color.Black, accent, 0.20f),
+            1f to lerp(Color.Black, accent, 0.34f),
+        ),
+    )
+    // Corner highlight where the side meets the front face.
+    drawLine(
+        color = Color.White.copy(alpha = 0.18f),
+        start = Offset(w, 0f),
+        end = Offset(w, h),
+        strokeWidth = 1.5f,
+    )
 }
 
 /** Readable warm-cream text that sits well on every tinted wood. */
