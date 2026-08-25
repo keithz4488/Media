@@ -1,13 +1,15 @@
 package com.kzaller.shelf.ui
 
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -93,6 +95,7 @@ private fun AuthSplash() {
     }
 }
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun ShelfApp() {
     val context = LocalContext.current
@@ -133,6 +136,8 @@ fun ShelfApp() {
 
     MediaShelfTheme {
         Box(modifier = Modifier.fillMaxSize()) {
+        SharedTransitionLayout {
+        CompositionLocalProvider(LocalSharedTransitionScope provides this) {
         NavHost(navController = nav, startDestination = Routes.HOME) {
             composable(Routes.HOME) { entry ->
                 HomeScreen(
@@ -205,6 +210,7 @@ fun ShelfApp() {
             ) { entry ->
                 val kind = MediaKind.fromWire(entry.arguments?.getString("kind")!!)
                 val vm: ShelfViewModel = viewModel(factory = ShelfViewModel.factory(repo, prefs, kind))
+                CompositionLocalProvider(LocalAnimatedVisibilityScope provides this) {
                 ShelfScreen(
                     kind = kind,
                     vm = vm,
@@ -219,6 +225,7 @@ fun ShelfApp() {
                         }
                     },
                 )
+                }
             }
             composable(
                 route = Routes.ADD,
@@ -244,21 +251,24 @@ fun ShelfApp() {
                     navArgument("kind") { type = NavType.StringType },
                     navArgument("id") { type = NavType.StringType },
                 ),
-                // Keep the crossfade brief: the detail page's own open-spin carries the
-                // transition, and a long fade on top of it just muddies the motion.
-                enterTransition = { fadeIn(tween(90)) },
-                // Going back closes it down again, the reverse of arriving.
-                popExitTransition = { scaleOut(targetScale = 0.88f, animationSpec = tween(240)) + fadeOut(tween(240)) },
+                // The page fades in around the cover while the cover itself flies into place;
+                // the flight is the motion, so nothing else should move.
+                enterTransition = { fadeIn(tween(COVER_FLIGHT_MS)) },
+                popExitTransition = { fadeOut(tween(COVER_FLIGHT_MS)) },
             ) { entry ->
                 val kind = MediaKind.fromWire(entry.arguments?.getString("kind")!!)
                 val id = entry.arguments?.getString("id")!!
-                DetailScreen(
-                    initialId = id,
-                    kind = kind,
-                    repo = repo,
-                    onBack = { nav.popBackStack() },
-                )
+                CompositionLocalProvider(LocalAnimatedVisibilityScope provides this) {
+                    DetailScreen(
+                        initialId = id,
+                        kind = kind,
+                        repo = repo,
+                        onBack = { nav.popBackStack() },
+                    )
+                }
             }
+        }
+        }
         }
         // Global unlock banner overlays every screen.
         AchievementUnlockBanner(

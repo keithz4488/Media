@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.models.ItemDto
+import com.kzaller.shelf.ui.coverFlight
 import com.kzaller.shelf.ui.theme.LocalShelfFlavor
 
 private const val FALL_MS = 950
@@ -276,6 +277,8 @@ private fun StandingCover(
         modifier = Modifier
             .fillMaxWidth()
             .aspectRatio(aspect)
+            // Tapping this cover flies it to the detail page's thumbnail.
+            .coverFlight(item.id)
             .graphicsLayer {
                 if (fall > 0f) {
                     transformOrigin = TransformOrigin(0.5f, 1f)
