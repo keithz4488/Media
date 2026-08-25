@@ -52,6 +52,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -59,6 +60,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.models.ItemDto
 import com.kzaller.shelf.ui.theme.LocalShelfFlavor
@@ -313,6 +315,16 @@ private fun StandingCover(
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
     ) {
         val slotH = maxHeight
+        // Spine picks up the cover's own colouring once the image lands; until then it falls
+        // back to the shelf accent.
+        var coverTone by remember(item.id) { mutableStateOf<Color?>(null) }
+        val spineBase = coverTone ?: lerp(Color.Black, flavor.accent, 0.30f)
+        // Butt the cover flush against the spine: a rounded corner there reads as a gap.
+        val frontShape = if (boxes3d) {
+            RoundedCornerShape(topStart = 0.dp, bottomStart = 0.dp, topEnd = 8.dp, bottomEnd = 8.dp)
+        } else {
+            shape
+        }
         // Cap the spine to the gutter between neighbours so cases never collide.
         val spineW = if (boxes3d) {
             (maxWidth * spineDepthFor(item.kind)).coerceAtMost(MAX_SPINE)
@@ -329,7 +341,7 @@ private fun StandingCover(
                     .fillMaxHeight(),
                 contentAlignment = Alignment.Center,
             ) {
-                Canvas(modifier = Modifier.matchParentSize()) { drawSpine(flavor.accent) }
+                Canvas(modifier = Modifier.matchParentSize()) { drawSpine(spineBase) }
                 // Below this the strip is too narrow for type to be anything but mush.
                 if (spineW >= 9.dp) {
                     Text(
@@ -356,16 +368,26 @@ private fun StandingCover(
             modifier = Modifier
                 .matchParentSize()
                 // soft drop shadow so the cover looks like it's standing on the plank
-                .shadow(elevation = 10.dp, shape = shape, clip = false)
-                .clip(shape)
+                .shadow(elevation = 10.dp, shape = frontShape, clip = false)
+                .clip(frontShape)
                 .background(Color.Black.copy(alpha = 0.25f)),
             contentAlignment = Alignment.Center,
         ) {
             if (item.coverUrl != null) {
                 AsyncImage(
-                    model = item.coverUrl,
+                    // Hardware bitmaps can't be read back, so allow them only when we don't
+                    // need to sample the artwork for a spine colour.
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(item.coverUrl)
+                        .allowHardware(!boxes3d)
+                        .build(),
                     contentDescription = item.title,
                     contentScale = ContentScale.Crop,
+                    onSuccess = { state ->
+                        if (boxes3d && coverTone == null) {
+                            coverTone = spineToneFrom(state.result.drawable)
+                        }
+                    },
                     modifier = Modifier.fillMaxSize(),
                 )
             } else {
@@ -408,7 +430,7 @@ private fun spineDepthFor(kind: MediaKind): Float = when (kind) {
  * as receding, shaded dark at the back and lifting toward the front crease, with a thin highlight
  * along the corner where it meets the cover.
  */
-private fun DrawScope.drawSpine(accent: Color) {
+private fun DrawScope.drawSpine(base: Color) {
     val w = size.width
     val h = size.height
     val inset = h * 0.035f
@@ -422,9 +444,9 @@ private fun DrawScope.drawSpine(accent: Color) {
     drawPath(
         path = path,
         brush = Brush.horizontalGradient(
-            0f to lerp(Color.Black, accent, 0.06f),
-            0.7f to lerp(Color.Black, accent, 0.20f),
-            1f to lerp(Color.Black, accent, 0.34f),
+            0f to lerp(Color.Black, base, 0.30f),
+            0.7f to lerp(Color.Black, base, 0.78f),
+            1f to base,
         ),
     )
     // Corner highlight where the side meets the front face.
@@ -434,6 +456,56 @@ private fun DrawScope.drawSpine(accent: Color) {
         end = Offset(w, h),
         strokeWidth = 1.5f,
     )
+}
+
+/**
+ * A spine colour drawn from the cover itself: the most colourful tone in the artwork, or its
+ * average when the cover is essentially greyscale. Brightness is clamped well below the
+ * midpoint so the cream spine lettering always stays legible on top of it.
+ */
+private fun spineToneFrom(drawable: android.graphics.drawable.Drawable): Color? {
+    val source = (drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap ?: return null
+    if (source.config == android.graphics.Bitmap.Config.HARDWARE) return null
+    val w = 8
+    val h = 12
+    val small = runCatching {
+        android.graphics.Bitmap.createScaledBitmap(source, w, h, true)
+    }.getOrNull() ?: return null
+
+    var bestPixel = 0
+    var bestScore = -1f
+    var rSum = 0L
+    var gSum = 0L
+    var bSum = 0L
+    for (x in 0 until w) {
+        for (y in 0 until h) {
+            val p = small.getPixel(x, y)
+            val r = (p shr 16) and 0xFF
+            val g = (p shr 8) and 0xFF
+            val b = p and 0xFF
+            rSum += r; gSum += g; bSum += b
+            val mx = maxOf(r, g, b)
+            val mn = minOf(r, g, b)
+            val sat = if (mx == 0) 0f else (mx - mn).toFloat() / mx
+            val score = sat * (mx / 255f)
+            if (score > bestScore) {
+                bestScore = score
+                bestPixel = p
+            }
+        }
+    }
+    val n = w * h
+    // A washed-out "most colourful" pixel means the art is basically greyscale; average instead.
+    val chosen = if (bestScore >= 0.12f) {
+        bestPixel
+    } else {
+        android.graphics.Color.rgb((rSum / n).toInt(), (gSum / n).toInt(), (bSum / n).toInt())
+    }
+    val hsv = FloatArray(3)
+    android.graphics.Color.colorToHSV(chosen, hsv)
+    hsv[1] = hsv[1].coerceAtMost(0.72f)
+    hsv[2] = 0.46f
+    return Color(android.graphics.Color.HSVToColor(hsv))
 }
 
 /** Readable warm-cream text that sits well on every tinted wood. */
