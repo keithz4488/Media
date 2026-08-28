@@ -398,12 +398,14 @@ private fun CubbyCell(
 }
 
 /**
- * Custom artwork for a shelf cubby, or null to fall back to the drawn art. Add a drawable here
- * as each shelf's illustration lands.
+ * Custom artwork for a shelf cubby. Null falls back to the art drawn in code, which nothing
+ * uses now that all four shelves have illustrations.
  */
 private fun shelfArtFor(kind: MediaKind): Int? = when (kind) {
+    MediaKind.BOOK -> R.drawable.shelf_book
+    MediaKind.MOVIE -> R.drawable.shelf_movie
+    MediaKind.TV -> R.drawable.shelf_tv
     MediaKind.GAME -> R.drawable.shelf_game
-    else -> null
 }
 
 private fun tagline(kind: MediaKind): String = when (kind) {
