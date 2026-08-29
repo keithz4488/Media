@@ -12,11 +12,13 @@ import com.kzaller.shelf.data.Status
 import com.kzaller.shelf.data.models.ItemDto
 import com.kzaller.shelf.data.preferences.AppPreferences
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -66,9 +68,16 @@ class ShelfViewModel(
     val columnsExpanded: StateFlow<Int> =
         prefs.observeColumns(expanded = true).stateIn(viewModelScope, SharingStarted.Eagerly, 5)
 
-    /** One read of this shelf, shared by the visible list and the total count. */
-    private val shelf: StateFlow<List<ItemDto>> =
-        repo.observeShelf(kind).stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    /**
+     * One read of this shelf, shared by the visible list and the total count.
+     *
+     * shareIn, not stateIn: a StateFlow needs an initial value, and that synthetic empty list
+     * reached the grid before the real data did -- so opening a shelf drew the empty state, threw
+     * it away, and laid every cover out a second time. With no placeholder, combine below waits
+     * for real rows exactly as it did when it read the database directly.
+     */
+    private val shelf: SharedFlow<List<ItemDto>> =
+        repo.observeShelf(kind).shareIn(viewModelScope, SharingStarted.Eagerly, replay = 1)
 
     /** All active filters bundled together so the items combine stays within combine's arity. */
     private data class ActiveFilters(

@@ -13,9 +13,6 @@ import com.kzaller.shelf.data.models.ItemDto
 import com.kzaller.shelf.data.models.SearchHit
 import com.kzaller.shelf.data.models.UpdateItemRequest
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
@@ -40,14 +37,16 @@ class ShelfRepository(context: Context) {
         db.items().observeAll().map { rows -> rows.map(ItemEntity::toDto) }
 
     /**
-     * Pull every shelf. The four run together rather than one after another, and each stands or
-     * falls on its own -- previously the first failure aborted the rest, quietly leaving the
-     * remaining shelves stale.
+     * Pull every shelf, one at a time. Deliberately not concurrent: each shelf's refresh clears
+     * and rewrites its rows, and four of those landing together invalidate the database over and
+     * over, making every open shelf re-filter and re-sort on each one -- which is felt as lag
+     * exactly when the user is navigating at startup.
+     *
+     * Each shelf does stand or fall on its own, though; the first failure no longer aborts the
+     * rest and leaves them stale.
      */
     suspend fun refreshAll(force: Boolean = false): Result<Unit> = runCatching {
-        coroutineScope {
-            MediaKind.values().map { kind -> async { refresh(kind, force) } }.awaitAll()
-        }
+        MediaKind.values().forEach { refresh(it, force) }
     }
 
     /**
