@@ -33,6 +33,7 @@ export interface Env {
   GOOGLE_CLIENT_ID?: string;    // optional: when set, requests may authenticate with a Google ID token (aud = this)
   OWNER_EMAIL?: string;         // optional: the Google account that claims the pre-auth '__legacy__' library
   SESSION_SECRET?: string;      // optional: HMAC key for app session tokens (falls back to SHELF_TOKEN)
+  GOOGLE_BOOKS_API_KEY?: string; // optional: lifts Google Books off the shared anonymous quota
 }
 
 /** Bucket that owns all pre-multi-user rows until the owner claims them on first Google sign-in. */
@@ -728,47 +729,141 @@ async function deleteItem(id: string, env: Env, userId: string): Promise<Respons
 
 // ---------- external lookups ----------
 
+const OL_UA = { "user-agent": "media-shelf/0.1 (kzaller.com)" };
+
+/** Open Library publish dates are free text ("2005", "Aug 01, 2005", "1965-10"). */
+function parseYear(raw: unknown): number | null {
+  const m = typeof raw === "string" ? raw.match(/(1[0-9]{3}|20[0-9]{2})/) : null;
+  return m ? Number(m[1]) : null;
+}
+
+/** Google Books. Keyless works but shares an anonymous quota that is often exhausted, so a
+ *  failure here is an ordinary miss, never an error -- set GOOGLE_BOOKS_API_KEY to rely on it. */
+async function googleBooksHits(q: string, env: Env, limit: number): Promise<SearchHit[]> {
+  const api = new URL("https://www.googleapis.com/books/v1/volumes");
+  api.searchParams.set("q", q);
+  api.searchParams.set("maxResults", String(Math.min(Math.max(limit, 1), 20)));
+  if (env.GOOGLE_BOOKS_API_KEY) api.searchParams.set("key", env.GOOGLE_BOOKS_API_KEY);
+  const r = await fetchWithTimeout(api.toString(), {}, 7000).catch(() => null);
+  if (!r || !r.ok) return [];
+  const data = (await r.json().catch(() => null)) as any;
+  const items: any[] = Array.isArray(data?.items) ? data.items : [];
+  return items.flatMap((it): SearchHit[] => {
+    const v = it?.volumeInfo;
+    if (!v?.title) return [];
+    const isbn13 = (v.industryIdentifiers ?? []).find((i: any) => i?.type === "ISBN_13")?.identifier;
+    const authors = Array.isArray(v.authors) ? v.authors.join(", ") : null;
+    // Google serves covers over http and at thumbnail size by default; ask for something better.
+    const thumb: string | null = v.imageLinks?.thumbnail ?? v.imageLinks?.smallThumbnail ?? null;
+    const cover = thumb ? thumb.replace(/^http:/, "https:").replace(/&zoom=\d+/, "&zoom=1") : null;
+    return [{
+      external_id: String(isbn13 || it.id),
+      external_src: "google_books",
+      title: v.title,
+      subtitle: [authors, v.subtitle].filter(Boolean).join(" \u00b7 ") || null,
+      year: parseYear(v.publishedDate),
+      cover_url: cover,
+      description: trimDescription(v.description ?? null),
+    }];
+  });
+}
+
+/** Open Library keyed by ISBN. The search index misses many individual editions, so ask the
+ *  edition record directly -- it resolves far more scanned barcodes. */
+async function openLibraryIsbnHit(isbn: string): Promise<SearchHit | null> {
+  const r = await fetchWithTimeout(
+    `https://openlibrary.org/api/books?bibkeys=ISBN:${encodeURIComponent(isbn)}&format=json&jscmd=data`,
+    { headers: OL_UA },
+    7000,
+  ).catch(() => null);
+  if (!r || !r.ok) return null;
+  const data = (await r.json().catch(() => null)) as any;
+  const rec = data?.[`ISBN:${isbn}`];
+  if (!rec?.title) return null;
+  const authors = Array.isArray(rec.authors)
+    ? rec.authors.map((a: any) => a?.name).filter(Boolean).join(", ")
+    : null;
+  return {
+    external_id: isbn,
+    external_src: "open_library",
+    title: rec.title,
+    subtitle: [authors, rec.subtitle].filter(Boolean).join(" \u00b7 ") || null,
+    year: parseYear(rec.publish_date),
+    cover_url: rec.cover?.large ?? rec.cover?.medium ?? null,
+    description: null,
+  };
+}
+
+/** Open Library's search index: good for free-text, patchy for a specific ISBN. */
+async function openLibrarySearchHits(params: { isbn?: string; q?: string }): Promise<SearchHit[]> {
+  const api = new URL("https://openlibrary.org/search.json");
+  if (params.isbn) api.searchParams.set("isbn", params.isbn);
+  else if (params.q) api.searchParams.set("q", params.q);
+  api.searchParams.set("limit", "20");
+  api.searchParams.set("fields", "key,title,subtitle,author_name,first_publish_year,isbn,cover_i");
+  const r = await fetchWithTimeout(api.toString(), { headers: OL_UA }, 8000).catch(() => null);
+  if (!r || !r.ok) return [];
+  const data = (await r.json().catch(() => null)) as any;
+  const docs: any[] = data?.docs || [];
+  return docs.map((d: any): SearchHit => {
+    const firstIsbn = Array.isArray(d.isbn) && d.isbn.length > 0 ? String(d.isbn[0]) : null;
+    const workId = d.key ? String(d.key).replace("/works/", "") : "";
+    const authors = Array.isArray(d.author_name) ? d.author_name.join(", ") : null;
+    return {
+      external_id: firstIsbn || workId,
+      external_src: "open_library",
+      title: d.title || "Untitled",
+      subtitle: [authors, d.subtitle].filter(Boolean).join(" \u00b7 ") || null,
+      year: typeof d.first_publish_year === "number" ? d.first_publish_year : null,
+      cover_url: d.cover_i ? `https://covers.openlibrary.org/b/id/${d.cover_i}-L.jpg` : null,
+      description: null,
+    };
+  });
+}
+
+/** Drop repeats of the same book and put the best-described copies first. */
+function mergeBookHits(...groups: SearchHit[][]): SearchHit[] {
+  const seen = new Map<string, SearchHit>();
+  for (const hit of groups.flat()) {
+    const key = `${hit.title.toLowerCase().replace(/[^a-z0-9]+/g, "")}|${hit.year ?? ""}`;
+    const kept = seen.get(key);
+    if (!kept) {
+      seen.set(key, hit);
+      continue;
+    }
+    // Prefer whichever copy carries more: a cover beats none, a synopsis beats none.
+    const score = (h: SearchHit) => (h.cover_url ? 2 : 0) + (h.description ? 1 : 0);
+    if (score(hit) > score(kept)) seen.set(key, hit);
+  }
+  return [...seen.values()].sort(
+    (a, b) =>
+      (b.cover_url ? 2 : 0) + (b.description ? 1 : 0) -
+      ((a.cover_url ? 2 : 0) + (a.description ? 1 : 0)),
+  );
+}
+
 async function searchBooks(url: URL, env: Env): Promise<Response> {
-  // Open Library: keyless, no quota issues, mature search + cover CDN.
   const isbn = url.searchParams.get("isbn");
   const q = url.searchParams.get("q");
   if (!isbn && !q) return err(400, "q or isbn required");
 
-  const api = new URL("https://openlibrary.org/search.json");
-  if (isbn) api.searchParams.set("isbn", isbn);
-  else api.searchParams.set("q", q!);
-  api.searchParams.set("limit", "20");
-  api.searchParams.set(
-    "fields",
-    "key,title,subtitle,author_name,first_publish_year,isbn,cover_i",
-  );
-
-  const r = await fetch(api.toString(), { headers: { "user-agent": "media-shelf/0.1 (kzaller.com)" } });
-  if (!r.ok) {
-    const body = await r.text().catch(() => "");
-    return err(502, `open library ${r.status}: ${body.slice(0, 200)}`);
+  if (isbn) {
+    // A scanned barcode: ask both catalogues, since either alone misses plenty of editions.
+    const [edition, google] = await Promise.all([
+      openLibraryIsbnHit(isbn),
+      googleBooksHits(`isbn:${isbn}`, env, 3),
+    ]);
+    let hits = mergeBookHits(edition ? [edition] : [], google);
+    // Only if neither knew the ISBN, fall back to the (patchier) search index.
+    if (hits.length === 0) hits = await openLibrarySearchHits({ isbn });
+    return json({ hits });
   }
-  const data = (await r.json()) as any;
-  const docs: any[] = data.docs || [];
 
-  const hits: SearchHit[] = docs.map((d: any): SearchHit => {
-    const firstIsbn = Array.isArray(d.isbn) && d.isbn.length > 0 ? String(d.isbn[0]) : null;
-    const workId = d.key ? String(d.key).replace("/works/", "") : "";
-    const externalId = firstIsbn || workId;
-    const cover = d.cover_i ? `https://covers.openlibrary.org/b/id/${d.cover_i}-L.jpg` : null;
-    const authors = Array.isArray(d.author_name) ? d.author_name.join(", ") : null;
-    const subtitle = [authors, d.subtitle].filter(Boolean).join(" · ") || null;
-    return {
-      external_id: externalId,
-      external_src: "open_library",
-      title: d.title || "Untitled",
-      subtitle,
-      year: typeof d.first_publish_year === "number" ? d.first_publish_year : null,
-      cover_url: cover,
-      description: null,
-    };
-  });
-  return json({ hits });
+  const [ol, google] = await Promise.all([
+    openLibrarySearchHits({ q: q! }),
+    googleBooksHits(q!, env, 10),
+  ]);
+  return json({ hits: mergeBookHits(ol, google).slice(0, 25) });
 }
 
 async function searchTmdb(url: URL, env: Env, kind: "movie" | "tv"): Promise<Response> {
@@ -1589,6 +1684,8 @@ async function enrichForCreate(item: Item, env: Env, force = false): Promise<Ite
     switch (item.external_src) {
       case "open_library":
         return await enrichOpenLibrary(item);
+      case "google_books":
+        return await enrichGoogleBooks(item, env);
       case "rawg":
         return await enrichRawg(item, env);
       case "tmdb":
@@ -1666,6 +1763,9 @@ async function listCovers(id: string, env: Env, userId: string): Promise<Respons
         break;
       case "open_library":
         covers = await openLibraryCovers(row);
+        break;
+      case "google_books":
+        covers = await googleBooksCovers(row, env);
         break;
     }
   } catch {
@@ -1992,6 +2092,30 @@ async function openLibraryCovers(item: Item): Promise<CoverOption[]> {
     if (opts.length >= 16) break;
   }
   return opts;
+}
+
+/** Google Books usually hands us a synopsis up front; this covers the case where it didn't. */
+async function enrichGoogleBooks(item: Item, env: Env): Promise<Item> {
+  const id = item.external_id;
+  if (!id) return item;
+  // external_id is an ISBN when the volume had one, otherwise a Google volume id.
+  const q = /^\d{10,13}$/.test(id) ? `isbn:${id}` : `id:${id}`;
+  const hits = await googleBooksHits(q, env, 1);
+  const desc = hits[0]?.description;
+  return desc ? { ...item, description: desc } : item;
+}
+
+/** The same jacket at a few sizes, so the cover picker has something to offer. */
+async function googleBooksCovers(item: Item, env: Env): Promise<CoverOption[]> {
+  const id = item.external_id;
+  if (!id) return [];
+  const q = /^\d{10,13}$/.test(id) ? `isbn:${id}` : `id:${id}`;
+  const hit = (await googleBooksHits(q, env, 1))[0];
+  if (!hit?.cover_url) return [];
+  return [
+    { url: hit.cover_url.replace(/&zoom=\d+/, "&zoom=1"), label: "Google Books" },
+    { url: hit.cover_url.replace(/&zoom=\d+/, "&zoom=0"), label: "Google Books (large)" },
+  ];
 }
 
 async function enrichOpenLibrary(item: Item): Promise<Item> {
