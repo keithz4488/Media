@@ -743,6 +743,9 @@ async function googleBooksHits(q: string, env: Env, limit: number): Promise<Sear
   const api = new URL("https://www.googleapis.com/books/v1/volumes");
   api.searchParams.set("q", q);
   api.searchParams.set("maxResults", String(Math.min(Math.max(limit, 1), 20)));
+  // Workers call from datacenter IPs, which Google can't geolocate -- without an explicit
+  // country it rejects the request outright ("cannot determine user location").
+  api.searchParams.set("country", "US");
   if (env.GOOGLE_BOOKS_API_KEY) api.searchParams.set("key", env.GOOGLE_BOOKS_API_KEY);
   const r = await fetchWithTimeout(api.toString(), {}, 7000).catch(() => null);
   if (!r || !r.ok) return [];
