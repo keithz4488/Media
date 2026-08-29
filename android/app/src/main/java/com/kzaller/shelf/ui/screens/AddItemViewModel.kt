@@ -119,20 +119,27 @@ class AddItemViewModel(
         viewModelScope.launch {
             _searching.value = true
             _statusMsg.value = "Looking up $value"
-            val result = if (kind == MediaKind.BOOK) {
-                repo.lookupBookByIsbn(value)
-            } else {
-                repo.search(kind, value)
-            }
-            result.onSuccess { hits ->
-                if (hits.isNotEmpty()) {
-                    _hits.value = hits
-                    _mode.value = Mode.SEARCH
-                    _statusMsg.value = if (hits.size == 1) "Found 1 match" else "Found ${hits.size} matches"
-                } else {
-                    _query.value = value
-                    _mode.value = Mode.SEARCH
-                    _statusMsg.value = "No match for $value -- try refining"
+            // A barcode is only a product id. The backend resolves it: an ISBN goes straight to
+            // the book catalogue, anything else via a product database to get the retail name,
+            // which it then searches for properly.
+            repo.lookupBarcode(value, kind).onSuccess { res ->
+                _mode.value = Mode.SEARCH
+                when {
+                    res.hits.isNotEmpty() -> {
+                        _hits.value = res.hits
+                        _statusMsg.value =
+                            if (res.hits.size == 1) "Found 1 match" else "Found ${res.hits.size} matches"
+                    }
+                    // The code was recognised but nothing matched: seed the search box with the
+                    // product name so the user can nudge it rather than retype from scratch.
+                    res.matched != null -> {
+                        _query.value = res.matched
+                        _statusMsg.value = "Scanned \"${res.matched}\" -- no match, try refining"
+                    }
+                    else -> {
+                        _query.value = ""
+                        _statusMsg.value = "Barcode $value isn't in the product database"
+                    }
                 }
             }.onFailure { _error.value = it.message }
             _searching.value = false

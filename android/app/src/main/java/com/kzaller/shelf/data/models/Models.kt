@@ -52,6 +52,14 @@ data class SearchHit(
 @Serializable
 data class SearchResponse(val hits: List<SearchHit> = emptyList())
 
+/** Barcode resolution: [matched] is the retail product name the code resolved to, if any. */
+@Serializable
+data class BarcodeResponse(
+    val hits: List<SearchHit> = emptyList(),
+    val via: String? = null,
+    val matched: String? = null,
+)
+
 @Serializable
 data class CreateItemRequest(
     val kind: MediaKind,

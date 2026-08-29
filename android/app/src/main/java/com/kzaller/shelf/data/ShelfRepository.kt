@@ -169,6 +169,10 @@ class ShelfRepository(context: Context) {
         api.searchBooks(isbn = isbn).hits
     }
 
+    /** Resolve a scanned barcode for a shelf: ISBN direct, otherwise via the product database. */
+    suspend fun lookupBarcode(code: String, kind: MediaKind): Result<com.kzaller.shelf.data.models.BarcodeResponse> =
+        runCatching { api.lookupBarcode(code = code, kind = kind.wire) }
+
     /** Register the Steam credentials with the backend so its daily cron can auto-add purchases. */
     suspend fun saveSteamConfig(apiKey: String, steamId: String): Result<Unit> = runCatching {
         api.saveSteamConfig(com.kzaller.shelf.data.models.SteamConfigRequest(apiKey, steamId))

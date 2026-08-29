@@ -55,6 +55,13 @@ interface ShelfApi {
     @GET("search/games")
     suspend fun searchGames(@Query("q") q: String? = null, @Query("slug") slug: String? = null): SearchResponse
 
+    /** Resolve a scanned barcode to catalogue hits for the given shelf. */
+    @GET("lookup/barcode")
+    suspend fun lookupBarcode(
+        @Query("code") code: String,
+        @Query("kind") kind: String,
+    ): com.kzaller.shelf.data.models.BarcodeResponse
+
     @POST("identify")
     suspend fun identify(@Body body: IdentifyRequest): IdentifyResponse
 

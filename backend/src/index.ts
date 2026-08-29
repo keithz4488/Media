@@ -304,6 +304,7 @@ export default {
       if (url.pathname === "/search/movies") return searchTmdb(url, env, "movie");
       if (url.pathname === "/search/tv") return searchTmdb(url, env, "tv");
       if (url.pathname === "/search/games") return searchGames(url, env);
+      if (url.pathname === "/lookup/barcode") return lookupBarcode(url, env);
       if (url.pathname === "/identify" && req.method === "POST") return identifyImage(req, env);
       if (url.pathname === "/identify/shelf" && req.method === "POST") return identifyShelf(req, env);
 
@@ -1467,6 +1468,99 @@ async function identifyShelf(req: Request, env: Env): Promise<Response> {
     }
   }
   return json({ results });
+}
+
+// ---------- barcode lookup ----------
+
+/**
+ * A retail barcode is only ever a product id -- there is no free database that returns good
+ * media metadata for one. Books are the exception: an EAN starting 978/979 *is* an ISBN, which
+ * Open Library resolves directly.
+ *
+ * For everything else we go via a generic product database to turn the barcode into the product's
+ * name, tidy the retail packaging noise out of it, then run that through the catalogue we already
+ * trust (TMDB / RAWG) to get real metadata.
+ */
+function isIsbn(code: string): boolean {
+  const d = code.replace(/[^0-9Xx]/g, "");
+  return (d.length === 13 && (d.startsWith("978") || d.startsWith("979"))) || d.length === 10;
+}
+
+/** Ask a keyless product database what this barcode is called. Null when it can't say. */
+async function upcProductName(code: string): Promise<string | null> {
+  // The trial tier needs no key; it is rate limited, so a miss here is normal and must not throw.
+  const r = await fetchWithTimeout(
+    `https://api.upcitemdb.com/prod/trial/lookup?upc=${encodeURIComponent(code)}`,
+    { headers: { accept: "application/json" } },
+    7000,
+  ).catch(() => null);
+  if (!r || !r.ok) return null;
+  const data = (await r.json().catch(() => null)) as any;
+  const item = data?.items?.[0];
+  const title = item?.title ?? item?.brand ?? null;
+  return typeof title === "string" && title.trim() ? title.trim() : null;
+}
+
+/**
+ * Retail titles carry a lot that would wreck a catalogue search: format tags, edition suffixes,
+ * platform names, region codes. Strip those back to something close to the work's actual title.
+ */
+function cleanProductTitle(raw: string): string {
+  let t = raw;
+  t = t.replace(/\[[^\]]*\]/g, " ");                  // [Blu-ray], [DVD]
+  t = t.replace(/\((?:[^)]*(?:blu-?ray|dvd|4k|uhd|hd|edition|region|disc|import|widescreen)[^)]*)\)/gi, " ");
+  t = t.replace(
+    /\b(blu-?ray|dvd|4k(?:\s*ultra)?(?:\s*hd)?|uhd|steelbook|digital\s*copy|widescreen|fullscreen|region\s*[0-9a-z]|multi-?format|combo\s*pack|box\s*set|w\/\s*digital)\b/gi,
+    " ",
+  );
+  t = t.replace(
+    /\b(xbox(?:\s*(?:one|360|series\s*[sx]))?|playstation\s*[1-5]?|ps[1-5]|nintendo(?:\s*switch)?|switch|wii\s*u?|pc(?:\s*dvd)?|steam)\b/gi,
+    " ",
+  );
+  t = t.replace(/\((?:19|20)\d{2}\)/g, " ");           // a bare year confuses catalogue search
+  t = t.replace(/\s{2,}/g, " ").trim();
+  // Stripping the format tags leaves dangling joiners ("Dune +", "Alien -"); take those off both ends.
+  t = t.replace(/^[-–—:|,+&\s]+|[-–—:|,+&\s]+$/g, "").trim();
+  return t;
+}
+
+/** Resolve a scanned barcode to catalogue hits for the shelf being added to. */
+async function lookupBarcode(url: URL, env: Env): Promise<Response> {
+  const code = (url.searchParams.get("code") || "").trim();
+  const kind = url.searchParams.get("kind") || "";
+  if (!code) return err(400, "code required");
+  if (!["book", "movie", "tv", "game"].includes(kind)) return err(400, "valid kind required");
+
+  const search = async (q: string): Promise<SearchHit[]> => {
+    const u = new URL(`https://shelf.local/search?q=${encodeURIComponent(q)}`);
+    const resp = kind === "book" ? await searchBooks(u, env)
+      : kind === "game" ? await searchGames(u, env)
+      : await searchTmdb(u, env, kind as "movie" | "tv");
+    const body = (await resp.json().catch(() => null)) as any;
+    return Array.isArray(body?.hits) ? body.hits : [];
+  };
+
+  // Books: the barcode is the ISBN, so go straight at it.
+  if (kind === "book" && isIsbn(code)) {
+    const u = new URL(`https://shelf.local/search?isbn=${encodeURIComponent(code)}`);
+    const body = (await (await searchBooks(u, env)).json().catch(() => null)) as any;
+    const hits: SearchHit[] = Array.isArray(body?.hits) ? body.hits : [];
+    if (hits.length > 0) return json({ hits, via: "isbn" });
+  }
+
+  // Everything else: barcode -> product name -> catalogue.
+  const product = await upcProductName(code);
+  if (!product) {
+    return json({ hits: [], via: "upc", matched: null, reason: "barcode not in product database" });
+  }
+  const title = cleanProductTitle(product);
+  let hits = title ? await search(title) : [];
+  // Retail names often trail a subtitle the catalogue doesn't use; retry on the leading phrase.
+  if (hits.length === 0) {
+    const head = title.split(/\s+[-–—:]\s+/)[0]?.trim();
+    if (head && head !== title && head.length >= 3) hits = await search(head);
+  }
+  return json({ hits, via: "upc", matched: product, query: title });
 }
 
 // ---------- per-source enrichment at item-create time ----------
