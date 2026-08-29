@@ -268,6 +268,11 @@ export default {
     }
 
     if (url.pathname === "/health") return json({ ok: true });
+
+    // Uploaded covers are served unauthenticated: the app's image loader has no way to attach
+    // a token, and the id is an unguessable uuid. Same exposure as any cover URL we already use.
+    const coverMatch = url.pathname.match(/^\/covers\/([0-9a-f-]{36})$/);
+    if (coverMatch && req.method === "GET") return serveCustomCover(coverMatch[1], env);
     // Public read-only shelf view -- intentionally pre-auth.
     if (url.pathname === "/k" || url.pathname === "/k/") return publicShelves(env);
     // Plex webhook: Plex can't send an Authorization header, so this route authenticates via a
@@ -306,6 +311,9 @@ export default {
       if (url.pathname === "/search/tv") return searchTmdb(url, env, "tv");
       if (url.pathname === "/search/games") return searchGames(url, env);
       if (url.pathname === "/lookup/barcode") return lookupBarcode(url, env);
+      if (url.pathname === "/covers/upload" && req.method === "POST") {
+        return uploadCustomCover(req, url, env, userId);
+      }
       if (url.pathname === "/identify" && req.method === "POST") return identifyImage(req, env);
       if (url.pathname === "/identify/shelf" && req.method === "POST") return identifyShelf(req, env);
 
@@ -1659,6 +1667,53 @@ async function lookupBarcode(url: URL, env: Env): Promise<Response> {
     if (head && head !== title && head.length >= 3) hits = await search(head);
   }
   return json({ hits, via: "upc", matched: product, query: title });
+}
+
+// ---------- user-uploaded covers ----------
+
+/** Roughly the largest image we'll accept, before base64 inflates it by a third. */
+const MAX_COVER_BYTES = 1_200_000;
+
+/**
+ * Store a cover the user picked from their own photos and hand back a URL for it. The app
+ * downscales before sending, so this is a guard against something unreasonable rather than the
+ * normal path.
+ */
+async function uploadCustomCover(req: Request, url: URL, env: Env, userId: string): Promise<Response> {
+  const body = (await req.json().catch(() => null)) as
+    | { image?: string; mime?: string; item_id?: string }
+    | null;
+  const data = body?.image;
+  if (!data) return err(400, "image (base64) required");
+  // base64 carries 3 bytes per 4 characters.
+  if (data.length * 0.75 > MAX_COVER_BYTES) return err(413, "image too large");
+
+  const mime = body?.mime === "image/png" ? "image/png" : "image/jpeg";
+  const id = uuid();
+  await env.DB.prepare(
+    `INSERT INTO custom_covers (id, user_id, item_id, mime, data, created_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6)`,
+  )
+    .bind(id, userId, body?.item_id ?? null, mime, data, Date.now())
+    .run();
+
+  return json({ url: `${url.origin}/covers/${id}`, id }, { status: 201 });
+}
+
+/** Serve a stored cover. Immutable: the id is only ever minted for one set of bytes. */
+async function serveCustomCover(id: string, env: Env): Promise<Response> {
+  const row = await env.DB.prepare("SELECT mime, data FROM custom_covers WHERE id = ?1")
+    .bind(id)
+    .first<{ mime: string; data: string }>();
+  if (!row) return err(404, "cover not found");
+  // b64urlToBytes also accepts the standard alphabet, which is what the app sends.
+  return new Response(b64urlToBytes(row.data), {
+    headers: {
+      "content-type": row.mime,
+      "cache-control": "public, max-age=31536000, immutable",
+      "access-control-allow-origin": "*",
+    },
+  });
 }
 
 // ---------- per-source enrichment at item-create time ----------

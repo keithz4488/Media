@@ -118,6 +118,16 @@ data class CoverOption(
 )
 
 @Serializable
+data class UploadCoverRequest(
+    val image: String,
+    val mime: String = "image/jpeg",
+    @SerialName("item_id") val itemId: String? = null,
+)
+
+@Serializable
+data class UploadCoverResponse(val url: String = "", val id: String = "")
+
+@Serializable
 data class CoversResponse(
     val covers: List<CoverOption> = emptyList(),
 )

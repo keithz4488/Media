@@ -1,5 +1,8 @@
 package com.kzaller.shelf.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -39,6 +42,7 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
@@ -163,8 +167,14 @@ private fun DetailPage(
     val steamAchLoading by vm.steamAchLoading.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     var coverSheetOpen by remember { mutableStateOf(false) }
+    val uploadingCover by vm.uploadingCover.collectAsState()
 
     val context = LocalContext.current
+    // The modern photo picker: no storage permission, and the user only ever hands over the
+    // single image they chose.
+    val photoPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { uri -> if (uri != null) vm.uploadCover(uri, context) }
     val prefs = remember { AppPreferences(context) }
     val steamKey by prefs.observeSteamKey().collectAsState(initial = "")
     val steamId by prefs.observeSteamId().collectAsState(initial = "")
@@ -561,9 +571,15 @@ private fun DetailPage(
                 CoverPickerSheet(
                     covers = covers,
                     loading = loadingCovers,
+                    uploading = uploadingCover,
                     onPick = { url ->
                         vm.setCover(url)
                         coverSheetOpen = false
+                    },
+                    onPickFromPhotos = {
+                        photoPicker.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                        )
                     },
                     onClose = { coverSheetOpen = false },
                 )
@@ -577,7 +593,9 @@ private fun DetailPage(
 private fun CoverPickerSheet(
     covers: List<CoverOption>,
     loading: Boolean,
+    uploading: Boolean,
     onPick: (String) -> Unit,
+    onPickFromPhotos: () -> Unit,
     onClose: () -> Unit,
 ) {
     Column(modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 24.dp)) {
@@ -586,7 +604,24 @@ private fun CoverPickerSheet(
             Spacer(Modifier.weight(1f))
             TextButton(onClick = onClose) { Text("Close") }
         }
-        Spacer(Modifier.height(12.dp))
+        // Offered up front rather than as a fallback: when a catalogue has no art at all, this
+        // is the only way to give the item a cover.
+        OutlinedButton(
+            onClick = onPickFromPhotos,
+            enabled = !uploading,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            if (uploading) {
+                CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Uploading…")
+            } else {
+                Icon(Icons.Default.PhotoLibrary, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Upload from photos")
+            }
+        }
+        Spacer(Modifier.height(16.dp))
         when {
             loading -> Box(
                 modifier = Modifier.fillMaxWidth().padding(40.dp),
@@ -595,7 +630,7 @@ private fun CoverPickerSheet(
                 CircularProgressIndicator()
             }
             covers.isEmpty() -> Text(
-                text = "No alternate covers available for this item.",
+                text = "No alternate covers found for this item \u2014 upload one from your photos.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
             )

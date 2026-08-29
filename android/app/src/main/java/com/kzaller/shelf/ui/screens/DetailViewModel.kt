@@ -138,6 +138,25 @@ class DetailViewModel(
     private val _loadingCovers = MutableStateFlow(false)
     val loadingCovers = _loadingCovers.asStateFlow()
 
+    private val _uploadingCover = MutableStateFlow(false)
+    val uploadingCover = _uploadingCover.asStateFlow()
+
+    /**
+     * Use a photo from the user's own library as the cover. Uploaded rather than referenced in
+     * place: a device-local uri would mean nothing on their other devices, and would break the
+     * day the photo is deleted.
+     */
+    fun uploadCover(uri: android.net.Uri, context: android.content.Context) {
+        viewModelScope.launch {
+            _uploadingCover.value = true
+            _toast.value = "Uploading cover…"
+            repo.uploadCover(id, uri, context)
+                .onSuccess { url -> setCover(url) }
+                .onFailure { _error.value = it.message ?: "Couldn't upload that image" }
+            _uploadingCover.value = false
+        }
+    }
+
     fun loadCovers() {
         viewModelScope.launch {
             _loadingCovers.value = true

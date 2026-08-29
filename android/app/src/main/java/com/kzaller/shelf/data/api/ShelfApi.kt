@@ -62,6 +62,12 @@ interface ShelfApi {
         @Query("kind") kind: String,
     ): com.kzaller.shelf.data.models.BarcodeResponse
 
+    /** Store a cover picked from the user's own photos; returns the URL to point the item at. */
+    @POST("covers/upload")
+    suspend fun uploadCover(
+        @Body body: com.kzaller.shelf.data.models.UploadCoverRequest,
+    ): com.kzaller.shelf.data.models.UploadCoverResponse
+
     @POST("identify")
     suspend fun identify(@Body body: IdentifyRequest): IdentifyResponse
 

@@ -12,8 +12,10 @@ import com.kzaller.shelf.data.models.IdentifyResult
 import com.kzaller.shelf.data.models.ItemDto
 import com.kzaller.shelf.data.models.SearchHit
 import com.kzaller.shelf.data.models.UpdateItemRequest
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 
 class ShelfRepository(context: Context) {
     private val db = ShelfDatabase.get(context)
@@ -215,6 +217,20 @@ class ShelfRepository(context: Context) {
         resp.item
     }
 
+    /**
+     * Upload a cover the user picked from their photos. Downscaled and re-compressed first: the
+     * originals are many megapixels, far more than a shelf thumbnail needs, and the backend caps
+     * what it will accept.
+     */
+    suspend fun uploadCover(itemId: String, source: android.net.Uri, context: Context): Result<String> =
+        runCatching {
+            val bytes = withContext(Dispatchers.IO) { compressForCover(context, source) }
+            val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+            api.uploadCover(
+                com.kzaller.shelf.data.models.UploadCoverRequest(image = b64, itemId = itemId),
+            ).url
+        }
+
     suspend fun listCovers(id: String): Result<List<CoverOption>> = runCatching {
         api.covers(id).covers
     }
@@ -235,4 +251,57 @@ class ShelfRepository(context: Context) {
         private val lastRefresh = java.util.concurrent.ConcurrentHashMap<String, Long>()
         private const val REFRESH_INTERVAL_MS = 30_000L
     }
+}
+
+/**
+ * Turn a picked photo into something sensible to store as a cover: phone photos are many
+ * megapixels, far more than a shelf thumbnail needs and larger than the backend accepts.
+ * Caps the long edge and re-encodes as JPEG.
+ */
+private fun compressForCover(context: Context, uri: android.net.Uri): ByteArray {
+    val maxEdge = 1000
+    var bitmap: android.graphics.Bitmap =
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            // ImageDecoder applies the photo's EXIF orientation, so portraits don't arrive sideways.
+            val src = android.graphics.ImageDecoder.createSource(context.contentResolver, uri)
+            android.graphics.ImageDecoder.decodeBitmap(src) { decoder, info, _ ->
+                val scale = maxOf(info.size.width, info.size.height).toFloat() / maxEdge
+                if (scale > 1f) {
+                    decoder.setTargetSize(
+                        (info.size.width / scale).toInt().coerceAtLeast(1),
+                        (info.size.height / scale).toInt().coerceAtLeast(1),
+                    )
+                }
+                // Hardware bitmaps can't be read back, and we need to compress this one.
+                decoder.allocator = android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
+            }
+        } else {
+            // Older devices: sample down while decoding so a huge photo can't blow the heap.
+            val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            context.contentResolver.openInputStream(uri).use {
+                android.graphics.BitmapFactory.decodeStream(it, null, bounds)
+            }
+            var sample = 1
+            while (maxOf(bounds.outWidth, bounds.outHeight) / sample > maxEdge * 2) sample *= 2
+            val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = sample }
+            context.contentResolver.openInputStream(uri).use {
+                android.graphics.BitmapFactory.decodeStream(it, null, opts)
+            } ?: error("Couldn't read that image")
+        }
+
+    // Whichever path decoded it, hold the cap.
+    val longest = maxOf(bitmap.width, bitmap.height)
+    if (longest > maxEdge) {
+        val k = maxEdge.toFloat() / longest
+        bitmap = android.graphics.Bitmap.createScaledBitmap(
+            bitmap,
+            (bitmap.width * k).toInt().coerceAtLeast(1),
+            (bitmap.height * k).toInt().coerceAtLeast(1),
+            true,
+        )
+    }
+
+    val out = java.io.ByteArrayOutputStream()
+    bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, out)
+    return out.toByteArray()
 }
