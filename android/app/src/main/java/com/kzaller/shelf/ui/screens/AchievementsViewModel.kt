@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -28,8 +29,19 @@ class AchievementsViewModel(
     private val prefs: AppPreferences,
 ) : ViewModel() {
 
+    /**
+     * One shared read of the library. Both the unlock watcher and the achievements screen work
+     * off this; previously each opened its own full-table observer, so every rating, status or
+     * cover change converted the entire library twice over.
+     *
+     * Shared rather than stateIn: no synthetic empty first value, so the watcher below still sees
+     * the real library as its first emission and its seeding logic behaves exactly as before.
+     */
+    private val library = repo.observeAll()
+        .shareIn(viewModelScope, SharingStarted.Eagerly, replay = 1)
+
     val ui: StateFlow<List<AchievementUi>> =
-        repo.observeAll().map { items ->
+        library.map { items ->
             val s = AchievementStats.from(items)
             Achievements.ALL.map { AchievementUi(it, it.current(s), it.unlocked(s)) }
         }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
@@ -55,7 +67,7 @@ class AchievementsViewModel(
             // whole current catalog as already-known so adding achievements doesn't storm.
             var knownReady = known.isNotEmpty()
 
-            repo.observeAll().collect { items ->
+            library.collect { items ->
                 val computed = Achievements.unlockedIds(AchievementStats.from(items))
                 if (!seeded) {
                     prefs.setUnlockedAchievements(computed)

@@ -132,9 +132,12 @@ fun DetailScreen(
     val pagerState = rememberPagerState(initialPage = initialIndex) { items.size }
 
     // Swiping to another item makes that one the cover that flies back to the shelf.
+    // Keyed on the id rather than the list: keying on `items` re-ran an equality check across
+    // the whole shelf (~1,800 movies) and restarted the effect on any change anywhere.
     val flyingCover = LocalFlyingCoverId.current
-    LaunchedEffect(pagerState.currentPage, items) {
-        items.getOrNull(pagerState.currentPage)?.let { flyingCover.value = it.id }
+    val currentId = items.getOrNull(pagerState.currentPage)?.id
+    LaunchedEffect(currentId) {
+        if (currentId != null) flyingCover.value = currentId
     }
 
     HorizontalPager(

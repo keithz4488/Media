@@ -38,8 +38,10 @@ android {
         applicationId = "com.kzaller.shelf"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0"
+        // CI passes its run number so every build supersedes the last; Android refuses to
+        // install over a newer versionCode, and this sat at 1 for a hundred-odd builds.
+        versionCode = 1 + ((System.getenv("BUILD_NUMBER") ?: "0").toIntOrNull() ?: 0)
+        versionName = "1.0"
 
         buildConfigField("String", "API_BASE", "\"$shelfApiBase\"")
         buildConfigField("String", "API_TOKEN", "\"$shelfApiToken\"")

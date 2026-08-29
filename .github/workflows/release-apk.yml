@@ -76,6 +76,9 @@ jobs:
 
       - name: Build release APK
         working-directory: android
+        env:
+          # Feeds versionCode, so each build installs cleanly over the previous one.
+          BUILD_NUMBER: ${{ github.run_number }}
         # `gradle` is provided by setup-gradle@v3 and uses the version pinned in
         # gradle-wrapper.properties. Equivalent to ./gradlew assembleRelease.
         run: gradle assembleRelease --no-daemon --stacktrace

@@ -66,6 +66,10 @@ class ShelfViewModel(
     val columnsExpanded: StateFlow<Int> =
         prefs.observeColumns(expanded = true).stateIn(viewModelScope, SharingStarted.Eagerly, 5)
 
+    /** One read of this shelf, shared by the visible list and the total count. */
+    private val shelf: StateFlow<List<ItemDto>> =
+        repo.observeShelf(kind).stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
     /** All active filters bundled together so the items combine stays within combine's arity. */
     private data class ActiveFilters(
         val status: Set<String>,
@@ -81,7 +85,7 @@ class ShelfViewModel(
 
     /** Items visible on the shelf: kind -> status/format/platform/console filters -> search -> sort. */
     val items: StateFlow<List<ItemDto>> =
-        combine(repo.observeShelf(kind), activeFilters, _query, sort) { all, af, query, sort ->
+        combine(shelf, activeFilters, _query, sort) { all, af, query, sort ->
             // Defensive: the DAO already filters by kind in SQL, but enforce here too
             // so a stale emission can't slip a different-kind item into the grid.
             val ofKind = all.filter { it.kind == kind }
@@ -132,9 +136,7 @@ class ShelfViewModel(
 
     /** Full unfiltered count, for a "showing X of Y" label when filters/search are active. */
     val totalCount: StateFlow<Int> =
-        repo.observeShelf(kind)
-            .map { it.size }
-            .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+        shelf.map { it.size }.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
     private val _refreshing = MutableStateFlow(false)
     val refreshing = _refreshing.asStateFlow()

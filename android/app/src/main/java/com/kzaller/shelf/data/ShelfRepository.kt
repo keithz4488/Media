@@ -13,6 +13,9 @@ import com.kzaller.shelf.data.models.ItemDto
 import com.kzaller.shelf.data.models.SearchHit
 import com.kzaller.shelf.data.models.UpdateItemRequest
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
@@ -36,8 +39,15 @@ class ShelfRepository(context: Context) {
     fun observeAll(): Flow<List<ItemDto>> =
         db.items().observeAll().map { rows -> rows.map(ItemEntity::toDto) }
 
+    /**
+     * Pull every shelf. The four run together rather than one after another, and each stands or
+     * falls on its own -- previously the first failure aborted the rest, quietly leaving the
+     * remaining shelves stale.
+     */
     suspend fun refreshAll(force: Boolean = false): Result<Unit> = runCatching {
-        MediaKind.values().forEach { refresh(it, force).getOrThrow() }
+        coroutineScope {
+            MediaKind.values().map { kind -> async { refresh(kind, force) } }.awaitAll()
+        }
     }
 
     /**
