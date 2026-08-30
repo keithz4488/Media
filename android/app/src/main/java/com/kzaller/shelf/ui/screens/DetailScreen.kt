@@ -87,10 +87,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.kzaller.shelf.ui.LocalFlyingCoverId
@@ -110,9 +112,12 @@ import com.kzaller.shelf.data.SteamAchievement
 import com.kzaller.shelf.data.SteamAchievementData
 import com.kzaller.shelf.data.preferences.AppPreferences
 import com.kzaller.shelf.data.models.CoverOption
+import com.kzaller.shelf.data.models.ItemDto
+import com.kzaller.shelf.data.models.Scores
 import com.kzaller.shelf.ui.components.WoodBackground
 import com.kzaller.shelf.ui.components.shelfTextFieldColors
 import com.kzaller.shelf.ui.theme.MediaShelfTheme
+import com.kzaller.shelf.ui.theme.ShelfFlavor
 import com.kzaller.shelf.ui.theme.flavorFor
 
 /**
@@ -256,319 +261,62 @@ private fun DetailPage(
         ) { padding ->
             WoodBackground(modifier = Modifier.padding(padding)) {
                 if (current == null) return@WoodBackground
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                        .padding(20.dp),
-                ) {
-                    // Compact header: a standing cover beside the title, meta, and rating,
-                    // so more is visible above the fold (Cibby-style). Tap the cover to swap art.
+                // Unfolded, a single narrow column left most of the screen empty. Split it in
+                // two: the cover and what the item is on one side, everything you can change on
+                // the other. Each side scrolls on its own, since their lengths are unrelated.
+                if (LocalConfiguration.current.screenWidthDp >= 600) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier.fillMaxSize().padding(20.dp),
+                        horizontalArrangement = Arrangement.spacedBy(28.dp),
                     ) {
-                        Box(
+                        Column(
                             modifier = Modifier
-                                .width(128.dp)
-                                .aspectRatio(if (current.kind == MediaKind.GAME) 3f / 4f else 2f / 3f)
-                                // The same cover the user tapped on the shelf: it flies here.
-                                .coverFlight(current.id)
-                                .shadow(14.dp, RoundedCornerShape(10.dp), clip = false)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(Color.Black.copy(alpha = 0.25f))
-                                .clickable {
-                                    coverSheetOpen = true
-                                    vm.loadCovers()
-                                },
-                            contentAlignment = Alignment.Center,
+                                .weight(0.42f)
+                                .verticalScroll(rememberScrollState()),
                         ) {
-                            if (current.coverUrl != null) {
-                                AsyncImage(
-                                    model = current.coverUrl,
-                                    contentDescription = current.title,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize(),
-                                )
-                            } else {
-                                Text(
-                                    text = current.title.take(2).uppercase(),
-                                    style = flavor.titleStyle.copy(color = flavor.accent),
-                                )
-                            }
-                            // Small badge hinting the cover is tappable to change art.
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.BottomEnd)
-                                    .padding(6.dp)
-                                    .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(50))
-                                    .padding(5.dp),
-                            ) {
-                                Icon(
-                                    Icons.Default.Image,
-                                    contentDescription = "Change cover",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(14.dp),
-                                )
-                            }
-                        }
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = current.title,
-                                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                            DetailHeader(
+                                current = current,
+                                flavor = flavor,
+                                stacked = true,
+                                coverWidth = 220.dp,
+                                onCoverTap = { coverSheetOpen = true; vm.loadCovers() },
+                                onRate = { vm.setRating(it) },
                             )
-                            val secondary = buildList {
-                                current.subtitle?.let { add(it) }
-                                current.year?.let { add(it.toString()) }
-                                if (current.kind == MediaKind.TV && (current.seasons ?: 0) > 0) {
-                                    add("${current.seasons} season${if (current.seasons == 1) "" else "s"}")
-                                }
-                            }.joinToString(" · ")
-                            if (secondary.isNotBlank()) {
-                                Spacer(Modifier.height(4.dp))
-                                Text(
-                                    text = secondary,
-                                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
-                            }
-                            Spacer(Modifier.height(10.dp))
-                            Row {
-                                for (i in 1..5) {
-                                    val filled = (current.rating ?: 0) >= i
-                                    Icon(
-                                        imageVector = if (filled) Icons.Default.Star else Icons.Default.StarBorder,
-                                        contentDescription = "Rate $i",
-                                        tint = flavor.accent,
-                                        modifier = Modifier
-                                            .size(30.dp)
-                                            .clip(RoundedCornerShape(50))
-                                            .clickable { vm.setRating(if (current.rating == i) null else i) }
-                                            .padding(2.dp),
-                                    )
-                                }
-                            }
+                            // The synopsis rides with the cover rather than trailing the
+                            // controls, which is what fills this column out.
+                            DetailAbout(current)
+                        }
+                        Column(
+                            modifier = Modifier
+                                .weight(0.58f)
+                                .verticalScroll(rememberScrollState()),
+                        ) {
+                            DetailSections(
+                                current, flavor, vm, scores, steamAch, steamAchLoading,
+                                steamKey, steamId,
+                            )
                         }
                     }
-
-                    Spacer(Modifier.height(20.dp))
-                    Text("Status", style = MaterialTheme.typography.titleSmall)
-                    Spacer(Modifier.height(6.dp))
-                    val selectedStatuses = Status.parse(current.status)
-                    val options = Status.optionsFor(current.kind)
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                            .padding(20.dp),
                     ) {
-                        options.forEach { s ->
-                            val on = s in selectedStatuses
-                            AssistChip(
-                                onClick = { vm.setStatus(Status.toggle(current.status, s)) },
-                                label = {
-                                    Text(
-                                        text = Status.label(s, current.kind),
-                                        color = if (on) flavor.accent else MaterialTheme.colorScheme.onBackground,
-                                    )
-                                },
-                                colors = AssistChipDefaults.assistChipColors(
-                                    containerColor = if (on) flavor.accent.copy(alpha = 0.22f) else Color.Transparent,
-                                ),
-                            )
-                        }
-                    }
-
-                    Spacer(Modifier.height(16.dp))
-                    Text("Format", style = MaterialTheme.typography.titleSmall)
-                    Spacer(Modifier.height(6.dp))
-                    val selectedFormats = Format.parse(current.format)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Format.ALL.forEach { f ->
-                            val on = f in selectedFormats
-                            AssistChip(
-                                onClick = { vm.setFormat(Format.toggle(current.format, f)) },
-                                label = {
-                                    Text(
-                                        text = Format.label(f),
-                                        color = if (on) flavor.accent else MaterialTheme.colorScheme.onBackground,
-                                    )
-                                },
-                                colors = AssistChipDefaults.assistChipColors(
-                                    containerColor = if (on) flavor.accent.copy(alpha = 0.22f) else Color.Transparent,
-                                ),
-                            )
-                        }
-                    }
-
-                    if (current.kind == MediaKind.TV) {
-                        Spacer(Modifier.height(16.dp))
-                        TvProgressSection(
-                            seasons = current.seasons,
-                            episodes = current.episodes,
-                            curSeason = current.curSeason,
-                            curEpisode = current.curEpisode,
-                            seasonEpisodes = current.seasonEpisodes,
-                            watched = Status.parse(current.status).contains(Status.WATCHED),
-                            accent = flavor.accent,
-                            onSet = { s, e -> vm.setProgress(s, e) },
+                        DetailHeader(
+                            current = current,
+                            flavor = flavor,
+                            stacked = false,
+                            coverWidth = 128.dp,
+                            onCoverTap = { coverSheetOpen = true; vm.loadCovers() },
+                            onRate = { vm.setRating(it) },
                         )
-                    }
-
-                    if (current.kind == MediaKind.GAME) {
-                        val selectedPlatforms = Platform.parse(current.userPlatform)
-                        val selectedConsoles = Console.parse(current.consoles)
-                        // Collapse the (tall) platform+console editor by default once something is
-                        // set, showing just a one-line summary; expand to edit. Keeps games tidy.
-                        var platformExpanded by remember(current.id) {
-                            mutableStateOf(selectedPlatforms.isEmpty())
-                        }
-                        val summary = when {
-                            selectedConsoles.isNotEmpty() -> selectedConsoles.joinToString(", ") { Console.label(it) }
-                            selectedPlatforms.isNotEmpty() -> selectedPlatforms.joinToString(", ") { Platform.label(it) }
-                            else -> "Not set"
-                        }
-
-                        Spacer(Modifier.height(16.dp))
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { platformExpanded = !platformExpanded },
-                        ) {
-                            Text("Platform", style = MaterialTheme.typography.titleSmall)
-                            Spacer(Modifier.size(8.dp))
-                            if (!platformExpanded) {
-                                Text(
-                                    text = summary,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = flavor.accent,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f),
-                                )
-                            } else {
-                                Spacer(Modifier.weight(1f))
-                            }
-                            Icon(
-                                imageVector = if (platformExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                contentDescription = if (platformExpanded) "Collapse" else "Edit platform",
-                                tint = flavor.accent,
-                            )
-                        }
-
-                        if (platformExpanded) {
-                            Spacer(Modifier.height(6.dp))
-                            FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                Platform.ALL.forEach { p ->
-                                    val on = p in selectedPlatforms
-                                    AssistChip(
-                                        onClick = {
-                                            val newPlatforms = Platform.toggle(current.userPlatform, p)
-                                            // If a platform got removed, strip its consoles too.
-                                            val newPlatformSet = Platform.parse(newPlatforms)
-                                            val newConsoles = Console.pruneToPlatforms(current.consoles, newPlatformSet)
-                                            if (newConsoles == (current.consoles ?: "")) {
-                                                vm.setPlatform(newPlatforms)
-                                            } else {
-                                                vm.setPlatformAndConsoles(newPlatforms, newConsoles)
-                                            }
-                                        },
-                                        label = {
-                                            Text(
-                                                text = Platform.label(p),
-                                                color = if (on) flavor.accent else MaterialTheme.colorScheme.onBackground,
-                                            )
-                                        },
-                                        colors = AssistChipDefaults.assistChipColors(
-                                            containerColor = if (on) flavor.accent.copy(alpha = 0.22f) else Color.Transparent,
-                                        ),
-                                    )
-                                }
-                            }
-                            // Console sub-sections: only for selected platforms that have any
-                            // sub-consoles. PC and Mobile stay flat (no dropdown).
-                            Platform.ALL.forEach { p ->
-                                if (p !in selectedPlatforms) return@forEach
-                                val consoles = Console.forPlatform(p)
-                                if (consoles.isEmpty()) return@forEach
-                                Spacer(Modifier.height(10.dp))
-                                ConsoleDropdown(
-                                    platform = p,
-                                    consoles = consoles,
-                                    selected = selectedConsoles,
-                                    accent = flavor.accent,
-                                    onToggle = { code ->
-                                        vm.setConsoles(Console.toggle(current.consoles, code))
-                                    },
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(Modifier.height(16.dp))
-                    if (current.kind == MediaKind.MOVIE || current.kind == MediaKind.TV) {
-                        // Watched state is the status; the section just mirrors it (and holds an
-                        // optional "when"), so it stays in sync with the Status chip and Plex sync.
-                        WatchedSection(
-                            watched = Status.parse(current.status).contains(Status.WATCHED),
-                            completedAt = current.completedAt,
-                            onToggle = { vm.setWatched(it) },
-                            onPickDate = { vm.setWatched(true, at = it) },
+                        DetailSections(
+                            current, flavor, vm, scores, steamAch, steamAchLoading,
+                            steamKey, steamId,
                         )
-                    } else {
-                        CompletedSection(
-                            kind = current.kind,
-                            completedAt = current.completedAt,
-                            onSet = { vm.setCompletedAt(it) },
-                        )
-                    }
-
-                    if (current.kind == MediaKind.MOVIE || current.kind == MediaKind.TV) {
-                        Spacer(Modifier.height(16.dp))
-                        ShowToSection(
-                            namesCsv = current.showTo,
-                            accent = flavor.accent,
-                            onSet = { vm.setShowTo(it) },
-                        )
-                    }
-
-                    Spacer(Modifier.height(8.dp))
-                    NotesSection(
-                        savedNotes = current.notes,
-                        onSave = { vm.setNotes(it) },
-                    )
-
-                    val s = scores
-                    if (current.kind == MediaKind.GAME && s != null && s.hasAny) {
-                        Spacer(Modifier.height(20.dp))
-                        Text("Scores", style = MaterialTheme.typography.titleSmall)
-                        Spacer(Modifier.height(6.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            if (s.critics != null) {
-                                ScoreBadge(score = s.critics!!, label = "Critics", count = s.criticsCount)
-                            }
-                            if (s.players != null) {
-                                ScoreBadge(score = s.players!!, label = "Players", count = s.playersCount)
-                            }
-                        }
-                    }
-
-                    if (current.kind == MediaKind.GAME && current.externalSrc == "steam") {
-                        Spacer(Modifier.height(20.dp))
-                        SteamAchievementsSection(
-                            data = steamAch,
-                            loading = steamAchLoading,
-                            connected = steamKey.isNotBlank() && steamId.isNotBlank(),
-                            accent = flavor.accent,
-                        )
-                    }
-
-                    if (!current.description.isNullOrBlank()) {
-                        Spacer(Modifier.height(20.dp))
-                        Text("About", style = MaterialTheme.typography.titleSmall)
-                        AboutText(text = current.description!!)
+                        DetailAbout(current)
                     }
                 }
             }
@@ -1342,4 +1090,357 @@ private fun NotesSection(
             )
         }
     }
+}
+
+
+/**
+ * The cover with the item's identity beside it -- or above it, on a screen wide enough to give
+ * the cover real size.
+ */
+@Composable
+private fun DetailHeader(
+    current: ItemDto,
+    flavor: ShelfFlavor,
+    stacked: Boolean,
+    coverWidth: Dp,
+    onCoverTap: () -> Unit,
+    onRate: (Int?) -> Unit,
+) {
+    val cover: @Composable () -> Unit = {
+        Box(
+            modifier = Modifier
+                .width(coverWidth)
+                .aspectRatio(if (current.kind == MediaKind.GAME) 3f / 4f else 2f / 3f)
+                // The same cover the user tapped on the shelf: it flies here.
+                .coverFlight(current.id)
+                .shadow(14.dp, RoundedCornerShape(10.dp), clip = false)
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color.Black.copy(alpha = 0.25f))
+                .clickable(onClick = onCoverTap),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (current.coverUrl != null) {
+                AsyncImage(
+                    model = current.coverUrl,
+                    contentDescription = current.title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                Text(
+                    text = current.title.take(2).uppercase(),
+                    style = flavor.titleStyle.copy(color = flavor.accent),
+                )
+            }
+            // Small badge hinting the cover is tappable to change art.
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(6.dp)
+                    .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(50))
+                    .padding(5.dp),
+            ) {
+                Icon(
+                    Icons.Default.Image,
+                    contentDescription = "Change cover",
+                    tint = Color.White,
+                    modifier = Modifier.size(14.dp),
+                )
+            }
+        }
+    }
+    val info: @Composable () -> Unit = {
+        Column {
+            Text(
+                text = current.title,
+                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+            )
+            val secondary = buildList {
+                current.subtitle?.let { add(it) }
+                current.year?.let { add(it.toString()) }
+                if (current.kind == MediaKind.TV && (current.seasons ?: 0) > 0) {
+                    add("${current.seasons} season${if (current.seasons == 1) "" else "s"}")
+                }
+            }.joinToString(" · ")
+            if (secondary.isNotBlank()) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = secondary,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+            Row {
+                for (i in 1..5) {
+                    val filled = (current.rating ?: 0) >= i
+                    Icon(
+                        imageVector = if (filled) Icons.Default.Star else Icons.Default.StarBorder,
+                        contentDescription = "Rate $i",
+                        tint = flavor.accent,
+                        modifier = Modifier
+                            .size(30.dp)
+                            .clip(RoundedCornerShape(50))
+                            .clickable { onRate(if (current.rating == i) null else i) }
+                            .padding(2.dp),
+                    )
+                }
+            }
+        }
+    }
+
+    if (stacked) {
+        Column {
+            cover()
+            Spacer(Modifier.height(18.dp))
+            info()
+        }
+    } else {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            cover()
+            Box(modifier = Modifier.weight(1f)) { info() }
+        }
+    }
+}
+
+/** Everything about the item you can change: status, format, progress, notes and the rest. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DetailSections(
+    current: ItemDto,
+    flavor: ShelfFlavor,
+    vm: DetailViewModel,
+    scores: Scores?,
+    steamAch: SteamAchievementData?,
+    steamAchLoading: Boolean,
+    steamKey: String,
+    steamId: String,
+) {
+    Column {
+        Spacer(Modifier.height(20.dp))
+        Text("Status", style = MaterialTheme.typography.titleSmall)
+        Spacer(Modifier.height(6.dp))
+        val selectedStatuses = Status.parse(current.status)
+        val options = Status.optionsFor(current.kind)
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            options.forEach { s ->
+                val on = s in selectedStatuses
+                AssistChip(
+                    onClick = { vm.setStatus(Status.toggle(current.status, s)) },
+                    label = {
+                        Text(
+                            text = Status.label(s, current.kind),
+                            color = if (on) flavor.accent else MaterialTheme.colorScheme.onBackground,
+                        )
+                    },
+                    colors = AssistChipDefaults.assistChipColors(
+                        containerColor = if (on) flavor.accent.copy(alpha = 0.22f) else Color.Transparent,
+                    ),
+                )
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+        Text("Format", style = MaterialTheme.typography.titleSmall)
+        Spacer(Modifier.height(6.dp))
+        val selectedFormats = Format.parse(current.format)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Format.ALL.forEach { f ->
+                val on = f in selectedFormats
+                AssistChip(
+                    onClick = { vm.setFormat(Format.toggle(current.format, f)) },
+                    label = {
+                        Text(
+                            text = Format.label(f),
+                            color = if (on) flavor.accent else MaterialTheme.colorScheme.onBackground,
+                        )
+                    },
+                    colors = AssistChipDefaults.assistChipColors(
+                        containerColor = if (on) flavor.accent.copy(alpha = 0.22f) else Color.Transparent,
+                    ),
+                )
+            }
+        }
+
+        if (current.kind == MediaKind.TV) {
+            Spacer(Modifier.height(16.dp))
+            TvProgressSection(
+                seasons = current.seasons,
+                episodes = current.episodes,
+                curSeason = current.curSeason,
+                curEpisode = current.curEpisode,
+                seasonEpisodes = current.seasonEpisodes,
+                watched = Status.parse(current.status).contains(Status.WATCHED),
+                accent = flavor.accent,
+                onSet = { s, e -> vm.setProgress(s, e) },
+            )
+        }
+
+        if (current.kind == MediaKind.GAME) {
+            val selectedPlatforms = Platform.parse(current.userPlatform)
+            val selectedConsoles = Console.parse(current.consoles)
+            // Collapse the (tall) platform+console editor by default once something is
+            // set, showing just a one-line summary; expand to edit. Keeps games tidy.
+            var platformExpanded by remember(current.id) {
+                mutableStateOf(selectedPlatforms.isEmpty())
+            }
+            val summary = when {
+                selectedConsoles.isNotEmpty() -> selectedConsoles.joinToString(", ") { Console.label(it) }
+                selectedPlatforms.isNotEmpty() -> selectedPlatforms.joinToString(", ") { Platform.label(it) }
+                else -> "Not set"
+            }
+
+            Spacer(Modifier.height(16.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { platformExpanded = !platformExpanded },
+            ) {
+                Text("Platform", style = MaterialTheme.typography.titleSmall)
+                Spacer(Modifier.size(8.dp))
+                if (!platformExpanded) {
+                    Text(
+                        text = summary,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = flavor.accent,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                } else {
+                    Spacer(Modifier.weight(1f))
+                }
+                Icon(
+                    imageVector = if (platformExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = if (platformExpanded) "Collapse" else "Edit platform",
+                    tint = flavor.accent,
+                )
+            }
+
+            if (platformExpanded) {
+                Spacer(Modifier.height(6.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Platform.ALL.forEach { p ->
+                        val on = p in selectedPlatforms
+                        AssistChip(
+                            onClick = {
+                                val newPlatforms = Platform.toggle(current.userPlatform, p)
+                                // If a platform got removed, strip its consoles too.
+                                val newPlatformSet = Platform.parse(newPlatforms)
+                                val newConsoles = Console.pruneToPlatforms(current.consoles, newPlatformSet)
+                                if (newConsoles == (current.consoles ?: "")) {
+                                    vm.setPlatform(newPlatforms)
+                                } else {
+                                    vm.setPlatformAndConsoles(newPlatforms, newConsoles)
+                                }
+                            },
+                            label = {
+                                Text(
+                                    text = Platform.label(p),
+                                    color = if (on) flavor.accent else MaterialTheme.colorScheme.onBackground,
+                                )
+                            },
+                            colors = AssistChipDefaults.assistChipColors(
+                                containerColor = if (on) flavor.accent.copy(alpha = 0.22f) else Color.Transparent,
+                            ),
+                        )
+                    }
+                }
+                // Console sub-sections: only for selected platforms that have any
+                // sub-consoles. PC and Mobile stay flat (no dropdown).
+                Platform.ALL.forEach { p ->
+                    if (p !in selectedPlatforms) return@forEach
+                    val consoles = Console.forPlatform(p)
+                    if (consoles.isEmpty()) return@forEach
+                    Spacer(Modifier.height(10.dp))
+                    ConsoleDropdown(
+                        platform = p,
+                        consoles = consoles,
+                        selected = selectedConsoles,
+                        accent = flavor.accent,
+                        onToggle = { code ->
+                            vm.setConsoles(Console.toggle(current.consoles, code))
+                        },
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+        if (current.kind == MediaKind.MOVIE || current.kind == MediaKind.TV) {
+            // Watched state is the status; the section just mirrors it (and holds an
+            // optional "when"), so it stays in sync with the Status chip and Plex sync.
+            WatchedSection(
+                watched = Status.parse(current.status).contains(Status.WATCHED),
+                completedAt = current.completedAt,
+                onToggle = { vm.setWatched(it) },
+                onPickDate = { vm.setWatched(true, at = it) },
+            )
+        } else {
+            CompletedSection(
+                kind = current.kind,
+                completedAt = current.completedAt,
+                onSet = { vm.setCompletedAt(it) },
+            )
+        }
+
+        if (current.kind == MediaKind.MOVIE || current.kind == MediaKind.TV) {
+            Spacer(Modifier.height(16.dp))
+            ShowToSection(
+                namesCsv = current.showTo,
+                accent = flavor.accent,
+                onSet = { vm.setShowTo(it) },
+            )
+        }
+
+        Spacer(Modifier.height(8.dp))
+        NotesSection(
+            savedNotes = current.notes,
+            onSave = { vm.setNotes(it) },
+        )
+
+        val s = scores
+        if (current.kind == MediaKind.GAME && s != null && s.hasAny) {
+            Spacer(Modifier.height(20.dp))
+            Text("Scores", style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.height(6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (s.critics != null) {
+                    ScoreBadge(score = s.critics!!, label = "Critics", count = s.criticsCount)
+                }
+                if (s.players != null) {
+                    ScoreBadge(score = s.players!!, label = "Players", count = s.playersCount)
+                }
+            }
+        }
+
+        if (current.kind == MediaKind.GAME && current.externalSrc == "steam") {
+            Spacer(Modifier.height(20.dp))
+            SteamAchievementsSection(
+                data = steamAch,
+                loading = steamAchLoading,
+                connected = steamKey.isNotBlank() && steamId.isNotBlank(),
+                accent = flavor.accent,
+            )
+        }
+    }
+}
+
+/** The synopsis, when the catalogue gave us one. */
+@Composable
+private fun DetailAbout(current: ItemDto) {
+    if (current.description.isNullOrBlank()) return
+    Spacer(Modifier.height(20.dp))
+    Text("About", style = MaterialTheme.typography.titleSmall)
+    AboutText(text = current.description!!)
 }
