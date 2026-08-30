@@ -65,6 +65,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -79,6 +80,7 @@ import com.kzaller.shelf.ui.components.ExpandingAddFab
 import com.kzaller.shelf.ui.components.ItemListRow
 import com.kzaller.shelf.ui.components.ShelfPill
 import com.kzaller.shelf.ui.components.ShelfWoodGrid
+import com.kzaller.shelf.ui.LocalShelfOrder
 import com.kzaller.shelf.ui.components.WoodBackground
 import com.kzaller.shelf.ui.components.shelfTextFieldColors
 import com.kzaller.shelf.ui.theme.MediaShelfTheme
@@ -99,8 +101,29 @@ fun ShelfScreen(
     val dark = true
     val flavor = flavorFor(kind, dark)
     MediaShelfTheme(flavor = flavor, dark = dark) {
-        val items by vm.items.collectAsState()
+        // Null means the first list hasn't arrived; the shelf stays blank rather than flashing
+        // the empty state and then re-laying every cover out.
+        val loadedItems by vm.items.collectAsState()
+        val items = loadedItems ?: emptyList()
         val total by vm.totalCount.collectAsState()
+
+        // The detail page's pager should walk the shelf as it looks right now, not as the
+        // database happens to store it, so hand it this order on the way out.
+        // Remembered, and reading the shelf through state rather than capturing the list: a
+        // handler that changed identity on every emission would be a new parameter to every row
+        // in the grid, so nothing below could skip recomposition.
+        val shelfOrder = LocalShelfOrder.current
+        val currentItems by rememberUpdatedState(items)
+        val currentOnItem by rememberUpdatedState(onItem)
+        val openInOrder: (List<String>, String) -> Unit = remember {
+            { order, id ->
+                shelfOrder.value = order
+                currentOnItem(id)
+            }
+        }
+        val openItem: (String) -> Unit = remember {
+            { id -> openInOrder(currentItems.map { it.id }, id) }
+        }
         val activeFilters by vm.filters.collectAsState()
         val activeFormatFilters by vm.formatFilters.collectAsState()
         val activePlatformFilters by vm.platformFilters.collectAsState()
@@ -330,7 +353,10 @@ fun ShelfScreen(
                         onRefresh = { vm.refresh(force = true) },
                         modifier = Modifier.fillMaxSize(),
                     ) {
-                        if (items.isEmpty()) {
+                        if (loadedItems == null) {
+                            // Still loading: draw nothing for the frame or two it takes.
+                            Spacer(Modifier.fillMaxSize())
+                        } else if (items.isEmpty()) {
                             EmptyState(
                                 kind = kind,
                                 filtered = anyFilterActive,
@@ -341,7 +367,7 @@ fun ShelfScreen(
                                 items = items,
                                 selection = selection,
                                 inSelectionMode = inSelectionMode,
-                                onItem = onItem,
+                                onOpen = openInOrder,
                                 onToggle = vm::toggleSelection,
                             )
                         } else if (viewMode == ViewMode.GRID) {
@@ -351,7 +377,7 @@ fun ShelfScreen(
                                 kind = kind,
                                 selection = selection,
                                 inSelectionMode = inSelectionMode,
-                                onItem = onItem,
+                                onItem = openItem,
                                 onToggle = vm::toggleSelection,
                                 columns = columns,
                                 modifier = Modifier.fillMaxSize(),
@@ -374,7 +400,7 @@ fun ShelfScreen(
                                         selected = item.id in selection,
                                         onClick = { clicked ->
                                             if (inSelectionMode) vm.toggleSelection(clicked.id)
-                                            else onItem(clicked.id)
+                                            else openItem(clicked.id)
                                         },
                                         onLongClick = { clicked -> vm.toggleSelection(clicked.id) },
                                     )
@@ -500,10 +526,12 @@ private fun GroupedList(
     items: List<com.kzaller.shelf.data.models.ItemDto>,
     selection: Set<String>,
     inSelectionMode: Boolean,
-    onItem: (String) -> Unit,
+    onOpen: (List<String>, String) -> Unit,
     onToggle: (String) -> Unit,
 ) {
     val groups = remember(items) { com.kzaller.shelf.data.Series.group(items) }
+    // Grouping reshuffles the shelf, so the pager's order is the groups read top to bottom.
+    val order = remember(groups) { groups.flatMap { g -> g.items.map { it.id } } }
     LazyColumn(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -523,7 +551,7 @@ private fun GroupedList(
                     item = item,
                     selected = item.id in selection,
                     onClick = { clicked ->
-                        if (inSelectionMode) onToggle(clicked.id) else onItem(clicked.id)
+                        if (inSelectionMode) onToggle(clicked.id) else onOpen(order, clicked.id)
                     },
                     onLongClick = { clicked -> onToggle(clicked.id) },
                 )

@@ -12,17 +12,34 @@ import com.kzaller.shelf.data.models.IdentifyResult
 import com.kzaller.shelf.data.models.ItemDto
 import com.kzaller.shelf.data.models.SearchHit
 import com.kzaller.shelf.data.models.UpdateItemRequest
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.withContext
 
 class ShelfRepository(context: Context) {
     private val db = ShelfDatabase.get(context)
     private val api = ApiClient.api
 
-    fun observeShelf(kind: MediaKind): Flow<List<ItemDto>> =
-        db.items().observeByKind(kind.wire).map { rows -> rows.map(ItemEntity::toDto) }
+    /**
+     * A shelf's items, hot and already converted. See [shelfFlow] for why this is cached rather
+     * than a fresh query each call.
+     */
+    fun observeShelf(kind: MediaKind): Flow<List<ItemDto>> = shelfFlow(db, kind)
+
+    /**
+     * Start building every shelf now so tapping one has nothing left to do. Called once at
+     * startup, while the user is still looking at the home screen.
+     */
+    fun warmShelves() {
+        MediaKind.values().forEach { shelfFlow(db, it) }
+    }
 
     fun observeItem(id: String): Flow<ItemDto?> =
         db.items().observe(id).map { it?.toDto() }
@@ -34,7 +51,9 @@ class ShelfRepository(context: Context) {
 
     /** Every item on every shelf, newest-first. Backs the cross-shelf search screen. */
     fun observeAll(): Flow<List<ItemDto>> =
-        db.items().observeAll().map { rows -> rows.map(ItemEntity::toDto) }
+        db.items().observeAll()
+            .map { rows -> rows.map(ItemEntity::toDto) }
+            .flowOn(Dispatchers.Default)
 
     /**
      * Pull every shelf, one at a time. Deliberately not concurrent: each shelf's refresh clears
@@ -259,6 +278,28 @@ class ShelfRepository(context: Context) {
         // was pulled from the server, so back-to-back screen opens don't all re-fetch.
         private val lastRefresh = java.util.concurrent.ConcurrentHashMap<String, Long>()
         private const val REFRESH_INTERVAL_MS = 30_000L
+
+        /**
+         * One hot flow per shelf, process-wide.
+         *
+         * A shelf ViewModel is built from scratch every time its screen opens, and each one used
+         * to run its own Room query and convert every row again -- a couple of thousand entities
+         * on the movies shelf, which is what made opening one feel slow. Sharing the flow means
+         * the rows are converted once and every later open replays what's already in memory.
+         *
+         * Eagerly, not WhileSubscribed: the flow has to stay current between screens, otherwise
+         * the replayed value could be stale by the time the next shelf opens. It's also what lets
+         * [warmShelves] do the work up front. Kept off the main thread throughout.
+         */
+        private val cacheScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        private val shelfFlows = java.util.concurrent.ConcurrentHashMap<String, SharedFlow<List<ItemDto>>>()
+
+        private fun shelfFlow(db: ShelfDatabase, kind: MediaKind): SharedFlow<List<ItemDto>> =
+            shelfFlows.getOrPut(kind.wire) {
+                db.items().observeByKind(kind.wire)
+                    .map { rows -> rows.map(ItemEntity::toDto) }
+                    .shareIn(cacheScope, SharingStarted.Eagerly, replay = 1)
+            }
     }
 }
 

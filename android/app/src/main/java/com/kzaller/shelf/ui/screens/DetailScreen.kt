@@ -94,6 +94,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.kzaller.shelf.ui.LocalFlyingCoverId
+import com.kzaller.shelf.ui.LocalShelfOrder
 import com.kzaller.shelf.ui.coverFlight
 import kotlin.math.roundToInt
 import androidx.compose.foundation.pager.HorizontalPager
@@ -126,28 +127,35 @@ fun DetailScreen(
     repo: ShelfRepository,
     onBack: () -> Unit,
 ) {
-    val items by repo.observeShelf(kind).collectAsState(initial = emptyList())
-    if (items.isEmpty()) return // initial load hasn't populated cache yet; brief blank
-    val initialIndex = items.indexOfFirst { it.id == initialId }.coerceAtLeast(0)
-    val pagerState = rememberPagerState(initialPage = initialIndex) { items.size }
+    // The order the shelf was showing when this item was tapped -- filtered, searched and sorted
+    // the way the user had it. Absent (or belonging to another screen) when the item was opened
+    // from search or the home screen, which is what the containment check catches; then we fall
+    // back to the database's own order, which is all we ever had before.
+    val fromShelf = LocalShelfOrder.current.value.takeIf { initialId in it }
+    val all by repo.observeShelf(kind).collectAsState(initial = emptyList())
+    // Only ids: each page loads its own item through its own DetailViewModel, so re-deriving
+    // this list on every shelf emission bought nothing and risked reshuffling under the thumb.
+    val ids = remember(initialId, fromShelf, all.size) { fromShelf ?: all.map { it.id } }
+    if (ids.isEmpty()) return // initial load hasn't populated cache yet; brief blank
+
+    val initialIndex = remember(ids) { ids.indexOf(initialId).coerceAtLeast(0) }
+    val pagerState = rememberPagerState(initialPage = initialIndex) { ids.size }
 
     // Swiping to another item makes that one the cover that flies back to the shelf.
-    // Keyed on the id rather than the list: keying on `items` re-ran an equality check across
-    // the whole shelf (~1,800 movies) and restarted the effect on any change anywhere.
     val flyingCover = LocalFlyingCoverId.current
-    val currentId = items.getOrNull(pagerState.currentPage)?.id
+    val currentId = ids.getOrNull(pagerState.currentPage)
     LaunchedEffect(currentId) {
         if (currentId != null) flyingCover.value = currentId
     }
 
     HorizontalPager(
         state = pagerState,
-        key = { idx -> items[idx].id },
+        key = { idx -> ids[idx] },
     ) { page ->
-        val pageItem = items[page]
+        val pageId = ids[page]
         val vm: DetailViewModel = viewModel(
-            key = "detail-${pageItem.id}",
-            factory = DetailViewModel.factory(repo, pageItem.id),
+            key = "detail-$pageId",
+            factory = DetailViewModel.factory(repo, pageId),
         )
         DetailPage(vm = vm, onBack = onBack)
     }

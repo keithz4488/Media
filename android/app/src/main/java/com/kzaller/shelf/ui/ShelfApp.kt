@@ -126,6 +126,10 @@ fun ShelfApp() {
         }
     }
 
+    // Build every shelf's items now, while the user is still on the home screen, so tapping a
+    // shelf only has to lay covers out rather than query and convert a couple of thousand rows.
+    LaunchedEffect(Unit) { repo.warmShelves() }
+
     // If Steam is already connected, make sure the backend has the credentials so its daily
     // auto-sync cron can add newly-purchased games (the app otherwise only sends them on connect).
     LaunchedEffect(Unit) {
@@ -140,9 +144,11 @@ fun ShelfApp() {
         Box(modifier = Modifier.fillMaxSize()) {
         SharedTransitionLayout {
         val flyingCover = remember { mutableStateOf<String?>(null) }
+        val shelfOrder = remember { mutableStateOf<List<String>>(emptyList()) }
         CompositionLocalProvider(
             LocalSharedTransitionScope provides this,
             LocalFlyingCoverId provides flyingCover,
+            LocalShelfOrder provides shelfOrder,
         ) {
         NavHost(navController = nav, startDestination = Routes.HOME) {
             composable(Routes.HOME) { entry ->

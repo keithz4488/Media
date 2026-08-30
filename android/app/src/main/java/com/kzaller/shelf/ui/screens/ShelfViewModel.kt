@@ -16,7 +16,9 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
@@ -92,8 +94,14 @@ class ShelfViewModel(
             ActiveFilters(s, f, p, c)
         }
 
-    /** Items visible on the shelf: kind -> status/format/platform/console filters -> search -> sort. */
-    val items: StateFlow<List<ItemDto>> =
+    /**
+     * Items visible on the shelf: kind -> status/format/platform/console filters -> search -> sort.
+     *
+     * Null until the first real list arrives. A StateFlow has to start somewhere, and starting at
+     * an empty list meant every shelf open drew the "nothing here yet" state for a frame and then
+     * threw it away -- null lets the screen tell "still loading" apart from "genuinely empty".
+     */
+    val items: StateFlow<List<ItemDto>?> =
         combine(shelf, activeFilters, _query, sort) { all, af, query, sort ->
             // Defensive: the DAO already filters by kind in SQL, but enforce here too
             // so a stale emission can't slip a different-kind item into the grid.
@@ -136,12 +144,19 @@ class ShelfViewModel(
 
             when (sort) {
                 SortMode.RECENT     -> searched.sortedByDescending { it.addedAt ?: 0L }
-                SortMode.TITLE_ASC  -> searched.sortedBy { it.title.lowercase() }
-                SortMode.TITLE_DESC -> searched.sortedByDescending { it.title.lowercase() }
+                // A case-insensitive comparator, not sortedBy { lowercase() }: the selector form
+                // re-lowercases on every comparison, which is tens of thousands of throwaway
+                // strings to order a shelf this size.
+                SortMode.TITLE_ASC  -> searched.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.title })
+                SortMode.TITLE_DESC -> searched.sortedWith(compareByDescending(String.CASE_INSENSITIVE_ORDER) { it.title })
                 SortMode.YEAR_DESC  -> searched.sortedByDescending { it.year ?: Int.MIN_VALUE }
                 SortMode.YEAR_ASC   -> searched.sortedBy { it.year ?: Int.MAX_VALUE }
             }
-        }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+        }
+            // Filtering and sorting a full shelf is far too much to do on the main thread, which
+            // is where viewModelScope would otherwise run it.
+            .flowOn(Dispatchers.Default)
+            .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     /** Full unfiltered count, for a "showing X of Y" label when filters/search are active. */
     val totalCount: StateFlow<Int> =
