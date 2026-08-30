@@ -159,11 +159,17 @@ private fun booksFlavor(dark: Boolean): ShelfFlavor {
         displayFont = FontFamily.Serif,
         titleStyle = titleStyleFor(FontFamily.Serif, italic = false, weight = FontWeight.Bold),
         ornament = ShelfOrnament.WOOD_PLANKS,
-        // Warm honey library wood.
-        woodTop = Color(0xFFC79A63),
-        woodBottom = Color(0xFF6E4A28),
-        plank = Color(0xFF8A5E32),
-        plankEdge = Color(0xFF4F3619),
+        // Warm library wood, dark enough to read against.
+        //
+        // This used to be a pale honey (top C79A63) -- roughly twice the luminance of the other
+        // three shelves, while every shelf forces the dark scheme: cream text, and chips whose
+        // selected state is the gold accent at 22% alpha. On that pale ground the text, the chip
+        // outlines and the selected fill all sat nearly on top of the background. Same hue, same
+        // depth as its siblings now, so books stays the warmest of the four without vanishing.
+        woodTop = Color(0xFF6B4A2A),
+        woodBottom = Color(0xFF2E1D0E),
+        plank = Color(0xFF54381E),
+        plankEdge = Color(0xFF261708),
     )
 }
 
