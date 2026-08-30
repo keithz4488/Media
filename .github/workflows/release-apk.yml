@@ -91,6 +91,7 @@ jobs:
           NAME="media-shelf-build-${{ github.run_number }}.apk"
           cp "$APK" "$NAME"
           echo "apk=$NAME" >> "$GITHUB_OUTPUT"
+          echo "size=$(du -h "$NAME" | cut -f1)" >> "$GITHUB_OUTPUT"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -99,13 +100,24 @@ jobs:
           path: ${{ steps.locate.outputs.apk }}
           retention-days: 30
 
+      - name: Upload R8 mapping
+        # Without this, a stack trace from a shrunk release build is unreadable -- and the
+        # mapping only exists inside this runner, which is discarded when the job ends.
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: r8-mapping-${{ github.run_number }}
+          path: android/app/build/outputs/mapping/release/
+          retention-days: 90
+          if-no-files-found: ignore
+
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
           name: Build ${{ github.run_number }}
           body: |
-            Automated release APK from commit ${{ github.sha }}.
+            Automated release APK from commit ${{ github.sha }} (${{ steps.locate.outputs.size }}).
             Install on your phone: open the link on the phone, tap Assets, download the .apk, tap to install.
           files: ${{ steps.locate.outputs.apk }}
           fail_on_unmatched_files: true

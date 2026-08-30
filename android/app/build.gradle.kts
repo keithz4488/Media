@@ -65,7 +65,12 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // Shrink and obfuscate. The bulk of the APK was unused library code -- most of it
+            // material-icons-extended, which ships every icon Material has and of which this app
+            // uses a couple of dozen. Resource shrinking then drops the drawables and strings
+            // those removed classes were the only reference to.
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             if (signingConfigured) {
                 signingConfig = signingConfigs.getByName("release")
