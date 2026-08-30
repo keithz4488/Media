@@ -131,11 +131,12 @@ class DetailViewModel(
         launchUpdate(UpdateItemRequest(status = newStatus, completedAt = date))
     }
 
-    /** Lazily fill in TV season/episode counts (including the per-season breakdown) for items
-     *  that were imported or added before that data existed. */
+    /** Lazily fill in TV season/episode counts (including the per-season breakdown and whether
+     *  the show is still running) for items that were imported or added before that data existed. */
     fun ensureEnriched() {
         val cur = item.value ?: return
-        val needsTv = cur.kind == MediaKind.TV && (cur.seasons == null || cur.seasonEpisodes == null)
+        val needsTv = cur.kind == MediaKind.TV &&
+            (cur.seasons == null || cur.seasonEpisodes == null || cur.seriesStatus == null)
         // Steam-imported games are created without enrichment, so their "About" (description),
         // box art, and release year are blank until the first open — backfill them then.
         val needsSteam = cur.externalSrc == "steam" &&

@@ -106,6 +106,7 @@ import com.kzaller.shelf.data.Console
 import com.kzaller.shelf.data.Format
 import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.Platform
+import com.kzaller.shelf.data.SeriesStatus
 import com.kzaller.shelf.data.ShelfRepository
 import com.kzaller.shelf.data.Status
 import com.kzaller.shelf.data.SteamAchievement
@@ -1168,6 +1169,19 @@ private fun DetailHeader(
                     text = secondary,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
                     style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            // Whether the show is still running. A pill rather than another word in the meta
+            // line, since it's the thing you look for when deciding what to start.
+            SeriesStatus.label(current.seriesStatus)?.let { seriesLabel ->
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = seriesLabel,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = flavor.accent,
+                    modifier = Modifier
+                        .background(flavor.accent.copy(alpha = 0.18f), RoundedCornerShape(50))
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
                 )
             }
             Spacer(Modifier.height(10.dp))

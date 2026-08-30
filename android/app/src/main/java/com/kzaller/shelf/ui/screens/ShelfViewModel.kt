@@ -7,6 +7,7 @@ import com.kzaller.shelf.data.Console
 import com.kzaller.shelf.data.Format
 import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.data.Platform
+import com.kzaller.shelf.data.SeriesStatus
 import com.kzaller.shelf.data.ShelfRepository
 import com.kzaller.shelf.data.Status
 import com.kzaller.shelf.data.models.ItemDto
@@ -136,12 +137,19 @@ class ShelfViewModel(
             else ofKind.filter { item ->
                 val s = Status.parse(item.status)
                 // Real statuses match by intersection; the pseudo-filters ("Not Watched",
-                // "Show To") match on other fields. Everything combines as OR, like the rest.
-                val regular = af.status - Status.NOT_WATCHED - Status.HAS_SHOW_TO
+                // "Show To", and whether a show is still running) match on other fields.
+                // Everything combines as OR, like the rest.
+                val regular = af.status - Status.NOT_WATCHED - Status.HAS_SHOW_TO -
+                    Status.SERIES_CONTINUING - Status.SERIES_ENDED
                 val matchesRegular = regular.any { it in s }
                 val matchesNotWatched = Status.NOT_WATCHED in af.status && Status.WATCHED !in s
                 val matchesShowTo = Status.HAS_SHOW_TO in af.status && !item.showTo.isNullOrBlank()
-                matchesRegular || matchesNotWatched || matchesShowTo
+                val matchesContinuing = Status.SERIES_CONTINUING in af.status &&
+                    item.seriesStatus == SeriesStatus.CONTINUING
+                val matchesEnded = Status.SERIES_ENDED in af.status &&
+                    item.seriesStatus == SeriesStatus.ENDED
+                matchesRegular || matchesNotWatched || matchesShowTo ||
+                    matchesContinuing || matchesEnded
             }
 
         val formatFiltered = if (af.format.isEmpty()) statusFiltered

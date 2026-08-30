@@ -28,6 +28,8 @@ data class ItemDto(
     @SerialName("completed_at") val completedAt: Long? = null,
     @SerialName("show_to") val showTo: String? = null,
     @SerialName("season_episodes") val seasonEpisodes: String? = null,
+    /** TV only: "continuing" or "ended". Null until TMDB has been asked. */
+    @SerialName("series_status") val seriesStatus: String? = null,
     @SerialName("added_at")   val addedAt: Long? = null,
     @SerialName("updated_at") val updatedAt: Long? = null,
 )

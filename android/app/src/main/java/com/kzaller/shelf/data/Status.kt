@@ -27,6 +27,14 @@ object Status {
     /** Pseudo-filter matching movies/TV that have at least one "Show to" name set. */
     const val HAS_SHOW_TO = "has_show_to"
 
+    /**
+     * Pseudo-filters for a show's own state rather than the user's progress through it: whether
+     * there are more episodes coming. Prefixed to keep them clear of the real statuses, which
+     * share this CSV column.
+     */
+    const val SERIES_CONTINUING = "series_continuing"
+    const val SERIES_ENDED      = "series_ended"
+
     private val CANONICAL_ORDER = listOf(
         OWNED, READING, READ, WATCHING, WATCHED, PLAYING, PLAYED, COMPLETE, SEEN, WISHLIST,
     )
@@ -40,7 +48,8 @@ object Status {
 
     /** Extra pseudo-filters (backlog views) offered on a shelf, beyond real statuses. */
     fun extraFilters(kind: MediaKind): List<String> = when (kind) {
-        MediaKind.MOVIE, MediaKind.TV -> listOf(NOT_WATCHED, HAS_SHOW_TO)
+        MediaKind.TV    -> listOf(NOT_WATCHED, HAS_SHOW_TO, SERIES_CONTINUING, SERIES_ENDED)
+        MediaKind.MOVIE -> listOf(NOT_WATCHED, HAS_SHOW_TO)
         else -> emptyList()
     }
 
@@ -63,6 +72,8 @@ object Status {
             SEEN     -> "Seen"
             NOT_WATCHED -> "Not Watched"
             HAS_SHOW_TO -> "Show To"
+            SERIES_CONTINUING -> "Continuing"
+            SERIES_ENDED      -> "Ended"
             else     -> code.replaceFirstChar { it.uppercase() }
         }
     }

@@ -33,6 +33,7 @@ data class ItemEntity(
     val completedAt: Long?,
     val showTo: String?,
     val seasonEpisodes: String?,
+    val seriesStatus: String?,
     val addedAt: Long,
     val updatedAt: Long,
 ) {
@@ -59,6 +60,7 @@ data class ItemEntity(
         completedAt = completedAt,
         showTo = showTo,
         seasonEpisodes = seasonEpisodes,
+        seriesStatus = seriesStatus,
         addedAt = addedAt,
         updatedAt = updatedAt,
     )
@@ -87,6 +89,7 @@ data class ItemEntity(
             completedAt = dto.completedAt,
             showTo = dto.showTo,
             seasonEpisodes = dto.seasonEpisodes,
+            seriesStatus = dto.seriesStatus,
             addedAt = dto.addedAt ?: System.currentTimeMillis(),
             updatedAt = dto.updatedAt ?: System.currentTimeMillis(),
         )

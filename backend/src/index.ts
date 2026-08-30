@@ -65,6 +65,7 @@ interface Item {
   completed_at?: number | null;  // epoch ms when the user marked the item as finished
   show_to?: string | null;       // movies/TV: CSV of people to show it to
   season_episodes?: string | null; // TV: CSV of "seasonNumber:episodeCount" pairs
+  series_status?: string | null;   // TV: 'continuing' or 'ended'
   added_at?: number;
   updated_at?: number;
 }
@@ -642,9 +643,9 @@ async function createItem(req: Request, env: Env, userId: string): Promise<Respo
     `INSERT INTO items
       (id, user_id, kind, title, subtitle, year, cover_url, external_id, external_src,
        description, rating, status, notes, user_platform, consoles, format,
-       seasons, episodes, cur_season, cur_episode, completed_at, added_at, updated_at)
+       seasons, episodes, cur_season, cur_episode, completed_at, series_status, added_at, updated_at)
      VALUES
-      (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23)
+      (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24)
      ON CONFLICT(user_id, kind, external_src, external_id) DO UPDATE SET
        updated_at = excluded.updated_at,
        status     = excluded.status`,
@@ -671,6 +672,7 @@ async function createItem(req: Request, env: Env, userId: string): Promise<Respo
       item.cur_season,
       item.cur_episode,
       item.completed_at,
+      item.series_status ?? null,
       item.added_at,
       item.updated_at,
     )
@@ -1787,9 +1789,10 @@ async function refreshItem(id: string, env: Env, userId: string): Promise<Respon
            seasons     = COALESCE(?3, seasons),
            episodes    = COALESCE(?4, episodes),
            season_episodes = COALESCE(?5, season_episodes),
-           year        = COALESCE(?6, year),
-           updated_at  = ?7
-     WHERE id = ?8`,
+           series_status = COALESCE(?6, series_status),
+           year        = COALESCE(?7, year),
+           updated_at  = ?8
+     WHERE id = ?9`,
   )
     .bind(
       refreshed.description ?? null,
@@ -1797,6 +1800,7 @@ async function refreshItem(id: string, env: Env, userId: string): Promise<Respon
       refreshed.seasons ?? null,
       refreshed.episodes ?? null,
       refreshed.season_episodes ?? null,
+      refreshed.series_status ?? null,
       refreshed.year ?? null,
       Date.now(),
       id,
@@ -2266,8 +2270,33 @@ async function enrichTmdb(item: Item, env: Env): Promise<Item> {
         .map((s: any) => `${s.season_number}:${s.episode_count}`);
       if (pairs.length) enriched.season_episodes = pairs.join(",");
     }
+    enriched.series_status = seriesStatus(d.status) ?? item.series_status ?? null;
   }
   return enriched;
+}
+
+/**
+ * Reduce TMDB's series status to the only distinction that matters here: is there more of this
+ * coming or not. TMDB uses "Returning Series", "Ended", "Canceled", "In Production", "Planned"
+ * and "Pilot" -- a cancelled show is finished from a viewer's point of view, and one still in
+ * production has more to come, so the six collapse to two. Anything unrecognised is left null
+ * rather than guessed at.
+ */
+function seriesStatus(raw: unknown): "continuing" | "ended" | null {
+  if (typeof raw !== "string") return null;
+  switch (raw.trim().toLowerCase()) {
+    case "returning series":
+    case "in production":
+    case "planned":
+    case "pilot":
+      return "continuing";
+    case "ended":
+    case "canceled":
+    case "cancelled":
+      return "ended";
+    default:
+      return null;
+  }
 }
 
 // ---------- public read-only HTML view at /k ----------
