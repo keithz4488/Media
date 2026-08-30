@@ -87,9 +87,12 @@ interface ShelfApi {
     @GET("steam/status")
     suspend fun steamStatus(): com.kzaller.shelf.data.models.SteamStatusResponse
 
-    /** Get (generating if needed) this user's personal Plex webhook URL for live sync. */
+    /** Get (generating if needed) this user's personal Plex webhook URL for live sync, and
+     *  register which Plex account is theirs so other people's playback is ignored. */
     @POST("plex/config")
-    suspend fun plexConfig(): com.kzaller.shelf.data.models.PlexConfigResponse
+    suspend fun plexConfig(
+        @Body body: com.kzaller.shelf.data.models.PlexConfigRequest,
+    ): com.kzaller.shelf.data.models.PlexConfigResponse
 
     /** Exchange the current (Google) auth for a long-lived app session token. */
     @POST("auth/session")

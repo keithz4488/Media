@@ -225,9 +225,25 @@ class ShelfRepository(context: Context) {
         api.steamStatus()
     }
 
-    /** This user's personal Plex webhook URL for live sync (generated on first request). */
-    suspend fun plexConfig(): Result<com.kzaller.shelf.data.models.PlexConfigResponse> = runCatching {
-        api.plexConfig()
+    /**
+     * This user's personal Plex webhook URL for live sync (generated on first request).
+     *
+     * [account] is the Plex account name read from their own server; passing it is what lets the
+     * webhook drop playback by everyone else who has access to the library.
+     */
+    suspend fun plexConfig(account: String? = null): Result<com.kzaller.shelf.data.models.PlexConfigResponse> = runCatching {
+        api.plexConfig(com.kzaller.shelf.data.models.PlexConfigRequest(account))
+    }
+
+    /**
+     * Read the Plex account name off the user's server and register it with the backend. Runs at
+     * startup when Plex is already connected, so an install that predates the account check heals
+     * itself the first time the app is opened at home -- no reconnecting, no settings to find.
+     */
+    suspend fun registerPlexAccount(baseUrl: String, token: String) {
+        if (baseUrl.isBlank() || token.isBlank()) return
+        val account = PlexClient().fetchAccountName(baseUrl, token) ?: return
+        runCatching { api.plexConfig(com.kzaller.shelf.data.models.PlexConfigRequest(account)) }
     }
 
     /** Exchange the current Google auth for a long-lived app session token. */

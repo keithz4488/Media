@@ -145,6 +145,16 @@ fun ShelfApp() {
         }
     }
 
+    // Tell the backend which Plex account is this user's own, read from their own server. The
+    // webhook fires for everyone with access to the library and the account name is the only
+    // thing that separates them, so without this other people's viewing lands on this shelf.
+    // Done here rather than only on connect so an existing setup fixes itself on next launch.
+    LaunchedEffect(Unit) {
+        val plexUrl = prefs.observePlexUrl().first()
+        val plexToken = prefs.observePlexToken().first()
+        repo.registerPlexAccount(plexUrl, plexToken)
+    }
+
     MediaShelfTheme {
         Box(modifier = Modifier.fillMaxSize()) {
         SharedTransitionLayout {

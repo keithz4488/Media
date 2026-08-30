@@ -42,6 +42,21 @@ class PlexClient {
         }
     }
 
+    /**
+     * The Plex account this server belongs to, as the server itself reports it.
+     *
+     * The webhook needs this to tell the user's own playback from that of everyone else with
+     * access to the library -- Plex fires for all of them and only names the account.
+     */
+    suspend fun fetchAccountName(baseUrl: String, token: String): String? = withContext(Dispatchers.IO) {
+        runCatching {
+            get(baseUrl.trimEnd('/') + "/", token)
+                .optJSONObject("MediaContainer")
+                ?.optString("myPlexUsername")
+                ?.takeIf { it.isNotBlank() }
+        }.getOrNull()
+    }
+
     /** Returns all movies + shows across the server's libraries. */
     suspend fun fetchLibrary(baseUrl: String, token: String): List<PlexItem> = withContext(Dispatchers.IO) {
         val base = baseUrl.trimEnd('/')

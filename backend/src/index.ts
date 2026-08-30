@@ -329,7 +329,7 @@ export default {
       if (url.pathname === "/steam/status" && req.method === "GET") return steamStatus(env, userId);
 
       // Plex live sync: hand the user their personal webhook URL to paste into Plex.
-      if (url.pathname === "/plex/config" && req.method === "POST") return plexConfig(url, env, userId);
+      if (url.pathname === "/plex/config" && req.method === "POST") return plexConfig(req, url, env, userId);
 
       return err(404, "not found");
     } catch (e) {
@@ -1013,13 +1013,25 @@ async function userByPlexSecret(env: Env, secret: string | null): Promise<string
 }
 
 /** Generate (once) and return this user's personal Plex webhook URL. */
-async function plexConfig(url: URL, env: Env, userId: string): Promise<Response> {
+async function plexConfig(req: Request, url: URL, env: Env, userId: string): Promise<Response> {
   let secret = await settingGet(env, userId, "plex_webhook_secret");
   if (!secret) {
     secret = uuid();
     await settingSet(env, userId, "plex_webhook_secret", secret);
   }
-  return json({ secret, url: `${url.origin}/plex/webhook?u=${secret}` });
+
+  // The app reports which Plex account is this user's own, read from their server. It's the only
+  // thing that reliably tells one person's playback from another's in a webhook -- see the
+  // account check in plexWebhook. The body is optional, so a client that doesn't send one still
+  // gets its webhook URL.
+  let body: any = null;
+  try { body = await req.json(); } catch { /* no body, or not JSON */ }
+  if (body && typeof body.account === "string" && body.account.trim()) {
+    await settingSet(env, userId, "plex_account", body.account.trim());
+  }
+
+  const account = await settingGet(env, userId, "plex_account");
+  return json({ secret, url: `${url.origin}/plex/webhook?u=${secret}`, account: account ?? "" });
 }
 
 async function plexWebhook(req: Request, url: URL, env: Env): Promise<Response> {
@@ -1054,13 +1066,27 @@ async function plexWebhook(req: Request, url: URL, env: Env): Promise<Response> 
   // Everything this webhook sends lands on its owner's shelf (resolved from the secret above).
   const owner = webhookUser;
 
-  // Plex fires webhooks for EVERY account on the server -- Plex Home users and shared users
-  // (e.g. a sibling with access to the library) included. Only the server owner's own plays
-  // should update the owner's watched state, so skip scrobbles from non-owner accounts. Plex
-  // marks these with owner=false; when the field is absent (older servers) we don't block, to
-  // avoid dropping the owner's own plays.
-  if (event === "media.scrobble" && payload.owner === false) {
-    return json({ ok: true, skipped: "non-owner scrobble", account: payload.Account?.title ?? null });
+  // Plex fires webhooks for EVERY account on the server -- shared users with access to the
+  // library included -- so a scrobble here is not necessarily this user's own play.
+  //
+  // The account name is what settles it. The `owner` flag was tried first and isn't dependable:
+  // it can be absent, and treating absent as "allow" let other people's plays through, which is
+  // exactly what put films nobody here watched into Recently completed. When we know the user's
+  // Plex account name (the app reports it from their server), an exact match is required and
+  // anything else is dropped. Until it's known we fall back to the old flag check, so a webhook
+  // configured before this still works rather than going silent.
+  if (event === "media.scrobble") {
+    const expected = (await settingGet(env, owner, "plex_account"))?.trim().toLowerCase();
+    const account = typeof payload.Account?.title === "string"
+      ? payload.Account.title.trim().toLowerCase()
+      : null;
+    if (expected) {
+      if (account !== expected) {
+        return json({ ok: true, skipped: "another account", account: payload.Account?.title ?? null });
+      }
+    } else if (payload.owner === false) {
+      return json({ ok: true, skipped: "non-owner scrobble", account: payload.Account?.title ?? null });
+    }
   }
 
   // "Watched" sync: Plex scrobbles when playback finishes (~90%). A movie scrobble means the

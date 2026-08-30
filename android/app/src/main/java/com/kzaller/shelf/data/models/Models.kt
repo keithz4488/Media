@@ -155,8 +155,16 @@ data class SteamSyncResponse(val added: Int = 0, val updated: Int = 0)
 @Serializable
 data class SteamStatusResponse(val connected: Boolean = false, val games: Int = 0)
 
+/** [account] is the user's own Plex account name, so the webhook can ignore everyone else's plays. */
 @Serializable
-data class PlexConfigResponse(val secret: String = "", val url: String = "")
+data class PlexConfigRequest(val account: String? = null)
+
+@Serializable
+data class PlexConfigResponse(
+    val secret: String = "",
+    val url: String = "",
+    val account: String = "",
+)
 
 @Serializable
 data class SessionResponse(val token: String = "", val expiresAt: Long = 0)

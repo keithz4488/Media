@@ -75,6 +75,9 @@ class ImportViewModel(
     fun connectAndScan(url: String, token: String) {
         viewModelScope.launch {
             prefs.setPlex(url, token)
+            // Register whose Plex account this is while we're certainly able to reach the server,
+            // so live sync ignores playback by everyone else who can see the library.
+            repo.registerPlexAccount(url, token)
             confirmed.clear(); ambiguous = mutableListOf(); skippedCount = 0
             _state.value = ImportState.Scanning
             val items = runCatching { plex.fetchLibrary(url, token) }
