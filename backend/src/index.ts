@@ -689,17 +689,31 @@ async function createItem(req: Request, env: Env, userId: string): Promise<Respo
   return json({ item: row || item }, { status: 201 });
 }
 
+const PATCHABLE = ["title", "subtitle", "year", "cover_url", "description", "rating", "status", "notes", "user_platform", "consoles", "format", "seasons", "episodes", "cur_season", "cur_episode", "completed_at", "show_to"] as const;
+
 async function updateItem(id: string, req: Request, env: Env, userId: string): Promise<Response> {
-  const body = (await req.json()) as Partial<Item>;
+  const body = (await req.json()) as Partial<Item> & { clear?: unknown };
   const fields: string[] = [];
   const values: unknown[] = [];
   let i = 1;
-  for (const k of ["title", "subtitle", "year", "cover_url", "description", "rating", "status", "notes", "user_platform", "consoles", "format", "seasons", "episodes", "cur_season", "cur_episode", "completed_at", "show_to"] as const) {
+  for (const k of PATCHABLE) {
     if (k in body) {
       fields.push(`${k} = ?${i++}`);
       values.push(body[k] ?? null);
     }
   }
+
+  // Columns the client asked to empty, named rather than sent as nulls. The Android client
+  // serializes with kotlinx, which omits a property equal to its default -- so a null rating
+  // simply vanishes from the JSON and there is no way to tell "leave this alone" from "clear
+  // it". Un-rating an item used to arrive here as an empty body and get rejected outright.
+  const clear = Array.isArray(body.clear) ? body.clear : [];
+  for (const k of clear) {
+    if (typeof k !== "string" || k in body) continue;
+    if (!(PATCHABLE as readonly string[]).includes(k)) continue;
+    fields.push(`${k} = NULL`);
+  }
+
   if (!fields.length) return err(400, "no fields to update");
   fields.push(`updated_at = ?${i++}`);
   values.push(Date.now());

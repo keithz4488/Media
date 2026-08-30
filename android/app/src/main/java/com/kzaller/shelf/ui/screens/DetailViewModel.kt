@@ -86,7 +86,10 @@ class DetailViewModel(
     }
 
     fun setStatus(status: String) = launchUpdate(UpdateItemRequest(status = status))
-    fun setRating(rating: Int?) = launchUpdate(UpdateItemRequest(rating = rating), toast = if (rating == null) "Rating cleared" else "Rated $rating")
+    // Clearing goes through `clear` rather than a null field -- see UpdateItemRequest.
+    fun setRating(rating: Int?) =
+        if (rating == null) launchUpdate(UpdateItemRequest(clear = listOf("rating")), toast = "Rating cleared")
+        else launchUpdate(UpdateItemRequest(rating = rating), toast = "Rated $rating")
     fun setNotes(notes: String) = launchUpdate(UpdateItemRequest(notes = notes), toast = "Notes saved")
     fun setCover(url: String) = launchUpdate(UpdateItemRequest(coverUrl = url), toast = "Cover updated")
     fun setPlatform(csv: String) = launchUpdate(UpdateItemRequest(userPlatform = csv))
@@ -100,9 +103,19 @@ class DetailViewModel(
     // The backend applies the episode-precise "caught up -> Watched" flip on any progress change
     // (from here or the Plex webhook) and returns the updated item, so we just send the progress.
     fun setProgress(season: Int?, episode: Int?) =
-        launchUpdate(UpdateItemRequest(curSeason = season, curEpisode = episode))
+        launchUpdate(
+            UpdateItemRequest(
+                curSeason = season,
+                curEpisode = episode,
+                clear = listOfNotNull(
+                    "cur_season".takeIf { season == null },
+                    "cur_episode".takeIf { episode == null },
+                ),
+            ),
+        )
     fun setCompletedAt(millis: Long?) =
-        launchUpdate(UpdateItemRequest(completedAt = millis), toast = if (millis == null) "Cleared completion" else "Marked complete")
+        if (millis == null) launchUpdate(UpdateItemRequest(clear = listOf("completed_at")), toast = "Cleared completion")
+        else launchUpdate(UpdateItemRequest(completedAt = millis), toast = "Marked complete")
 
     /**
      * Movies/TV: keep the "watched" status and the Watched section in lockstep. Marking watched

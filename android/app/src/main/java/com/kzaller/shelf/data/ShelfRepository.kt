@@ -41,6 +41,13 @@ class ShelfRepository(context: Context) {
         MediaKind.values().forEach { shelfFlow(db, it) }
     }
 
+    /**
+     * The shelf as it stands in memory, or null if it hasn't been read yet. Lets a screen render
+     * the real thing on its first frame instead of a placeholder it immediately replaces.
+     */
+    fun cachedShelf(kind: MediaKind): List<ItemDto>? =
+        shelfFlow(db, kind).replayCache.firstOrNull()
+
     fun observeItem(id: String): Flow<ItemDto?> =
         db.items().observe(id).map { it?.toDto() }
 

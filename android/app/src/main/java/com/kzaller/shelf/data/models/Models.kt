@@ -93,6 +93,12 @@ data class UpdateItemRequest(
     @SerialName("cur_episode") val curEpisode: Int? = null,
     @SerialName("completed_at") val completedAt: Long? = null,
     @SerialName("show_to") val showTo: String? = null,
+    /**
+     * Fields to empty, named rather than sent as nulls: a property equal to its default is left
+     * out of the JSON entirely, so `rating = null` above is indistinguishable from not touching
+     * the rating at all. Naming it here is the only way to say "clear this".
+     */
+    val clear: List<String> = emptyList(),
 )
 
 @Serializable

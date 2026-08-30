@@ -11,8 +11,8 @@ import com.kzaller.shelf.data.ShelfRepository
 import com.kzaller.shelf.data.Status
 import com.kzaller.shelf.data.models.ItemDto
 import com.kzaller.shelf.data.preferences.AppPreferences
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,7 +20,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -57,29 +56,35 @@ class ShelfViewModel(
     private val _query = MutableStateFlow("")
     val query: StateFlow<String> = _query.asStateFlow()
 
-    /** Sort mode persists per-kind in DataStore so it survives app restarts. */
+    /**
+     * Sort mode persists per-kind in DataStore so it survives app restarts.
+     *
+     * Seeded from the in-memory copy where there is one. A DataStore read can't finish before
+     * the first frame, so starting on the default meant the shelf drew itself in recently-added
+     * order and then re-sorted every cover once the saved mode arrived.
+     */
     val sort: StateFlow<SortMode> =
-        prefs.observeSort(kind).stateIn(viewModelScope, SharingStarted.Eagerly, SortMode.RECENT)
+        prefs.observeSort(kind)
+            .stateIn(viewModelScope, SharingStarted.Eagerly, prefs.cachedSort(kind) ?: SortMode.RECENT)
 
     /** Grid vs list view also persists per-kind so different shelves can prefer different layouts. */
     val viewMode: StateFlow<ViewMode> =
-        prefs.observeViewMode(kind).stateIn(viewModelScope, SharingStarted.Eagerly, ViewMode.GRID)
+        prefs.observeViewMode(kind)
+            .stateIn(viewModelScope, SharingStarted.Eagerly, prefs.cachedViewMode(kind) ?: ViewMode.GRID)
 
     val columnsCompact: StateFlow<Int> =
-        prefs.observeColumns(expanded = false).stateIn(viewModelScope, SharingStarted.Eagerly, 3)
+        prefs.observeColumns(expanded = false)
+            .stateIn(viewModelScope, SharingStarted.Eagerly, prefs.cachedColumns(expanded = false) ?: 3)
     val columnsExpanded: StateFlow<Int> =
-        prefs.observeColumns(expanded = true).stateIn(viewModelScope, SharingStarted.Eagerly, 5)
+        prefs.observeColumns(expanded = true)
+            .stateIn(viewModelScope, SharingStarted.Eagerly, prefs.cachedColumns(expanded = true) ?: 5)
 
     /**
-     * One read of this shelf, shared by the visible list and the total count.
-     *
-     * shareIn, not stateIn: a StateFlow needs an initial value, and that synthetic empty list
-     * reached the grid before the real data did -- so opening a shelf drew the empty state, threw
-     * it away, and laid every cover out a second time. With no placeholder, combine below waits
-     * for real rows exactly as it did when it read the database directly.
+     * This shelf's rows. Already hot and shared inside the repository, so both readers below can
+     * collect it directly -- and neither gets a synthetic empty list ahead of the real rows,
+     * which is what used to draw the empty state and then lay every cover out a second time.
      */
-    private val shelf: SharedFlow<List<ItemDto>> =
-        repo.observeShelf(kind).shareIn(viewModelScope, SharingStarted.Eagerly, replay = 1)
+    private val shelf: Flow<List<ItemDto>> = repo.observeShelf(kind)
 
     /** All active filters bundled together so the items combine stays within combine's arity. */
     private data class ActiveFilters(
@@ -97,70 +102,87 @@ class ShelfViewModel(
     /**
      * Items visible on the shelf: kind -> status/format/platform/console filters -> search -> sort.
      *
-     * Null until the first real list arrives. A StateFlow has to start somewhere, and starting at
-     * an empty list meant every shelf open drew the "nothing here yet" state for a frame and then
-     * threw it away -- null lets the screen tell "still loading" apart from "genuinely empty".
+     * Starts on the shelf as it can be worked out right now -- the rows are already in memory
+     * once the shelf has been warmed, and no filter or search is active this early, so this is a
+     * sort and nothing more. Null only when the rows genuinely aren't there yet, which lets the
+     * screen tell "still loading" apart from "genuinely empty" instead of flashing one for the
+     * other and laying every cover out twice.
      */
+    private val initialItems: List<ItemDto>? =
+        repo.cachedShelf(kind)?.let { cached ->
+            visible(cached, ActiveFilters(emptySet(), emptySet(), emptySet(), emptySet()), "", sort.value)
+        }
+
     val items: StateFlow<List<ItemDto>?> =
         combine(shelf, activeFilters, _query, sort) { all, af, query, sort ->
-            // Defensive: the DAO already filters by kind in SQL, but enforce here too
-            // so a stale emission can't slip a different-kind item into the grid.
-            val ofKind = all.filter { it.kind == kind }
-
-            val statusFiltered = if (af.status.isEmpty()) ofKind
-                else ofKind.filter { item ->
-                    val s = Status.parse(item.status)
-                    // Real statuses match by intersection; the pseudo-filters ("Not Watched",
-                    // "Show To") match on other fields. Everything combines as OR, like the rest.
-                    val regular = af.status - Status.NOT_WATCHED - Status.HAS_SHOW_TO
-                    val matchesRegular = regular.any { it in s }
-                    val matchesNotWatched = Status.NOT_WATCHED in af.status && Status.WATCHED !in s
-                    val matchesShowTo = Status.HAS_SHOW_TO in af.status && !item.showTo.isNullOrBlank()
-                    matchesRegular || matchesNotWatched || matchesShowTo
-                }
-
-            val formatFiltered = if (af.format.isEmpty()) statusFiltered
-                else statusFiltered.filter { item ->
-                    val f = Format.parse(item.format)
-                    f.any { it in af.format }
-                }
-
-            // Platform + console narrow independently (each AND-ed with the rest, OR within itself).
-            val platformFiltered = if (af.platform.isEmpty()) formatFiltered
-                else formatFiltered.filter { item ->
-                    Platform.parse(item.userPlatform).any { it in af.platform }
-                }
-
-            val consoleFiltered = if (af.console.isEmpty()) platformFiltered
-                else platformFiltered.filter { item ->
-                    Console.parse(item.consoles).any { it in af.console }
-                }
-
-            val searched = if (query.isBlank()) consoleFiltered
-                else consoleFiltered.filter { item ->
-                    item.title.contains(query, ignoreCase = true) ||
-                        (item.subtitle?.contains(query, ignoreCase = true) == true)
-                }
-
-            when (sort) {
-                SortMode.RECENT     -> searched.sortedByDescending { it.addedAt ?: 0L }
-                // A case-insensitive comparator, not sortedBy { lowercase() }: the selector form
-                // re-lowercases on every comparison, which is tens of thousands of throwaway
-                // strings to order a shelf this size.
-                SortMode.TITLE_ASC  -> searched.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.title })
-                SortMode.TITLE_DESC -> searched.sortedWith(compareByDescending(String.CASE_INSENSITIVE_ORDER) { it.title })
-                SortMode.YEAR_DESC  -> searched.sortedByDescending { it.year ?: Int.MIN_VALUE }
-                SortMode.YEAR_ASC   -> searched.sortedBy { it.year ?: Int.MAX_VALUE }
-            }
+            visible(all, af, query, sort)
         }
             // Filtering and sorting a full shelf is far too much to do on the main thread, which
             // is where viewModelScope would otherwise run it.
             .flowOn(Dispatchers.Default)
-            .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+            .stateIn(viewModelScope, SharingStarted.Eagerly, initialItems)
+
+    private fun visible(
+        all: List<ItemDto>,
+        af: ActiveFilters,
+        query: String,
+        sort: SortMode,
+    ): List<ItemDto> {
+        // Defensive: the DAO already filters by kind in SQL, but enforce here too
+        // so a stale emission can't slip a different-kind item into the grid.
+        val ofKind = all.filter { it.kind == kind }
+
+        val statusFiltered = if (af.status.isEmpty()) ofKind
+            else ofKind.filter { item ->
+                val s = Status.parse(item.status)
+                // Real statuses match by intersection; the pseudo-filters ("Not Watched",
+                // "Show To") match on other fields. Everything combines as OR, like the rest.
+                val regular = af.status - Status.NOT_WATCHED - Status.HAS_SHOW_TO
+                val matchesRegular = regular.any { it in s }
+                val matchesNotWatched = Status.NOT_WATCHED in af.status && Status.WATCHED !in s
+                val matchesShowTo = Status.HAS_SHOW_TO in af.status && !item.showTo.isNullOrBlank()
+                matchesRegular || matchesNotWatched || matchesShowTo
+            }
+
+        val formatFiltered = if (af.format.isEmpty()) statusFiltered
+            else statusFiltered.filter { item ->
+                val f = Format.parse(item.format)
+                f.any { it in af.format }
+            }
+
+        // Platform + console narrow independently (each AND-ed with the rest, OR within itself).
+        val platformFiltered = if (af.platform.isEmpty()) formatFiltered
+            else formatFiltered.filter { item ->
+                Platform.parse(item.userPlatform).any { it in af.platform }
+            }
+
+        val consoleFiltered = if (af.console.isEmpty()) platformFiltered
+            else platformFiltered.filter { item ->
+                Console.parse(item.consoles).any { it in af.console }
+            }
+
+        val searched = if (query.isBlank()) consoleFiltered
+            else consoleFiltered.filter { item ->
+                item.title.contains(query, ignoreCase = true) ||
+                    (item.subtitle?.contains(query, ignoreCase = true) == true)
+            }
+
+        return when (sort) {
+            SortMode.RECENT     -> searched.sortedByDescending { it.addedAt ?: 0L }
+            // A case-insensitive comparator, not sortedBy { lowercase() }: the selector form
+            // re-lowercases on every comparison, which is tens of thousands of throwaway
+            // strings to order a shelf this size.
+            SortMode.TITLE_ASC  -> searched.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.title })
+            SortMode.TITLE_DESC -> searched.sortedWith(compareByDescending(String.CASE_INSENSITIVE_ORDER) { it.title })
+            SortMode.YEAR_DESC  -> searched.sortedByDescending { it.year ?: Int.MIN_VALUE }
+            SortMode.YEAR_ASC   -> searched.sortedBy { it.year ?: Int.MAX_VALUE }
+        }
+    }
 
     /** Full unfiltered count, for a "showing X of Y" label when filters/search are active. */
     val totalCount: StateFlow<Int> =
-        shelf.map { it.size }.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+        shelf.map { it.size }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, repo.cachedShelf(kind)?.size ?: 0)
 
     private val _refreshing = MutableStateFlow(false)
     val refreshing = _refreshing.asStateFlow()

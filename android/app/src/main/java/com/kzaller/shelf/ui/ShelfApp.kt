@@ -128,7 +128,12 @@ fun ShelfApp() {
 
     // Build every shelf's items now, while the user is still on the home screen, so tapping a
     // shelf only has to lay covers out rather than query and convert a couple of thousand rows.
-    LaunchedEffect(Unit) { repo.warmShelves() }
+    // The sort, view mode and column count come from DataStore, which is equally asynchronous
+    // and equally worth having settled before a shelf tries to lay itself out.
+    LaunchedEffect(Unit) {
+        repo.warmShelves()
+        prefs.warmDisplayPrefs()
+    }
 
     // If Steam is already connected, make sure the backend has the credentials so its daily
     // auto-sync cron can add newly-purchased games (the app otherwise only sends them on connect).

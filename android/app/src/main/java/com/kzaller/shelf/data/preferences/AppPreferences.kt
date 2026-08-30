@@ -9,7 +9,9 @@ import com.kzaller.shelf.data.MediaKind
 import com.kzaller.shelf.ui.screens.SortMode
 import com.kzaller.shelf.ui.screens.ViewMode
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 
 private val Context.dataStore by preferencesDataStore(name = "media_shelf_prefs")
 
@@ -25,7 +27,26 @@ class AppPreferences(private val context: Context) {
         context.dataStore.data.map { prefs ->
             val raw = prefs[sortKey(kind)] ?: return@map SortMode.RECENT
             runCatching { SortMode.valueOf(raw) }.getOrDefault(SortMode.RECENT)
+        }.cached("sort_${kind.wire}")
+
+    /** The saved sort, if it has been read at least once this run. See [cached]. */
+    fun cachedSort(kind: MediaKind): SortMode? = cache["sort_${kind.wire}"] as? SortMode
+    fun cachedViewMode(kind: MediaKind): ViewMode? = cache["view_${kind.wire}"] as? ViewMode
+    fun cachedColumns(expanded: Boolean): Int? = cache[columnsCacheKey(expanded)] as? Int
+
+    /**
+     * Read the display preferences once so their values are in memory before any shelf opens.
+     * Reading DataStore is asynchronous, and a shelf built from scratch would otherwise start on
+     * the defaults and visibly re-sort and re-flow itself the moment the real values landed.
+     */
+    suspend fun warmDisplayPrefs() {
+        MediaKind.values().forEach { kind ->
+            observeSort(kind).first()
+            observeViewMode(kind).first()
         }
+        observeColumns(expanded = false).first()
+        observeColumns(expanded = true).first()
+    }
 
     suspend fun setSort(kind: MediaKind, mode: SortMode) {
         context.dataStore.edit { it[sortKey(kind)] = mode.name }
@@ -125,11 +146,14 @@ class AppPreferences(private val context: Context) {
      * (expanded) screens remember separate values, so a foldable keeps a comfortable density in
      * each posture.
      */
+    private fun columnsCacheKey(expanded: Boolean) =
+        if (expanded) "columns_expanded" else "columns_compact"
+
     fun observeColumns(expanded: Boolean): Flow<Int> =
         context.dataStore.data.map {
             val key = if (expanded) columnsExpandedKey else columnsCompactKey
             (it[key] ?: if (expanded) 5 else 3).coerceIn(2, 8)
-        }
+        }.cached(columnsCacheKey(expanded))
 
     suspend fun setColumns(expanded: Boolean, n: Int) {
         val key = if (expanded) columnsExpandedKey else columnsCompactKey
@@ -140,9 +164,23 @@ class AppPreferences(private val context: Context) {
         context.dataStore.data.map { prefs ->
             val raw = prefs[viewKey(kind)] ?: return@map ViewMode.GRID
             runCatching { ViewMode.valueOf(raw) }.getOrDefault(ViewMode.GRID)
-        }
+        }.cached("view_${kind.wire}")
 
     suspend fun setViewMode(kind: MediaKind, mode: ViewMode) {
         context.dataStore.edit { it[viewKey(kind)] = mode.name }
+    }
+
+    companion object {
+        /**
+         * The last value seen for each display preference, process-wide because DataStore is.
+         *
+         * These feed the initial value of the shelf's state flows. Every shelf ViewModel is built
+         * from scratch when its screen opens, and a DataStore read doesn't complete in time, so
+         * without this a shelf laid itself out on the defaults -- recently-added order, three
+         * columns -- and then re-sorted and re-flowed a moment later, which is the flicker.
+         */
+        private val cache = java.util.concurrent.ConcurrentHashMap<String, Any>()
+
+        private fun <T : Any> Flow<T>.cached(key: String): Flow<T> = onEach { cache[key] = it }
     }
 }
