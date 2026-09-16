@@ -904,6 +904,12 @@ async function searchTmdb(url: URL, env: Env, kind: "movie" | "tv"): Promise<Res
   } else if (q) {
     api = new URL(`https://api.themoviedb.org/3/search/${kind}`);
     api.searchParams.set("query", q);
+    // Optional: narrows a title that many releases share. TMDB names the parameter differently
+    // per kind, and ignores an empty one, so only set it when we actually have a year.
+    const year = url.searchParams.get("year");
+    if (year && /^\d{4}$/.test(year)) {
+      api.searchParams.set(kind === "movie" ? "year" : "first_air_date_year", year);
+    }
   } else {
     return err(400, "q or id required");
   }
@@ -1650,26 +1656,162 @@ async function upcProductName(code: string): Promise<string | null> {
 }
 
 /**
+ * Tidy the wreckage a strip leaves behind: empty brackets, runs of dangling joiners in the
+ * middle ("Elden Ring - - Bandai"), and joiners at either end ("Dune +", "- Alien").
+ */
+function trimJoiners(s: string): string {
+  return s
+    .replace(/\(\s*\)|\[\s*\]|\{\s*\}/g, " ")            // ( ) left by a stripped tag
+    .replace(/\s{2,}/g, " ")
+    .replace(/(?:\s*[-–—:|,+&/]\s*){2,}/g, " - ")        // " - - " collapses to one
+    .replace(/^[-–—:|,+&/\s]+|[-–—:|,+&/\s]+$/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+/**
  * Retail titles carry a lot that would wreck a catalogue search: format tags, edition suffixes,
  * platform names, region codes. Strip those back to something close to the work's actual title.
  */
 function cleanProductTitle(raw: string): string {
   let t = raw;
+  // Typographic punctuation the catalogues don't use in their own titles.
+  t = t.replace(/[‘’ʼ]/g, "'").replace(/[“”]/g, '"');
   t = t.replace(/\[[^\]]*\]/g, " ");                  // [Blu-ray], [DVD]
   t = t.replace(/\((?:[^)]*(?:blu-?ray|dvd|4k|uhd|hd|edition|region|disc|import|widescreen)[^)]*)\)/gi, " ");
   t = t.replace(
     /\b(blu-?ray|dvd|4k(?:\s*ultra)?(?:\s*hd)?|uhd|steelbook|digital\s*copy|widescreen|fullscreen|region\s*[0-9a-z]|multi-?format|combo\s*pack|box\s*set|w\/\s*digital)\b/gi,
     " ",
   );
+  // Platform names that no work is plausibly called, so they're safe to cut wherever they appear.
   t = t.replace(
-    /\b(xbox(?:\s*(?:one|360|series\s*[sx]))?|playstation\s*[1-5]?|ps[1-5]|nintendo(?:\s*switch)?|switch|wii\s*u?|pc(?:\s*dvd)?|steam)\b/gi,
+    /\b(xbox(?:\s*(?:one|360|series\s*[sx]))?|playstation\s*[1-5]?|ps[1-5]|wii\s*u?)\b/gi,
     " ",
   );
+  // "Nintendo", "Switch", "Steam" and "PC" are all real words that turn up inside real titles
+  // ("Nintendo Land", "Steam World Dig"), so they only go when a whole segment is nothing but
+  // platform talk -- which is how a retail name actually carries them: "... - Nintendo Switch".
+  // Split only on a separator with space around it. A bare hyphen is part of the word
+  // ("Spider-Man", "16-Disc"), and splitting on those mangled real titles.
+  t = t
+    .split(/\s+[-–—]\s+|\s*\/\s*|\s*,\s*/)
+    .filter((seg, i) => i === 0 || !isPlatformSegment(seg))
+    .join(" - ");
   t = t.replace(/\((?:19|20)\d{2}\)/g, " ");           // a bare year confuses catalogue search
-  t = t.replace(/\s{2,}/g, " ").trim();
-  // Stripping the format tags leaves dangling joiners ("Dune +", "Alien -"); take those off both ends.
-  t = t.replace(/^[-–—:|,+&\s]+|[-–—:|,+&\s]+$/g, "").trim();
-  return t;
+  return trimJoiners(t);
+}
+
+/** True when a dash-separated chunk carries no title at all, only platform/packaging words. */
+function isPlatformSegment(seg: string): boolean {
+  const words = seg.toLowerCase().match(/[a-z0-9]+/g);
+  if (!words || words.length === 0 || words.length > 4) return false;
+  const vocab = /^(nintendo|switch|steam|pc|mac|linux|deck|console|for|the|edition|version|game|disc|physical|digital|cd|rom|u|2|360|x|s)$/;
+  return words.every((w) => vocab.test(w));
+}
+
+/**
+ * Studios, labels and publishers that retail listings put in front of the actual title
+ * ("Warner Bros. Presents Dune", "Ubisoft Assassin's Creed Valhalla"). Only stripped from the
+ * front, and only as a later fallback, since a few are legitimately part of a title.
+ */
+const PRODUCT_BRANDS = [
+  // film & TV labels
+  "warner bros(?:thers)?(?: home video| interactive| entertainment| pictures)?", "universal(?: pictures)?(?: home entertainment)?",
+  "paramount(?: pictures| home (?:entertainment|media))?", "sony pictures(?: home entertainment)?",
+  "20th century (?:fox|studios)", "twentieth century (?:fox|studios)", "lionsgate", "lions gate",
+  "mgm", "metro-?goldwyn-?mayer", "walt disney(?: studios)?(?: home entertainment)?", "disney",
+  "buena vista", "miramax", "a24", "criterion(?: collection)?", "shout(?: ?! ?)?(?: factory)?",
+  "scream factory", "arrow(?: video| films)", "anchor bay", "new line(?: cinema)?", "dreamworks",
+  "focus features", "hbo", "showtime", "bbc", "pbs", "netflix", "columbia(?: pictures)?",
+  "tristar", "orion(?: pictures)?", "magnolia(?: pictures)?", "ifc(?: films)?", "well go usa",
+  "kino lorber", "image entertainment", "rlje(?: films)?", "vertical entertainment",
+  // game publishers
+  "nintendo", "sony interactive entertainment", "sie", "microsoft(?: game studios)?",
+  "xbox game studios", "ubisoft", "electronic arts", "ea(?: sports| games)?", "activision(?: blizzard)?",
+  "bethesda(?: softworks)?", "bandai ?namco(?: entertainment)?", "square ?enix", "capcom", "konami",
+  "sega", "take-?two(?: interactive)?", "rockstar games", "2k(?: games| sports)?", "thq(?: nordic)?",
+  "deep silver", "focus(?: home interactive| entertainment)", "devolver digital", "koei tecmo",
+  "atlus", "nis america", "limited run games", "snk", "annapurna interactive", "505 games",
+];
+
+/**
+ * Matched anywhere, not just at the front: retail listings put the label wherever it fits
+ * ("Elden Ring - Xbox Series X - Bandai Namco Entertainment", "Alien ... 20th Century Fox").
+ * Only ever applied as a later rung, so a title that genuinely contains one of these names
+ * gets its faithful attempt first.
+ */
+const BRAND_ANYWHERE = new RegExp(
+  `\\b(?:${PRODUCT_BRANDS.join("|")})\\b\\.?(?:\\s+presents\\b)?`,
+  "gi",
+);
+
+/**
+ * Marketing and packaging language that sits around the title. Cut later than the format tags
+ * because some of it is load-bearing -- "Remastered" and "Definitive Edition" really are separate
+ * entries in the game catalogues, so the fuller title gets its turn first.
+ */
+function stripEditionNoise(t: string): string {
+  let s = t;
+  s = s.replace(
+    /\b(?:(?:collector'?s?|special|limited|deluxe|ultimate|standard|definitive|complete|anniversary|legacy|gold|premium|day\s*one|launch|legendary|platinum|greatest\s*hits|player'?s?\s*choice|nintendo\s*selects)\s*edition)\b/gi,
+    " ",
+  );
+  s = s.replace(/\b(?:game of the year(?:\s*edition)?|goty(?:\s*edition)?)\b/gi, " ");
+  s = s.replace(/\b(?:director'?s?\s*cut|extended\s*(?:cut|edition)|unrated|theatrical(?:\s*version)?|remaster(?:ed)?)\b/gi, " ");
+  s = s.replace(/\b(?:the\s+)?complete\s+(?:series|seasons?|collection)\b/gi, " ");
+  s = s.replace(/\b(?:seasons?|series)\s+\d+(?:\s*[-–]\s*\d+)?\b/gi, " ");
+  s = s.replace(/\b\d+\s*-?\s*(?:disc|dvd|movie|film)\s*(?:set|collection|pack)?\b/gi, " ");
+  s = s.replace(/\b(?:amazon|walmart|target|best\s*buy|gamestop)\s+exclusive\b/gi, " ");
+  s = s.replace(/\b(?:brand\s*new|factory\s*sealed|new\s*sealed|pre-?owned|used|slipcover|video\s*game)\b/gi, " ");
+  s = s.replace(/\b(?:rated\s*[gr]|pg-?13|nc-?17|esrb|unrated)\b/gi, " ");
+  return trimJoiners(s);
+}
+
+/** A release year mentioned anywhere in the retail name, which narrows a catalogue search a lot. */
+function extractYear(raw: string): number | null {
+  const m = raw.match(/\b(19[2-9]\d|20[0-4]\d)\b/);
+  if (!m) return null;
+  const y = Number(m[1]);
+  return y >= 1920 && y <= new Date().getFullYear() + 2 ? y : null;
+}
+
+/**
+ * Query strings to try for a retail product name, most faithful first.
+ *
+ * A single cleaned string was too brittle: retail names vary wildly in how much they bolt onto
+ * the actual title, and one failed guess ended the scan. Walking a ladder costs one extra
+ * catalogue call per rung only when the rung above found nothing.
+ */
+function productTitleCandidates(raw: string): string[] {
+  const out: string[] = [];
+  const push = (s: string | undefined) => {
+    const v = s?.trim();
+    if (v && v.length >= 3 && !out.includes(v)) out.push(v);
+  };
+
+  const clean = cleanProductTitle(raw);
+  push(clean);
+  push(stripEditionNoise(clean));
+
+  // The publisher or label, wherever it sits in the name.
+  const debranded = trimJoiners(clean.replace(BRAND_ANYWHERE, " "));
+  push(debranded);
+  const bare = stripEditionNoise(debranded);
+  push(bare);
+
+  // Retail names often trail a subtitle the catalogue doesn't use.
+  const base = bare || debranded || clean;
+  push(base.split(/\s+[-–—]\s+|\s*[:|]\s*/)[0]);
+
+  // Last resort: the opening words. Stops at three so it can't degrade into a one-word search
+  // that matches half the catalogue, and skips anything ending mid-phrase.
+  const words = base.split(/\s+/);
+  for (let n = words.length - 1; n >= 3; n--) {
+    const prefix = trimJoiners(words.slice(0, n).join(" "));
+    if (prefix.split(/\s+/).length >= 3) push(prefix);
+  }
+
+  return out.slice(0, 6);
 }
 
 /** Resolve a scanned barcode to catalogue hits for the shelf being added to. */
@@ -1679,8 +1821,9 @@ async function lookupBarcode(url: URL, env: Env): Promise<Response> {
   if (!code) return err(400, "code required");
   if (!["book", "movie", "tv", "game"].includes(kind)) return err(400, "valid kind required");
 
-  const search = async (q: string): Promise<SearchHit[]> => {
+  const search = async (q: string, year?: number | null): Promise<SearchHit[]> => {
     const u = new URL(`https://shelf.local/search?q=${encodeURIComponent(q)}`);
+    if (year) u.searchParams.set("year", String(year));
     const resp = kind === "book" ? await searchBooks(u, env)
       : kind === "game" ? await searchGames(u, env)
       : await searchTmdb(u, env, kind as "movie" | "tv");
@@ -1701,14 +1844,18 @@ async function lookupBarcode(url: URL, env: Env): Promise<Response> {
   if (!product) {
     return json({ hits: [], via: "upc", matched: null, reason: "barcode not in product database" });
   }
-  const title = cleanProductTitle(product);
-  let hits = title ? await search(title) : [];
-  // Retail names often trail a subtitle the catalogue doesn't use; retry on the leading phrase.
-  if (hits.length === 0) {
-    const head = title.split(/\s+[-–—:]\s+/)[0]?.trim();
-    if (head && head !== title && head.length >= 3) hits = await search(head);
+  // Walk progressively looser readings of the retail name and take the first that lands. A
+  // year in the name, where there is one, narrows every attempt.
+  const candidates = productTitleCandidates(product);
+  const year = extractYear(product);
+  for (const q of candidates) {
+    let hits = await search(q, year);
+    // The year is a hint, not a fact -- retail names carry copyright and re-release dates too --
+    // so a miss with it is worth one more try without.
+    if (hits.length === 0 && year) hits = await search(q);
+    if (hits.length > 0) return json({ hits, via: "upc", matched: product, query: q });
   }
-  return json({ hits, via: "upc", matched: product, query: title });
+  return json({ hits: [], via: "upc", matched: product, query: candidates[0] ?? null });
 }
 
 // ---------- user-uploaded covers ----------
