@@ -1026,18 +1026,104 @@ async function plexConfig(req: Request, url: URL, env: Env, userId: string): Pro
     await settingSet(env, userId, "plex_webhook_secret", secret);
   }
 
-  // The app reports which Plex account is this user's own, read from their server. It's the only
-  // thing that reliably tells one person's playback from another's in a webhook -- see the
-  // account check in plexWebhook. The body is optional, so a client that doesn't send one still
-  // gets its webhook URL.
+  // The app reports which Plex account is this user's own, read from their server. The body is
+  // optional, so a client that doesn't send one still gets its webhook URL.
+  //
+  // Added to the accepted set rather than replacing it: an account has several names (id,
+  // username, title, email) and different parts of Plex report different ones, so a single
+  // stored value is one wrong guess away from dropping everything. Anything already learned
+  // from a scrobble stays.
   let body: any = null;
   try { body = await req.json(); } catch { /* no body, or not JSON */ }
-  if (body && typeof body.account === "string" && body.account.trim()) {
-    await settingSet(env, userId, "plex_account", body.account.trim());
+  const reported = Array.isArray(body?.accounts)
+    ? body.accounts.filter((a: unknown): a is string => typeof a === "string")
+    : typeof body?.account === "string" ? [body.account] : [];
+  if (reported.length) {
+    const merged = new Set([
+      ...parseIdentifiers(await settingGet(env, userId, "plex_account")),
+      ...reported.map((a: string) => a.trim().toLowerCase()).filter(Boolean),
+    ]);
+    await settingSet(env, userId, "plex_account", Array.from(merged).join(","));
   }
 
   const account = await settingGet(env, userId, "plex_account");
-  return json({ secret, url: `${url.origin}/plex/webhook?u=${secret}`, account: account ?? "" });
+  // Which accounts have actually scrobbled, and whether each was kept. This is what makes a
+  // mismatch visible instead of silent.
+  let seen: unknown = {};
+  try { seen = JSON.parse((await settingGet(env, userId, "plex_accounts_seen")) ?? "{}"); } catch { seen = {}; }
+  return json({
+    secret,
+    url: `${url.origin}/plex/webhook?u=${secret}`,
+    account: account ?? "",
+    seen,
+  });
+}
+
+/** Comma-separated identifiers, lowercased and emptied of blanks. */
+function parseIdentifiers(csv: string | null | undefined): string[] {
+  return (csv ?? "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+/**
+ * Decide whether a scrobble belongs to this user, and leave a trail either way.
+ *
+ * Returns the account as Plex named it so the caller can report it, and records every distinct
+ * account into `plex_accounts_seen` — a filter you cannot observe is a filter you cannot debug,
+ * which is the whole reason the previous version went unnoticed for so long.
+ */
+async function classifyScrobbleAccount(
+  payload: any,
+  env: Env,
+  owner: string,
+): Promise<{ allow: boolean; seen: string | null }> {
+  const title: string | null = typeof payload.Account?.title === "string"
+    ? payload.Account.title.trim()
+    : null;
+  const id = payload.Account?.id != null ? String(payload.Account.id).trim() : null;
+  const seen = title ?? (id ? `#${id}` : null);
+
+  const accepted = parseIdentifiers(await settingGet(env, owner, "plex_account"));
+  const matches =
+    (title != null && accepted.includes(title.toLowerCase())) ||
+    (id != null && accepted.includes(id.toLowerCase()));
+
+  // Plex saying so outright is the one signal worth trusting on its own. Learning from it means
+  // a wrong identifier (or none) fixes itself the first time this user finishes something,
+  // rather than needing the app reinstalled or the setting edited by hand.
+  const statedOwner = payload.owner === true;
+  if (!matches && statedOwner && (title || id)) {
+    const next = [...accepted, ...(title ? [title.toLowerCase()] : []), ...(id ? [id.toLowerCase()] : [])];
+    await settingSet(env, owner, "plex_account", Array.from(new Set(next)).join(","));
+  }
+
+  const allow = matches || statedOwner || (accepted.length === 0 && payload.owner !== false);
+  await recordSeenAccount(env, owner, seen, allow);
+  return { allow, seen };
+}
+
+/** Keep a short, bounded record of which Plex accounts have scrobbled and whether each landed. */
+async function recordSeenAccount(
+  env: Env,
+  owner: string,
+  seen: string | null,
+  allowed: boolean,
+): Promise<void> {
+  if (!seen) return;
+  const raw = await settingGet(env, owner, "plex_accounts_seen");
+  let log: Record<string, { allowed: number; skipped: number; last: number }> = {};
+  try { log = raw ? JSON.parse(raw) : {}; } catch { log = {}; }
+  const entry = log[seen] ?? { allowed: 0, skipped: 0, last: 0 };
+  if (allowed) entry.allowed++; else entry.skipped++;
+  entry.last = Date.now();
+  log[seen] = entry;
+  // A server has a handful of accounts; a cap keeps a malformed payload from growing this forever.
+  const trimmed = Object.entries(log)
+    .sort((a, b) => b[1].last - a[1].last)
+    .slice(0, 12);
+  await settingSet(env, owner, "plex_accounts_seen", JSON.stringify(Object.fromEntries(trimmed)));
 }
 
 async function plexWebhook(req: Request, url: URL, env: Env): Promise<Response> {
@@ -1075,23 +1161,21 @@ async function plexWebhook(req: Request, url: URL, env: Env): Promise<Response> 
   // Plex fires webhooks for EVERY account on the server -- shared users with access to the
   // library included -- so a scrobble here is not necessarily this user's own play.
   //
-  // The account name is what settles it. The `owner` flag was tried first and isn't dependable:
-  // it can be absent, and treating absent as "allow" let other people's plays through, which is
-  // exactly what put films nobody here watched into Recently completed. When we know the user's
-  // Plex account name (the app reports it from their server), an exact match is required and
-  // anything else is dropped. Until it's known we fall back to the old flag check, so a webhook
-  // configured before this still works rather than going silent.
+  // Identifying the right account turned out to be the hard part. The `owner` flag alone is no
+  // good: it can be absent, and treating absent as "allow" let other people's plays through.
+  // Matching one stored name was worse -- the app reported the server's myPlexUsername, which
+  // is an email address, while a webhook names the account by its title. Nothing ever matched,
+  // so every scrobble was dropped silently, this user's included, for ten weeks.
+  //
+  // So: accept a SET of identifiers and match the account's id or its title against any of
+  // them; when the payload states outright that this is the owner, allow it and learn that
+  // title, which repairs a wrong or missing identifier on its own; and record every account
+  // seen either way, so what the filter is actually rejecting can be read back instead of
+  // guessed at.
   if (event === "media.scrobble") {
-    const expected = (await settingGet(env, owner, "plex_account"))?.trim().toLowerCase();
-    const account = typeof payload.Account?.title === "string"
-      ? payload.Account.title.trim().toLowerCase()
-      : null;
-    if (expected) {
-      if (account !== expected) {
-        return json({ ok: true, skipped: "another account", account: payload.Account?.title ?? null });
-      }
-    } else if (payload.owner === false) {
-      return json({ ok: true, skipped: "non-owner scrobble", account: payload.Account?.title ?? null });
+    const verdict = await classifyScrobbleAccount(payload, env, owner);
+    if (!verdict.allow) {
+      return json({ ok: true, skipped: "another account", account: verdict.seen });
     }
   }
 
