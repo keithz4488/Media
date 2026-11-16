@@ -1051,11 +1051,14 @@ async function plexConfig(req: Request, url: URL, env: Env, userId: string): Pro
   // mismatch visible instead of silent.
   let seen: unknown = {};
   try { seen = JSON.parse((await settingGet(env, userId, "plex_accounts_seen")) ?? "{}"); } catch { seen = {}; }
+  let scrobbles: unknown = [];
+  try { scrobbles = JSON.parse((await settingGet(env, userId, "plex_scrobble_log")) ?? "[]"); } catch { scrobbles = []; }
   return json({
     secret,
     url: `${url.origin}/plex/webhook?u=${secret}`,
     account: account ?? "",
     seen,
+    scrobbles,
   });
 }
 
@@ -1126,6 +1129,48 @@ async function recordSeenAccount(
   await settingSet(env, owner, "plex_accounts_seen", JSON.stringify(Object.fromEntries(trimmed)));
 }
 
+/**
+ * Was this played as live TV rather than started deliberately?
+ *
+ * Tunarr (and a real DVR) presents itself to Plex as an HDHomeRun tuner, so its channels are
+ * Live TV. Tune into a film already half-way through and Plex's playback position is instantly
+ * past the ~90% mark that fires media.scrobble -- two minutes of a channel is indistinguishable
+ * from finishing the film, and the shelf fills up with things nobody sat through.
+ *
+ * Plex tags this content as live and hangs the channel's details off it. Any of those is enough:
+ * a film started from the library carries none of them.
+ */
+function isLivePlayback(md: any): boolean {
+  if (!md || typeof md !== "object") return false;
+  const live = md.live;
+  if (live === 1 || live === "1" || live === true) return true;
+  return ["channelCallSign", "channelIdentifier", "channelTitle", "channelVcn", "channelThumb"]
+    .some((k) => typeof md[k] === "string" && md[k].trim() !== "");
+}
+
+/**
+ * The last few of this user's own scrobbles, reduced to the fields that decide what happens to
+ * them. Not the raw payloads -- just enough to tell a live-TV tune-in from a real play, and to
+ * see at a glance whether the test above is firing on the right ones.
+ */
+async function recordScrobbleShape(env: Env, owner: string, payload: any, md: any): Promise<void> {
+  const entry = {
+    at: Date.now(),
+    title: typeof md?.title === "string" ? md.title.slice(0, 80) : null,
+    type: md?.type ?? null,
+    live: md?.live ?? null,
+    channel: md?.channelTitle ?? md?.channelCallSign ?? null,
+    section: md?.librarySectionTitle ?? null,
+    player: typeof payload?.Player?.title === "string" ? payload.Player.title.slice(0, 40) : null,
+    treatedAsLive: isLivePlayback(md),
+  };
+  const raw = await settingGet(env, owner, "plex_scrobble_log");
+  let log: unknown[] = [];
+  try { log = raw ? JSON.parse(raw) : []; } catch { log = []; }
+  if (!Array.isArray(log)) log = [];
+  await settingSet(env, owner, "plex_scrobble_log", JSON.stringify([entry, ...log].slice(0, 15)));
+}
+
 async function plexWebhook(req: Request, url: URL, env: Env): Promise<Response> {
   const secret = url.searchParams.get("u") || url.searchParams.get("token") || url.searchParams.get("s");
   // Resolve which user this webhook belongs to by their per-user secret. Fall back to the legacy
@@ -1170,6 +1215,12 @@ async function plexWebhook(req: Request, url: URL, env: Env): Promise<Response> 
     const verdict = await classifyScrobbleAccount(payload, env, owner);
     if (!verdict.allow) {
       return json({ ok: true, skipped: "another account", account: verdict.seen });
+    }
+    // Keep a short record of the shape of this user's own scrobbles, so the live-TV test below
+    // can be checked against what Plex actually sends rather than taken on trust.
+    await recordScrobbleShape(env, owner, payload, md);
+    if (isLivePlayback(md)) {
+      return json({ ok: true, skipped: "live tv", title: md.title ?? null });
     }
   }
 
