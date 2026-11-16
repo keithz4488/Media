@@ -48,14 +48,36 @@ class PlexClient {
      * The webhook needs this to tell the user's own playback from that of everyone else with
      * access to the library -- Plex fires for all of them and only names the account.
      */
-    suspend fun fetchAccountName(baseUrl: String, token: String): String? = withContext(Dispatchers.IO) {
-        runCatching {
-            get(baseUrl.trimEnd('/') + "/", token)
-                .optJSONObject("MediaContainer")
-                ?.optString("myPlexUsername")
-                ?.takeIf { it.isNotBlank() }
-        }.getOrNull()
-    }
+    /**
+     * Every name this Plex account answers to: its numeric id, username, display title and
+     * email.
+     *
+     * All of them, because a webhook names the account by its *title* while the server reports
+     * `myPlexUsername`, which is the email. Registering only the latter meant the webhook's
+     * filter compared an email against a title, matched nothing, and silently dropped every
+     * play for ten weeks. Sending the whole set removes the guess.
+     *
+     * plex.tv is the account's own record, so it is asked first; the server's own view is the
+     * fallback when plex.tv can't be reached.
+     */
+    suspend fun fetchAccountIdentifiers(baseUrl: String, token: String): List<String> =
+        withContext(Dispatchers.IO) {
+            val out = LinkedHashSet<String>()
+            runCatching {
+                val me = get("https://plex.tv/api/v2/user", token)
+                listOf("id", "username", "title", "email").forEach { field ->
+                    me.optString(field).takeIf { it.isNotBlank() && it != "null" }?.let(out::add)
+                }
+            }
+            runCatching {
+                get(baseUrl.trimEnd('/') + "/", token)
+                    .optJSONObject("MediaContainer")
+                    ?.optString("myPlexUsername")
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let(out::add)
+            }
+            out.toList()
+        }
 
     /** Returns all movies + shows across the server's libraries. */
     suspend fun fetchLibrary(baseUrl: String, token: String): List<PlexItem> = withContext(Dispatchers.IO) {

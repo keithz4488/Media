@@ -1070,9 +1070,14 @@ function parseIdentifiers(csv: string | null | undefined): string[] {
 /**
  * Decide whether a scrobble belongs to this user, and leave a trail either way.
  *
- * Returns the account as Plex named it so the caller can report it, and records every distinct
- * account into `plex_accounts_seen` — a filter you cannot observe is a filter you cannot debug,
- * which is the whole reason the previous version went unnoticed for so long.
+ * The account's id or title, matched against the configured set, is the whole test. The
+ * payload's `owner` flag is deliberately ignored: it is true on every event delivered to this
+ * webhook, because the webhook belongs to the server's owner -- it says nothing about who
+ * pressed play. Reading it as "this play is the owner's" let it allow everyone, and reading it
+ * as "false means someone else" meant it never excluded anyone. It carries no information.
+ *
+ * Records every distinct account into `plex_accounts_seen`, which is what made the above
+ * visible rather than guessed at.
  */
 async function classifyScrobbleAccount(
   payload: any,
@@ -1082,7 +1087,8 @@ async function classifyScrobbleAccount(
   const title: string | null = typeof payload.Account?.title === "string"
     ? payload.Account.title.trim()
     : null;
-  const id = payload.Account?.id != null ? String(payload.Account.id).trim() : null;
+  const rawId = payload.Account?.id;
+  const id = rawId != null && String(rawId).trim() !== "" ? String(rawId).trim() : null;
   const seen = title ?? (id ? `#${id}` : null);
 
   const accepted = parseIdentifiers(await settingGet(env, owner, "plex_account"));
@@ -1090,16 +1096,10 @@ async function classifyScrobbleAccount(
     (title != null && accepted.includes(title.toLowerCase())) ||
     (id != null && accepted.includes(id.toLowerCase()));
 
-  // Plex saying so outright is the one signal worth trusting on its own. Learning from it means
-  // a wrong identifier (or none) fixes itself the first time this user finishes something,
-  // rather than needing the app reinstalled or the setting edited by hand.
-  const statedOwner = payload.owner === true;
-  if (!matches && statedOwner && (title || id)) {
-    const next = [...accepted, ...(title ? [title.toLowerCase()] : []), ...(id ? [id.toLowerCase()] : [])];
-    await settingSet(env, owner, "plex_account", Array.from(new Set(next)).join(","));
-  }
-
-  const allow = matches || statedOwner || (accepted.length === 0 && payload.owner !== false);
+  // With nothing configured there is nothing to compare against, so events are kept rather than
+  // silently dropped -- but the log above records them, so an unconfigured webhook shows up as
+  // several accounts being allowed instead of looking like normal use.
+  const allow = accepted.length === 0 ? true : matches;
   await recordSeenAccount(env, owner, seen, allow);
   return { allow, seen };
 }
@@ -1161,17 +1161,11 @@ async function plexWebhook(req: Request, url: URL, env: Env): Promise<Response> 
   // Plex fires webhooks for EVERY account on the server -- shared users with access to the
   // library included -- so a scrobble here is not necessarily this user's own play.
   //
-  // Identifying the right account turned out to be the hard part. The `owner` flag alone is no
-  // good: it can be absent, and treating absent as "allow" let other people's plays through.
-  // Matching one stored name was worse -- the app reported the server's myPlexUsername, which
-  // is an email address, while a webhook names the account by its title. Nothing ever matched,
-  // so every scrobble was dropped silently, this user's included, for ten weeks.
-  //
-  // So: accept a SET of identifiers and match the account's id or its title against any of
-  // them; when the payload states outright that this is the owner, allow it and learn that
-  // title, which repairs a wrong or missing identifier on its own; and record every account
-  // seen either way, so what the filter is actually rejecting can be read back instead of
-  // guessed at.
+  // Only the account's id or title can tell them apart. Two earlier attempts leaned on the
+  // payload's `owner` flag and both failed, in opposite directions: it is true on every event
+  // delivered to this webhook, because the webhook belongs to the server's owner, so "skip when
+  // owner is false" excluded nobody and "this is the owner, learn it" adopted everybody. The
+  // flag is now ignored entirely. See classifyScrobbleAccount.
   if (event === "media.scrobble") {
     const verdict = await classifyScrobbleAccount(payload, env, owner);
     if (!verdict.allow) {

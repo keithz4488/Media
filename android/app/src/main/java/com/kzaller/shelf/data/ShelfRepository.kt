@@ -242,8 +242,11 @@ class ShelfRepository(context: Context) {
      */
     suspend fun registerPlexAccount(baseUrl: String, token: String) {
         if (baseUrl.isBlank() || token.isBlank()) return
-        val account = PlexClient().fetchAccountName(baseUrl, token) ?: return
-        runCatching { api.plexConfig(com.kzaller.shelf.data.models.PlexConfigRequest(account)) }
+        val accounts = PlexClient().fetchAccountIdentifiers(baseUrl, token)
+        if (accounts.isEmpty()) return
+        runCatching {
+            api.plexConfig(com.kzaller.shelf.data.models.PlexConfigRequest(accounts = accounts))
+        }
     }
 
     /** Exchange the current Google auth for a long-lived app session token. */
